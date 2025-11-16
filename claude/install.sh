@@ -46,7 +46,7 @@ elif [ -d "$CONFIG_DIR/agents" ]; then
     echo -e "${YELLOW}  Warning: agents directory exists. Backing up to agents.backup${NC}"
     mv "$CONFIG_DIR/agents" "$CONFIG_DIR/agents.backup"
 fi
-ln -sf "$SCRIPT_DIR/.claude/agents" "$CONFIG_DIR/agents"
+ln -sf "$SCRIPT_DIR/agents" "$CONFIG_DIR/agents"
 echo "  ✓ Agents linked"
 
 # Symlink commands
@@ -58,7 +58,7 @@ elif [ -d "$CONFIG_DIR/commands" ]; then
     echo -e "${YELLOW}  Warning: commands directory exists. Backing up to commands.backup${NC}"
     mv "$CONFIG_DIR/commands" "$CONFIG_DIR/commands.backup"
 fi
-ln -sf "$SCRIPT_DIR/.claude/commands" "$CONFIG_DIR/commands"
+ln -sf "$SCRIPT_DIR/commands" "$CONFIG_DIR/commands"
 echo "  ✓ Commands linked"
 
 # Symlink agent registry
@@ -67,17 +67,19 @@ if [ -f "$CONFIG_DIR/agent-registry.json" ]; then
     echo "  Backing up existing registry to agent-registry.json.backup"
     cp "$CONFIG_DIR/agent-registry.json" "$CONFIG_DIR/agent-registry.json.backup"
 fi
-ln -sf "$SCRIPT_DIR/.claude/agent-registry.json" "$CONFIG_DIR/agent-registry.json"
+ln -sf "$SCRIPT_DIR/agent-registry.json" "$CONFIG_DIR/agent-registry.json" 2>/dev/null || echo "  (agent-registry.json not found, skipping)"
 echo "  ✓ Agent registry linked"
 
 # Copy settings (don't symlink - user may want different global settings)
 echo -e "${GREEN}[5/6]${NC} Setting up configuration..."
 if [ -f "$CONFIG_DIR/settings.json" ]; then
     echo -e "${YELLOW}  settings.json already exists. Skipping...${NC}"
-    echo "  (Manually merge $SCRIPT_DIR/.claude/settings.local.json if needed)"
-else
-    cp "$SCRIPT_DIR/.claude/settings.local.json" "$CONFIG_DIR/settings.json"
+    echo "  (Manually merge $SCRIPT_DIR/settings.local.json if needed)"
+elif [ -f "$SCRIPT_DIR/settings.local.json" ]; then
+    cp "$SCRIPT_DIR/settings.local.json" "$CONFIG_DIR/settings.json"
     echo "  ✓ Settings copied"
+else
+    echo -e "${YELLOW}  settings.local.json not found. Skipping...${NC}"
 fi
 
 # Install Python package
