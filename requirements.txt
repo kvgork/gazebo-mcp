@@ -1,0 +1,46 @@
+# Gazebo MCP Server Requirements
+# ================================
+
+# MCP Server SDK
+mcp>=0.1.0
+
+# Data validation and serialization
+pydantic>=2.0.0
+pyyaml>=6.0
+
+# Scientific computing
+numpy>=1.24.0
+
+# Image processing (for camera sensors)
+pillow>=10.0.0
+
+# Async support
+aiohttp>=3.9.0
+
+# Logging and utilities
+python-dotenv>=1.0.0
+
+# NOTE: ROS2 Dependencies
+# The following are typically installed via ROS2 system packages (apt):
+# - rclpy (ROS2 Python client library)
+# - gazebo_msgs (Gazebo ROS2 message definitions)
+# - geometry_msgs (Geometry message definitions)
+# - sensor_msgs (Sensor message definitions)
+# - std_msgs (Standard message definitions)
+# - std_srvs (Standard service definitions)
+# - nav_msgs (Navigation message definitions)
+#
+# Install ROS2 Humble or Jazzy via:
+#   sudo apt install ros-humble-desktop ros-humble-gazebo-ros-pkgs
+# or
+#   sudo apt install ros-jazzy-desktop ros-jazzy-gazebo-ros-pkgs
+#
+# Then source the ROS2 workspace:
+#   source /opt/ros/humble/setup.bash  # or jazzy
+
+# NOTE: Gazebo Dependencies
+# For Gazebo Harmonic or Garden, install via:
+#   sudo apt install gz-harmonic  # or gz-garden
+#
+# For legacy Gazebo 11 (not recommended):
+#   sudo apt install gazebo11 libgazebo11-dev
