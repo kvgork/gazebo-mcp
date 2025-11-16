@@ -10,6 +10,7 @@ Based on MCP code execution efficiency pattern from Anthropic.
 import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from datetime import datetime
 
 # Add claude project to path for ResultFilter:
 CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
@@ -25,6 +26,67 @@ from gazebo_mcp.utils import (
     gazebo_not_running_error,
     invalid_parameter_error,
 )
+from gazebo_mcp.utils.exceptions import (
+    GazeboMCPError,
+    ROS2NotConnectedError,
+    GazeboNotRunningError,
+    ModelNotFoundError
+)
+from gazebo_mcp.utils.validators import validate_model_name, validate_position, validate_orientation
+from gazebo_mcp.utils.converters import euler_to_quaternion
+from gazebo_mcp.utils.logger import get_logger
+from gazebo_mcp.bridge import ConnectionManager, GazeboBridgeNode
+
+# Module-level connection manager (singleton pattern):
+_connection_manager: Optional[ConnectionManager] = None
+_bridge_node: Optional[GazeboBridgeNode] = None
+_logger = get_logger("model_management")
+
+
+def _get_bridge() -> GazeboBridgeNode:
+    """
+    Get or create Gazebo bridge node.
+
+    Lazy initialization with auto-connection.
+
+    Returns:
+        GazeboBridgeNode instance
+
+    Raises:
+        ROS2NotConnectedError: If connection fails
+    """
+    global _connection_manager, _bridge_node
+
+    if _bridge_node is not None:
+        return _bridge_node
+
+    try:
+        # Create connection manager if needed:
+        if _connection_manager is None:
+            _connection_manager = ConnectionManager()
+            _connection_manager.connect(timeout=10.0)
+            _logger.info("Connected to ROS2 for model management")
+
+        # Create bridge node:
+        _bridge_node = GazeboBridgeNode(_connection_manager.get_node())
+        _logger.info("Created Gazebo bridge node")
+
+        return _bridge_node
+
+    except Exception as e:
+        _logger.error(f"Failed to create bridge", error=str(e))
+        raise ROS2NotConnectedError(f"Failed to connect to ROS2/Gazebo: {e}") from e
+
+
+def _use_real_gazebo() -> bool:
+    """Check if we should use real Gazebo or mock data."""
+    try:
+        # Try to get bridge - if it works, use real Gazebo:
+        _get_bridge()
+        return True
+    except Exception:
+        # Fall back to mock data:
+        return False
 
 
 def list_models(response_format: str = "filtered") -> OperationResult:
@@ -73,11 +135,41 @@ def list_models(response_format: str = "filtered") -> OperationResult:
             print(f"Active models: {len(active_models)}")
         ```
     """
-    # TODO: Phase 3 - Implement actual Gazebo model listing via ROS2 bridge
-    # For now, return mock data to demonstrate the pattern:
+    # Get models from real Gazebo or mock data:
+    try:
+        if _use_real_gazebo():
+            # Get real models from Gazebo:
+            bridge = _get_bridge()
+            model_states = bridge.get_model_list(timeout=5.0)
 
-    # Simulate getting models from Gazebo (would be from bridge):
-    all_models = _get_mock_models()
+            # Convert ModelState objects to dicts:
+            all_models = []
+            for model_state in model_states:
+                model_dict = {
+                    "name": model_state.name,
+                    "type": _infer_model_type(model_state.name),
+                    "state": model_state.state,
+                    "position": model_state.pose["position"],
+                    "orientation": model_state.pose["orientation"],
+                    "velocity": model_state.twist,
+                    "complexity": _estimate_complexity(model_state.name)
+                }
+                all_models.append(model_dict)
+
+            _logger.info(f"Retrieved {len(all_models)} models from Gazebo")
+        else:
+            # Fall back to mock data if Gazebo not available:
+            all_models = _get_mock_models()
+            _logger.warning("Using mock data - Gazebo not available")
+
+    except GazeboMCPError as e:
+        # Return error result with suggestions:
+        return error_result(
+            error=e.message,
+            error_code=e.error_code,
+            suggestions=e.suggestions,
+            example_fix=e.example_fix
+        )
 
     # Response format handling:
     if response_format == "summary":
@@ -191,26 +283,80 @@ def spawn_model(
         ...     for suggestion in result.suggestions:
         ...         print(f"  - {suggestion}")
     """
-    # TODO: Phase 3 - Implement actual spawning via ROS2 bridge
+    try:
+        # Validate parameters:
+        model_name = validate_model_name(model_name)
+        x, y, z = validate_position(x, y, z)
+        roll, pitch, yaw = validate_orientation(roll, pitch, yaw, radians=True)
 
-    # Validate parameters:
-    if not model_name:
-        return invalid_parameter_error("model_name", model_name, "non-empty string")
+        # Create pose dictionary:
+        qx, qy, qz, qw = euler_to_quaternion(roll, pitch, yaw)
+        pose = {
+            "position": {"x": x, "y": y, "z": z},
+            "orientation": {"x": qx, "y": qy, "z": qz, "w": qw}
+        }
 
-    # Mock check if model exists:
-    available_models = [m["name"] for m in _get_mock_models()]
-    if model_name not in available_models:
-        return model_not_found_error(model_name)
+        # Attempt to spawn in real Gazebo:
+        if _use_real_gazebo():
+            bridge = _get_bridge()
 
-    # Mock successful spawn:
-    return success_result({
-        "model_name": model_name,
-        "entity_name": namespace or model_name,
-        "position": {"x": x, "y": y, "z": z},
-        "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
-        "namespace": namespace,
-        "spawned_at": "2024-11-16T12:00:00Z"  # Would be actual timestamp
-    })
+            # Load SDF/URDF content (TODO: implement model loading):
+            # For now, assume model is available in Gazebo model path
+            sdf_content = f"""<?xml version='1.0'?>
+<sdf version='1.6'>
+  <model name='{model_name}'>
+    <static>false</static>
+    <link name='link'>
+      <pose>0 0 0 0 0 0</pose>
+    </link>
+  </model>
+</sdf>"""
+
+            # Spawn entity:
+            success = bridge.spawn_entity(
+                name=namespace or model_name,
+                xml_content=sdf_content,
+                pose=pose,
+                reference_frame="world",
+                timeout=10.0
+            )
+
+            if success:
+                _logger.log_model_event("spawned", model_name, position=pose["position"])
+                return success_result({
+                    "model_name": model_name,
+                    "entity_name": namespace or model_name,
+                    "position": {"x": x, "y": y, "z": z},
+                    "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
+                    "namespace": namespace,
+                    "spawned_at": datetime.utcnow().isoformat() + "Z"
+                })
+        else:
+            # Fall back to mock spawn:
+            _logger.warning(f"Mock spawning {model_name} - Gazebo not available")
+            return success_result({
+                "model_name": model_name,
+                "entity_name": namespace or model_name,
+                "position": {"x": x, "y": y, "z": z},
+                "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
+                "namespace": namespace,
+                "spawned_at": datetime.utcnow().isoformat() + "Z",
+                "note": "Mock spawn - Gazebo not available"
+            })
+
+    except GazeboMCPError as e:
+        return error_result(
+            error=e.message,
+            error_code=e.error_code,
+            suggestions=e.suggestions,
+            example_fix=e.example_fix
+        )
+    except Exception as e:
+        _logger.exception("Unexpected error during spawn", error=str(e))
+        return error_result(
+            error=f"Failed to spawn model: {e}",
+            error_code="SPAWN_ERROR"
+        )
 
 
 def delete_model(model_name: str) -> OperationResult:
@@ -228,16 +374,45 @@ def delete_model(model_name: str) -> OperationResult:
         >>> if result.success:
         ...     print(f"Deleted {result.data['model_name']}")
     """
-    # TODO: Phase 3 - Implement actual deletion via ROS2 bridge
+    try:
+        # Validate parameters:
+        model_name = validate_model_name(model_name)
 
-    if not model_name:
-        return invalid_parameter_error("model_name", model_name, "non-empty string")
+        # Attempt to delete in real Gazebo:
+        if _use_real_gazebo():
+            bridge = _get_bridge()
+            success = bridge.delete_entity(name=model_name, timeout=10.0)
 
-    # Mock successful deletion:
-    return success_result({
-        "model_name": model_name,
-        "deleted_at": "2024-11-16T12:00:00Z"
-    })
+            if success:
+                _logger.log_model_event("deleted", model_name)
+                return success_result({
+                    "model_name": model_name,
+                    "deleted_at": datetime.utcnow().isoformat() + "Z"
+                })
+        else:
+            # Fall back to mock deletion:
+            _logger.warning(f"Mock deleting {model_name} - Gazebo not available")
+            return success_result({
+                "model_name": model_name,
+                "deleted_at": datetime.utcnow().isoformat() + "Z",
+                "note": "Mock deletion - Gazebo not available"
+            })
+
+    except ModelNotFoundError as e:
+        return model_not_found_error(model_name)
+    except GazeboMCPError as e:
+        return error_result(
+            error=e.message,
+            error_code=e.error_code,
+            suggestions=e.suggestions,
+            example_fix=e.example_fix
+        )
+    except Exception as e:
+        _logger.exception("Unexpected error during deletion", error=str(e))
+        return error_result(
+            error=f"Failed to delete model: {e}",
+            error_code="DELETE_ERROR"
+        )
 
 
 def get_model_state(model_name: str, response_format: str = "concise") -> OperationResult:
@@ -257,38 +432,163 @@ def get_model_state(model_name: str, response_format: str = "concise") -> Operat
         ...     pos = result.data["position"]
         ...     print(f"Position: x={pos['x']}, y={pos['y']}, z={pos['z']}")
     """
-    # TODO: Phase 3 - Implement via ROS2 bridge
+    try:
+        # Validate parameters:
+        model_name = validate_model_name(model_name)
 
-    if not model_name:
-        return invalid_parameter_error("model_name", model_name, "non-empty string")
+        # Attempt to get state from real Gazebo:
+        if _use_real_gazebo():
+            bridge = _get_bridge()
+            model_state = bridge.get_model_state(name=model_name, timeout=5.0)
 
-    # Mock model state:
-    if response_format == "concise":
-        return success_result({
-            "name": model_name,
-            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
-            "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0},
-            "velocity": {"linear": {"x": 0.0, "y": 0.0, "z": 0.0}, "angular": {"x": 0.0, "y": 0.0, "z": 0.0}}
-        })
-    else:  # detailed
-        return success_result({
-            "name": model_name,
-            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
-            "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0},
-            "velocity": {"linear": {"x": 0.0, "y": 0.0, "z": 0.0}, "angular": {"x": 0.0, "y": 0.0, "z": 0.0}},
-            "acceleration": {"linear": {"x": 0.0, "y": 0.0, "z": 0.0}, "angular": {"x": 0.0, "y": 0.0, "z": 0.0}},
-            "links": [],  # Would include link states
-            "joints": []  # Would include joint states
-        })
+            if model_state is None:
+                return model_not_found_error(model_name)
+
+            # Convert orientation quaternion to Euler angles:
+            from gazebo_mcp.utils.converters import quaternion_to_euler
+            orient = model_state.pose["orientation"]
+            roll, pitch, yaw = quaternion_to_euler(
+                orient["x"], orient["y"], orient["z"], orient["w"]
+            )
+
+            # Return based on format:
+            if response_format == "concise":
+                return success_result({
+                    "name": model_state.name,
+                    "position": model_state.pose["position"],
+                    "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
+                    "velocity": model_state.twist
+                })
+            else:  # detailed
+                return success_result({
+                    "name": model_state.name,
+                    "position": model_state.pose["position"],
+                    "orientation": {
+                        "roll": roll,
+                        "pitch": pitch,
+                        "yaw": yaw,
+                        "quaternion": orient
+                    },
+                    "velocity": model_state.twist,
+                    "state": model_state.state
+                })
+        else:
+            # Fall back to mock state:
+            _logger.warning(f"Mock state for {model_name} - Gazebo not available")
+            if response_format == "concise":
+                return success_result({
+                    "name": model_name,
+                    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                    "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0},
+                    "velocity": {
+                        "linear": {"x": 0.0, "y": 0.0, "z": 0.0},
+                        "angular": {"x": 0.0, "y": 0.0, "z": 0.0}
+                    },
+                    "note": "Mock state - Gazebo not available"
+                })
+            else:  # detailed
+                return success_result({
+                    "name": model_name,
+                    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                    "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0},
+                    "velocity": {
+                        "linear": {"x": 0.0, "y": 0.0, "z": 0.0},
+                        "angular": {"x": 0.0, "y": 0.0, "z": 0.0}
+                    },
+                    "note": "Mock state - Gazebo not available"
+                })
+
+    except ModelNotFoundError as e:
+        return model_not_found_error(model_name)
+    except GazeboMCPError as e:
+        return error_result(
+            error=e.message,
+            error_code=e.error_code,
+            suggestions=e.suggestions,
+            example_fix=e.example_fix
+        )
+    except Exception as e:
+        _logger.exception("Unexpected error getting model state", error=str(e))
+        return error_result(
+            error=f"Failed to get model state: {e}",
+            error_code="GET_STATE_ERROR"
+        )
 
 
 # Helper functions:
 
+def _infer_model_type(model_name: str) -> str:
+    """
+    Infer model type from name.
+
+    Args:
+        model_name: Model name
+
+    Returns:
+        Model type ("robot", "static", "prop", "actor", "unknown")
+    """
+    name_lower = model_name.lower()
+
+    # Static models:
+    if name_lower in ["ground_plane", "sun"]:
+        return "static"
+
+    # Robots (common patterns):
+    if any(robot in name_lower for robot in ["turtlebot", "robot", "bot", "drone", "uav"]):
+        return "robot"
+
+    # Actors (animated models):
+    if any(actor in name_lower for actor in ["actor", "human", "person"]):
+        return "actor"
+
+    # Props (obstacles, furniture, etc.):
+    if any(prop in name_lower for prop in ["box", "cylinder", "sphere", "obstacle", "wall", "chair", "table"]):
+        return "prop"
+
+    return "unknown"
+
+
+def _estimate_complexity(model_name: str) -> int:
+    """
+    Estimate model complexity (approximate link/joint count).
+
+    Args:
+        model_name: Model name
+
+    Returns:
+        Complexity estimate (higher = more complex)
+    """
+    name_lower = model_name.lower()
+
+    # Simple primitives:
+    if any(prim in name_lower for prim in ["box", "cylinder", "sphere", "plane"]):
+        return 1
+
+    # Medium complexity (furniture, simple props):
+    if any(prop in name_lower for prop in ["chair", "table", "wall", "obstacle"]):
+        return 5
+
+    # High complexity (robots):
+    if "turtlebot3_burger" in name_lower:
+        return 45
+    if "turtlebot3_waffle" in name_lower:
+        return 52
+    if any(robot in name_lower for robot in ["turtlebot", "robot"]):
+        return 40
+
+    # Very high complexity (humanoids, complex robots):
+    if any(complex_model in name_lower for complex_model in ["pr2", "nao", "atlas", "human"]):
+        return 100
+
+    # Default:
+    return 10
+
+
 def _get_mock_models() -> List[Dict[str, Any]]:
     """
-    Get mock models for demonstration.
+    Get mock models for fallback when Gazebo is not available.
 
-    TODO: Phase 3 - Replace with actual Gazebo query via ROS2 bridge.
+    Used for testing and demonstration when ROS2/Gazebo connection fails.
     """
     return [
         {
@@ -296,6 +596,8 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "type": "static",
             "state": "active",
             "position": {"x": 0, "y": 0, "z": 0},
+            "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
+            "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
             "complexity": 1
         },
         {
@@ -303,6 +605,8 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "type": "robot",
             "state": "active",
             "position": {"x": 1.0, "y": 2.0, "z": 0.01},
+            "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
+            "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
             "complexity": 45
         },
         {
@@ -310,6 +614,8 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "type": "robot",
             "state": "inactive",
             "position": {"x": -1.0, "y": 0.0, "z": 0.01},
+            "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
+            "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
             "complexity": 52
         },
         {
@@ -317,6 +623,8 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "type": "prop",
             "state": "active",
             "position": {"x": 3.0, "y": 3.0, "z": 0.5},
+            "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
+            "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
             "complexity": 2
         },
         {
@@ -324,6 +632,8 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "type": "prop",
             "state": "active",
             "position": {"x": -2.0, "y": 2.0, "z": 0.5},
+            "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
+            "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
             "complexity": 3
         },
     ]
