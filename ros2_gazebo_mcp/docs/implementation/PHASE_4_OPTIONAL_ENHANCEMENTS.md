@@ -1,8 +1,9 @@
-# Phase 5: Optional Enhancements & Advanced Features
+# Phase 4: Optional Enhancements & Advanced Features
 
 **Status**: 🔵 Not Started
 **Estimated Duration**: 3-4 weeks (can be implemented incrementally)
-**Prerequisites**: Phase 4 Complete
+**Prerequisites**: Phase 4 Core Complete
+**Note**: This is an optional extension to Phase 4. Phase 5 is Testing & Documentation.
 
 ---
 
@@ -11,11 +12,11 @@
 **What you'll build**: Optional enhancements to Phase 4 tools, adding advanced features for research, benchmarking, and realistic simulations
 
 **Tasks**: 50+ optional enhancements across 5 modules
-- Module 5.1: Reproducibility & Benchmarking (8 tasks)
-- Module 5.2: Extended Material System (12 tasks)
-- Module 5.3: Environmental Effects (15 tasks)
-- Module 5.4: Advanced Dynamics (10 tasks)
-- Module 5.5: Automation & Utilities (8 tasks)
+- Module 4.1B: Reproducibility & Benchmarking (8 tasks)
+- Module 4.2B: Extended Material System (12 tasks)
+- Module 4.3B: Environmental Effects (15 tasks)
+- Module 4.4B: Advanced Dynamics (10 tasks)
+- Module 4.5B: Automation & Utilities (8 tasks)
 
 **Success criteria**: Enhanced tools provide research-grade reproducibility, realistic environmental conditions, and advanced control while maintaining 100% backward compatibility
 
@@ -31,9 +32,11 @@
 
 ---
 
-## Phase Overview
+## Overview
 
-This phase adds **optional parameters** to existing Phase 4 tools. All enhancements:
+These are **optional enhancements** to Phase 4 core tools. They add advanced features but are not required for Phase 4 completion.
+
+**Important:** Phase 5 is "Testing, Documentation & Examples" - these optional enhancements can be added before or after Phase 5. All enhancements:
 - ✅ Use `Optional[]` type hints
 - ✅ Provide sensible defaults
 - ✅ Maintain 100% backward compatibility
@@ -80,7 +83,7 @@ Nice-to-have features for advanced scenarios:
 
 ---
 
-## Module 5.1: Reproducibility & Benchmarking
+## Module 4.1B: Reproducibility & Benchmarking (Optional)
 
 **Goal**: Enable reproducible research and standardized testing
 
@@ -219,7 +222,7 @@ async def create_benchmark_world(
 
 ---
 
-## Module 5.2: Extended Material System
+## Module 4.2B: (Optional) Extended Material System
 
 **Goal**: Provide realistic material properties for diverse environments
 
@@ -420,7 +423,7 @@ async def set_surface_type(
 
 ---
 
-## Module 5.3: Environmental Effects
+## Module 4.3B: (Optional) Environmental Effects
 
 **Goal**: Simulate weather and atmospheric conditions for sensor testing
 
@@ -590,7 +593,7 @@ async def add_environment_effects(
 
 ---
 
-## Module 5.4: Advanced Dynamics
+## Module 4.4B: (Optional) Advanced Dynamics
 
 **Goal**: Enhanced physics simulation for complex scenarios
 
@@ -704,7 +707,7 @@ async def batch_world_updates(
 
 ---
 
-## Module 5.5: Automation & Utilities
+## Module 4.5B: (Optional) Automation & Utilities
 
 **Goal**: Tools for efficient world management
 
