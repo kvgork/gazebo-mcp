@@ -1,0 +1,49 @@
+[Unit]
+Description=Gazebo MCP Server
+Documentation=https://github.com/yourusername/ros2_gazebo_mcp
+After=network.target gazebo.service
+Wants=gazebo.service
+
+[Service]
+Type=simple
+User=mcp
+Group=mcp
+WorkingDirectory=/opt/ros2_gazebo_mcp
+
+# Environment variables:
+Environment="ROS_DISTRO=humble"
+Environment="ROS_DOMAIN_ID=0"
+Environment="PYTHONPATH=/opt/ros2_gazebo_mcp/src"
+Environment="LOG_LEVEL=INFO"
+Environment="ENABLE_METRICS=true"
+
+# Source ROS2 and run server:
+ExecStartPre=/bin/bash -c 'source /opt/ros/humble/setup.bash'
+ExecStart=/usr/bin/python3 -m mcp.server.server
+
+# Restart policy:
+Restart=on-failure
+RestartSec=10s
+StartLimitBurst=5
+StartLimitIntervalSec=300
+
+# Resource limits:
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryLimit=2G
+CPUQuota=200%
+
+# Security hardening:
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/gazebo_mcp /var/metrics/gazebo_mcp
+
+# Logging:
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gazebo-mcp
+
+[Install]
+WantedBy=multi-user.target

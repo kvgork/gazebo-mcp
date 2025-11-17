@@ -21,6 +21,7 @@ References:
 import sys
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, asdict
@@ -31,6 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from gazebo_mcp.utils import OperationResult
 from gazebo_mcp.utils.logger import get_logger
+from gazebo_mcp.utils.metrics import get_metrics_collector
 
 # Import adapters:
 from mcp.server.adapters import (
@@ -135,17 +137,110 @@ class GazeboMCPServer:
             )
 
         tool = self.tools[name]
+        metrics = get_metrics_collector()
+
+        # Start timing:
+        start_time = time.time()
 
         try:
             # Call tool handler:
             result: OperationResult = tool.handler(**arguments)
 
+            # Calculate duration:
+            duration = time.time() - start_time
+
+            # Estimate token usage:
+            tokens_sent, tokens_saved = self._estimate_tokens(result, arguments)
+
+            # Record metrics:
+            metrics.record_tool_call(
+                tool_name=name,
+                duration=duration,
+                tokens_sent=tokens_sent,
+                tokens_saved=tokens_saved,
+                success=result.success
+            )
+
             # Convert to MCP response:
             return self._format_response(result)
 
         except Exception as e:
+            # Record error:
+            duration = time.time() - start_time
+            metrics.record_tool_call(
+                tool_name=name,
+                duration=duration,
+                success=False
+            )
+            metrics.record_error(
+                error_type=type(e).__name__,
+                error_message=str(e)
+            )
+
             _logger.exception(f"Error calling tool {name}", error=str(e))
             return self._format_error(str(e))
+
+    def _estimate_tokens(self, result: OperationResult, arguments: Dict[str, Any]) -> tuple[int, int]:
+        """
+        Estimate token usage for a tool call.
+
+        Args:
+            result: Tool operation result
+            arguments: Tool arguments
+
+        Returns:
+            Tuple of (tokens_sent, tokens_saved)
+        """
+        tokens_sent = 0
+        tokens_saved = 0
+
+        if not result.success or not result.data:
+            return (0, 0)
+
+        # Check for explicit token info in result:
+        if "tokens_saved" in result.data:
+            tokens_saved = result.data["tokens_saved"]
+        if "tokens_sent" in result.data:
+            tokens_sent = result.data["tokens_sent"]
+            return (tokens_sent, tokens_saved)
+
+        # Estimate based on response format for list operations:
+        response_format = arguments.get("response_format", "filtered")
+
+        # For model listings:
+        if "models" in result.data:
+            models = result.data["models"]
+            if isinstance(models, list):
+                model_count = len(models)
+
+                if response_format == "summary":
+                    # Summary format: just counts and names
+                    tokens_sent = 100 + (model_count * 2)  # ~2 tokens per name
+                    # Calculate tokens saved (what filtered would have used):
+                    tokens_saved = (model_count * 50) - tokens_sent  # ~50 tokens per full model
+                else:
+                    # Filtered format: full details
+                    tokens_sent = model_count * 50
+
+        # For sensor listings:
+        elif "sensors" in result.data:
+            sensors = result.data["sensors"]
+            if isinstance(sensors, list):
+                sensor_count = len(sensors)
+
+                if response_format == "summary":
+                    tokens_sent = 100 + (sensor_count * 2)
+                    tokens_saved = (sensor_count * 40) - tokens_sent
+                else:
+                    tokens_sent = sensor_count * 40
+
+        # For simple operations (spawn, delete, state queries):
+        else:
+            # Estimate based on JSON response size:
+            json_str = json.dumps(result.data)
+            tokens_sent = len(json_str) // 4  # Rough estimate: 4 chars per token
+
+        return (tokens_sent, tokens_saved)
 
     def _format_response(self, result: OperationResult) -> Dict[str, Any]:
         """

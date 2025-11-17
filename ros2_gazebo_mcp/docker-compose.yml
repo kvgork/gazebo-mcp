@@ -1,0 +1,235 @@
+# Docker Compose configuration for Gazebo MCP Server
+#
+# Provides multi-container setup with:
+# - Gazebo simulation
+# - MCP server
+# - ROS2 networking
+#
+# Usage:
+#   docker-compose up                    # Start all services
+#   docker-compose up -d                 # Start in background
+#   docker-compose down                  # Stop all services
+#   docker-compose logs -f mcp_server    # View logs
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # Gazebo Simulation Service
+  # ============================================================================
+  gazebo:
+    image: osrf/ros:humble-desktop-full
+    container_name: gazebo_sim
+    restart: unless-stopped
+
+    # Display forwarding for GUI:
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - QT_X11_NO_MITSHM=1
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - GAZEBO_MODEL_PATH=/workspace/models
+
+    volumes:
+      # X11 socket for display:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Shared models directory:
+      - ./models:/workspace/models:ro
+      # Shared worlds directory:
+      - ./worlds:/workspace/worlds:ro
+
+    # Start Gazebo:
+    command: >
+      bash -c "
+        source /opt/ros/humble/setup.bash &&
+        ros2 launch gazebo_ros gazebo.launch.py
+      "
+
+    networks:
+      - ros2_network
+
+    # Health check:
+    healthcheck:
+      test: ["CMD", "ros2", "service", "list", "|", "grep", "gazebo"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # MCP Server Service
+  # ============================================================================
+  mcp_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        ROS_DISTRO: humble
+    container_name: gazebo_mcp_server
+    restart: unless-stopped
+
+    # Depend on Gazebo:
+    depends_on:
+      gazebo:
+        condition: service_healthy
+
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    volumes:
+      # Mount source for development:
+      - ./src:/workspace/ros2_gazebo_mcp/src:ro
+      - ./mcp:/workspace/ros2_gazebo_mcp/mcp:ro
+      # Logs directory:
+      - ./logs:/workspace/ros2_gazebo_mcp/logs:rw
+      # Metrics export:
+      - ./metrics:/workspace/ros2_gazebo_mcp/metrics:rw
+
+    # Run MCP server:
+    command: python3 -m mcp.server.server
+
+    networks:
+      - ros2_network
+
+    # Health check:
+    healthcheck:
+      test: ["CMD", "python3", "-c", "from mcp.server.server import GazeboMCPServer; GazeboMCPServer()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+    # Logging configuration:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================================================
+  # Metrics Exporter Service (optional)
+  # ============================================================================
+  metrics_exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: gazebo_mcp_metrics
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+    depends_on:
+      - mcp_server
+
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+
+    volumes:
+      - ./metrics:/workspace/ros2_gazebo_mcp/metrics:rw
+
+    # Export metrics periodically:
+    command: >
+      bash -c "
+        while true; do
+          sleep 60;
+          python3 scripts/show_metrics.py --export /workspace/ros2_gazebo_mcp/metrics/metrics.prom --format prometheus;
+        done
+      "
+
+    networks:
+      - ros2_network
+
+  # ============================================================================
+  # Development Container (optional)
+  # ============================================================================
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: gazebo_mcp_dev
+    profiles:
+      - development
+
+    depends_on:
+      - gazebo
+
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - PYTHONUNBUFFERED=1
+
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Mount source as read-write for development:
+      - ./src:/workspace/ros2_gazebo_mcp/src:rw
+      - ./mcp:/workspace/ros2_gazebo_mcp/mcp:rw
+      - ./tests:/workspace/ros2_gazebo_mcp/tests:rw
+      - ./examples:/workspace/ros2_gazebo_mcp/examples:rw
+
+    # Interactive shell:
+    stdin_open: true
+    tty: true
+
+    command: /bin/bash
+
+    networks:
+      - ros2_network
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  ros2_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ============================================================================
+# Volumes (optional persistent storage)
+# ============================================================================
+volumes:
+  gazebo_models:
+    driver: local
+  mcp_logs:
+    driver: local
+  mcp_metrics:
+    driver: local
+
+# ============================================================================
+# Usage Examples:
+# ============================================================================
+#
+# 1. Start all services:
+#    docker-compose up
+#
+# 2. Start in background:
+#    docker-compose up -d
+#
+# 3. Start with monitoring:
+#    docker-compose --profile monitoring up
+#
+# 4. Start development environment:
+#    docker-compose --profile development up dev
+#
+# 5. View logs:
+#    docker-compose logs -f mcp_server
+#
+# 6. Stop all services:
+#    docker-compose down
+#
+# 7. Rebuild containers:
+#    docker-compose build
+#
+# 8. Run examples:
+#    docker-compose exec mcp_server python3 examples/01_basic_connection.py
+#
+# 9. Show metrics:
+#    docker-compose exec mcp_server python3 scripts/show_metrics.py
+#
+# 10. Interactive development:
+#     docker-compose --profile development run --rm dev

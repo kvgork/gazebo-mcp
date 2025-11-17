@@ -121,6 +121,23 @@ class GazeboBridgeNode:
                 ) from e
         return self._delete_entity_client
 
+    def _get_set_model_state_client(self):
+        """Get or create set_model_state service client."""
+        if self._set_model_state_client is None:
+            try:
+                from gazebo_msgs.srv import SetEntityState
+                self._set_model_state_client = self.node.create_client(
+                    SetEntityState,
+                    '/gazebo/set_entity_state'
+                )
+                self.logger.debug("Created set_entity_state service client")
+            except ImportError as e:
+                raise ROS2ServiceError(
+                    "/gazebo/set_entity_state",
+                    "Failed to import gazebo_msgs"
+                ) from e
+        return self._set_model_state_client
+
     def _get_model_states_subscriber(self):
         """Get or create model_states topic subscriber."""
         if self._model_states_subscriber is None:
@@ -296,6 +313,123 @@ class GazeboBridgeNode:
                 if isinstance(e, (ModelDeleteError, GazeboTimeoutError)):
                     raise
                 raise ModelDeleteError(name, f"Service call failed: {e}") from e
+
+    def set_entity_state(
+        self,
+        name: str,
+        pose: Optional[Dict[str, Any]] = None,
+        twist: Optional[Dict[str, Any]] = None,
+        reference_frame: str = "world",
+        timeout: float = 10.0
+    ) -> bool:
+        """
+        Set entity state (pose and/or twist) in Gazebo.
+
+        Args:
+            name: Entity name
+            pose: Target pose {position: {x,y,z}, orientation: {x,y,z,w}} or {roll,pitch,yaw}
+            twist: Target velocity {linear: {x,y,z}, angular: {x,y,z}}
+            reference_frame: Reference frame for pose (default: "world")
+            timeout: Service call timeout
+
+        Returns:
+            True if state set successfully
+
+        Raises:
+            ModelNotFoundError: If model doesn't exist
+            GazeboTimeoutError: If service call times out
+            GazeboNotRunningError: If Gazebo is not running
+            ROS2ServiceError: If service call fails
+
+        Example:
+            >>> # Set position only
+            >>> node.set_entity_state("robot", pose={"position": {"x": 1, "y": 2, "z": 0.5}})
+            >>>
+            >>> # Set position and velocity
+            >>> node.set_entity_state(
+            ...     "robot",
+            ...     pose={"position": {"x": 1, "y": 2, "z": 0.5}},
+            ...     twist={"linear": {"x": 0.5, "y": 0, "z": 0}}
+            ... )
+        """
+        with self.logger.operation("set_entity_state", name=name):
+            # Validate parameters:
+            name = validate_model_name(name)
+            timeout = validate_timeout(timeout)
+
+            if pose is None and twist is None:
+                raise ROS2ServiceError(
+                    "/gazebo/set_entity_state",
+                    "Must provide either pose or twist (or both)"
+                )
+
+            # Get service client:
+            client = self._get_set_model_state_client()
+
+            # Wait for service:
+            if not client.wait_for_service(timeout_sec=5.0):
+                raise GazeboNotRunningError()
+
+            # Create request:
+            try:
+                from gazebo_msgs.srv import SetEntityState
+                from gazebo_msgs.msg import EntityState
+
+                request = SetEntityState.Request()
+                state = EntityState()
+                state.name = name
+                state.reference_frame = reference_frame
+
+                # Set pose if provided:
+                if pose:
+                    from ..utils.converters import dict_to_pose
+                    state.pose = dict_to_pose(pose)
+
+                # Set twist if provided:
+                if twist:
+                    from ..utils.converters import dict_to_twist
+                    state.twist = dict_to_twist(twist)
+
+                request.state = state
+
+            except Exception as e:
+                raise ROS2ServiceError(
+                    "/gazebo/set_entity_state",
+                    f"Failed to create request: {e}"
+                ) from e
+
+            # Call service:
+            try:
+                future = client.call_async(request)
+
+                # Wait for response:
+                start_time = time.time()
+                while not future.done():
+                    if time.time() - start_time > timeout:
+                        raise GazeboTimeoutError("set_entity_state", timeout)
+                    time.sleep(0.01)
+
+                response = future.result()
+
+                if not response.success:
+                    # Check if model not found:
+                    if "does not exist" in response.status_message.lower():
+                        raise ModelNotFoundError(name)
+                    raise ROS2ServiceError(
+                        "/gazebo/set_entity_state",
+                        response.status_message
+                    )
+
+                self.logger.log_model_event("state_updated", name, reference_frame=reference_frame)
+                return True
+
+            except Exception as e:
+                if isinstance(e, (ModelNotFoundError, GazeboTimeoutError, ROS2ServiceError)):
+                    raise
+                raise ROS2ServiceError(
+                    "/gazebo/set_entity_state",
+                    f"Service call failed: {e}"
+                ) from e
 
     def get_model_list(self, timeout: float = 5.0) -> List[ModelState]:
         """

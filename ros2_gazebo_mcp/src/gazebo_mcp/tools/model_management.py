@@ -515,6 +515,154 @@ def get_model_state(model_name: str, response_format: str = "concise") -> Operat
         )
 
 
+def set_model_state(
+    model_name: str,
+    pose: Optional[Dict] = None,
+    twist: Optional[Dict] = None,
+    reference_frame: str = "world"
+) -> OperationResult:
+    """
+    Set model pose and/or velocity.
+
+    Teleports the model to a new position/orientation and/or sets its velocity.
+    Useful for resetting robot positions, creating test scenarios, or applying
+    initial conditions.
+
+    Args:
+        model_name: Name of model to update
+        pose: Target pose with structure:
+            {
+                "position": {"x": float, "y": float, "z": float},
+                "orientation": {"roll": float, "pitch": float, "yaw": float}
+                    OR {"x": float, "y": float, "z": float, "w": float}
+            }
+        twist: Target velocity with structure:
+            {
+                "linear": {"x": float, "y": float, "z": float},
+                "angular": {"x": float, "y": float, "z": float}
+            }
+        reference_frame: Reference frame for pose (default: "world")
+
+    Returns:
+        OperationResult with update status
+
+    Examples:
+        >>> # Move robot to new position
+        >>> result = set_model_state("robot_1", pose={
+        ...     "position": {"x": 2.0, "y": 1.0, "z": 0.5},
+        ...     "orientation": {"roll": 0, "pitch": 0, "yaw": 1.57}
+        ... })
+        >>>
+        >>> # Set velocity
+        >>> result = set_model_state("robot_1", twist={
+        ...     "linear": {"x": 0.5, "y": 0, "z": 0},
+        ...     "angular": {"x": 0, "y": 0, "z": 0.3}
+        ... })
+        >>>
+        >>> # Set both pose and velocity
+        >>> result = set_model_state("robot_1",
+        ...     pose={"position": {"x": 0, "y": 0, "z": 0.5}},
+        ...     twist={"linear": {"x": 0, "y": 0, "z": 0}}
+        ... )
+    """
+    try:
+        # Validate parameters:
+        model_name = validate_model_name(model_name)
+
+        if pose is None and twist is None:
+            return invalid_parameter_error(
+                "pose/twist",
+                "Must provide either pose or twist (or both)",
+                suggestions=[
+                    "Provide pose to teleport model",
+                    "Provide twist to set velocity",
+                    "Provide both to set position and velocity"
+                ]
+            )
+
+        # Validate pose if provided:
+        if pose:
+            if "position" in pose:
+                validate_position(pose["position"])
+            if "orientation" in pose:
+                validate_orientation(pose["orientation"])
+
+        # Attempt to set state in real Gazebo:
+        if _use_real_gazebo():
+            bridge = _get_bridge()
+
+            # Call bridge to set entity state:
+            success = bridge.set_entity_state(
+                name=model_name,
+                pose=pose,
+                twist=twist,
+                reference_frame=reference_frame,
+                timeout=10.0
+            )
+
+            if success:
+                _logger.info(f"Set state for model: {model_name}")
+
+                # Build response data:
+                response_data = {
+                    "model": model_name,
+                    "updated": True,
+                    "reference_frame": reference_frame
+                }
+
+                if pose:
+                    response_data["pose"] = pose
+                if twist:
+                    response_data["twist"] = twist
+
+                return success_result(response_data)
+            else:
+                return error_result(
+                    error=f"Failed to set state for model '{model_name}'",
+                    error_code="SET_STATE_FAILED"
+                )
+
+        else:
+            # Fallback: Provide instructions for mock mode:
+            _logger.warning(f"Mock set_model_state for {model_name} - Gazebo not available")
+
+            instructions = []
+            if pose:
+                instructions.append("To teleport model, ensure Gazebo is running")
+                instructions.append(f"Target position: {pose.get('position', 'not specified')}")
+                if "orientation" in pose:
+                    instructions.append(f"Target orientation: {pose['orientation']}")
+
+            if twist:
+                instructions.append("To set velocity, use ROS2 topics or Gazebo GUI")
+                instructions.append(f"Target linear velocity: {twist.get('linear', 'not specified')}")
+                instructions.append(f"Target angular velocity: {twist.get('angular', 'not specified')}")
+
+            return success_result({
+                "model": model_name,
+                "updated": False,
+                "note": "Mock mode - Gazebo not available",
+                "instructions": instructions,
+                "gazebo_connected": False
+            })
+
+    except ModelNotFoundError as e:
+        return model_not_found_error(model_name)
+    except GazeboMCPError as e:
+        return error_result(
+            error=e.message,
+            error_code=e.error_code,
+            suggestions=e.suggestions,
+            example_fix=e.example_fix
+        )
+    except Exception as e:
+        _logger.exception("Unexpected error setting model state", error=str(e))
+        return error_result(
+            error=f"Failed to set model state: {e}",
+            error_code="SET_STATE_ERROR"
+        )
+
+
 # Helper functions:
 
 def _infer_model_type(model_name: str) -> str:

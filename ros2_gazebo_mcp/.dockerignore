@@ -1,0 +1,74 @@
+# Docker build context ignore file
+# Excludes files from Docker build to speed up builds and reduce image size
+
+# Git files:
+.git
+.gitignore
+.gitattributes
+
+# Python cache:
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments:
+venv/
+env/
+ENV/
+.venv
+
+# IDE files:
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code files:
+.claude/
+plans/
+
+# Documentation (not needed in runtime):
+docs/
+*.md
+!requirements.txt
+!requirements-dev.txt
+
+# Tests (only needed in dev image):
+tests/
+pytest.ini
+.pytest_cache/
+
+# Logs and metrics:
+logs/
+*.log
+metrics/
+*.prom
+
+# ROS2 build artifacts:
+build/
+install/
+log/
+
+# Temporary files:
+tmp/
+*.tmp
+.DS_Store
+
+# Docker files:
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# CI/CD:
+.github/
+
+# Other:
+*.bak
+*.backup

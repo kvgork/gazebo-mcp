@@ -167,13 +167,32 @@ await use_mcp_tool("gazebo_unpause_simulation", {})
 status = await use_mcp_tool("gazebo_get_simulation_status", {})
 ```
 
+## Practical Examples
+
+The `examples/` directory contains **5 complete working examples** demonstrating real-world usage:
+
+1. **[01_basic_connection.py](examples/01_basic_connection.py)** - MCP server basics, tool discovery, token efficiency
+2. **[02_spawn_and_control.py](examples/02_spawn_and_control.py)** - Model spawning, state queries, lifecycle management
+3. **[03_sensor_streaming.py](examples/03_sensor_streaming.py)** - Sensor discovery, data access, streaming
+4. **[04_simulation_control.py](examples/04_simulation_control.py)** - Pause/resume, reset, time queries, world properties
+5. **[05_complete_workflow.py](examples/05_complete_workflow.py)** - Full robot testing workflow (8 phases)
+
+**All examples work without ROS2/Gazebo** using mock data. See **[examples/README.md](examples/README.md)** for detailed documentation.
+
+```bash
+# Run any example (no Gazebo required)
+cd examples/
+python 01_basic_connection.py
+python 05_complete_workflow.py
+```
+
 ## Available MCP Tools
 
-**Total Tools**: 17 tools across 4 categories
+**Total Tools**: 18 tools across 4 categories
 
 See `mcp/README.md` for detailed tool documentation and examples.
 
-### Model Management (4 tools)
+### Model Management (5 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -181,6 +200,7 @@ See `mcp/README.md` for detailed tool documentation and examples.
 | `gazebo_spawn_model` | Spawn model from URDF/SDF file or XML string |
 | `gazebo_delete_model` | Remove model from simulation |
 | `gazebo_get_model_state` | Query model pose and velocity |
+| `gazebo_set_model_state` | Set model pose and/or velocity (teleport or set velocity) |
 
 ### Sensor Tools (3 tools)
 
@@ -234,7 +254,9 @@ ros2_gazebo_mcp/
 │       ├── converters.py            # ROS2 ↔ Python conversions
 │       ├── geometry.py              # Quaternion math, transforms
 │       ├── exceptions.py            # Custom exceptions
-│       └── logger.py                # Structured logging
+│       ├── logger.py                # Structured logging
+│       ├── metrics.py               # Performance metrics collection
+│       └── profiler.py              # Tool profiling decorator
 ├── mcp/
 │   ├── server/
 │   │   ├── server.py                # Main MCP server (stdio protocol)
@@ -250,13 +272,35 @@ ros2_gazebo_mcp/
 │   ├── test_integration.py          # Integration tests (80+ tests)
 │   ├── test_utils.py                # Unit tests
 │   └── README.md                    # Test documentation
+├── examples/
+│   ├── 01_basic_connection.py       # Basic MCP usage
+│   ├── 02_spawn_and_control.py      # Model management
+│   ├── 03_sensor_streaming.py       # Sensor data access
+│   ├── 04_simulation_control.py     # Simulation control
+│   ├── 05_complete_workflow.py      # Full robot testing workflow
+│   └── README.md                    # Examples documentation
 ├── docs/
 │   ├── IMPLEMENTATION_PLAN.md       # Original implementation plan
-│   └── PHASE3_PROGRESS.md           # Phase 3 progress tracking
-├── scripts/                         # Utility scripts
+│   ├── PHASE3_PROGRESS.md           # Phase 3 progress tracking
+│   ├── PHASE4_PLAN.md               # Phase 4 enhancements plan
+│   ├── DEPLOYMENT.md                # Production deployment guide
+│   ├── METRICS.md                   # Performance monitoring guide
+│   └── ARCHITECTURE.md              # System architecture
+├── deployment/
+│   ├── gazebo-mcp.service           # systemd service file
+│   └── install.sh                   # Production installation script
+├── scripts/
+│   └── show_metrics.py              # Metrics display and export
+├── .github/workflows/
+│   ├── test.yml                     # CI/CD pipeline
+│   └── pre-commit.yml               # Pre-commit checks
+├── Dockerfile                       # Multi-stage Docker build
+├── docker-compose.yml               # Docker Compose configuration
+├── .dockerignore                    # Docker ignore patterns
 ├── pyproject.toml                   # Python package configuration
 ├── package.xml                      # ROS2 package manifest
 ├── requirements.txt                 # Python dependencies
+├── requirements-dev.txt             # Development dependencies
 ├── pytest.ini                       # Pytest configuration
 └── README.md                        # This file
 ```
@@ -264,9 +308,14 @@ ros2_gazebo_mcp/
 ## Documentation
 
 - **[MCP Server Guide](mcp/README.md)** - Complete MCP server documentation
+- **[Usage Examples](examples/README.md)** - 5 practical examples with detailed documentation
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment, Docker, systemd, monitoring
+- **[Performance Metrics](docs/METRICS.md)** - Monitoring, profiling, and metrics collection
 - **[Test Documentation](tests/README.md)** - Test suite and running tests
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and components
 - **[Implementation Plan](docs/IMPLEMENTATION_PLAN.md)** - Original implementation plan
-- **[Phase 3 Progress](docs/PHASE3_PROGRESS.md)** - Current development progress
+- **[Phase 3 Progress](docs/PHASE3_PROGRESS.md)** - Phase 3 completion summary
+- **[Phase 4 Plan](docs/PHASE4_PLAN.md)** - Phase 4 enhancements and production features
 
 ## Key Features & Architecture
 
@@ -303,6 +352,82 @@ Tools automatically fall back to mock data when Gazebo is not available:
 - **20+ integration tests** for ROS2 and Gazebo integration
 - **95%+ code coverage** for core utilities
 - See `tests/README.md` for running tests
+
+## Deployment
+
+### Docker Deployment (Recommended for Production)
+
+**Quick Start:**
+
+```bash
+# Start all services (Gazebo + MCP Server):
+docker-compose up
+
+# Run in background:
+docker-compose up -d
+
+# View logs:
+docker-compose logs -f mcp_server
+
+# Stop services:
+docker-compose down
+```
+
+**Development Mode:**
+
+```bash
+# Start with development container:
+docker-compose --profile development up dev
+
+# Run examples:
+docker-compose exec mcp_server python3 examples/01_basic_connection.py
+
+# View metrics:
+docker-compose exec mcp_server python3 scripts/show_metrics.py
+```
+
+**Monitoring Mode:**
+
+```bash
+# Start with metrics exporter:
+docker-compose --profile monitoring up
+
+# Metrics exported to: ./metrics/metrics.prom (Prometheus format)
+```
+
+See **[Deployment Guide](docs/DEPLOYMENT.md)** for comprehensive deployment documentation including:
+- Production deployment with systemd
+- Security best practices
+- High availability setup
+- Monitoring and observability
+- Backup and recovery
+
+### Production Deployment (systemd)
+
+**Installation:**
+
+```bash
+cd deployment
+sudo ./install.sh
+```
+
+**Service Management:**
+
+```bash
+# Start service:
+sudo systemctl start gazebo-mcp
+
+# Check status:
+sudo systemctl status gazebo-mcp
+
+# View logs:
+sudo journalctl -u gazebo-mcp -f
+
+# Stop service:
+sudo systemctl stop gazebo-mcp
+```
+
+See **[Deployment Guide](docs/DEPLOYMENT.md)** for complete installation and configuration instructions.
 
 ## Development
 
@@ -424,6 +549,31 @@ python -m mcp.server.server
 - Memory: ~100-200 MB (ROS2 + Python)
 - Network: ROS2 local communication only
 
+### Performance Monitoring
+
+View real-time metrics:
+
+```bash
+# Show summary:
+python3 scripts/show_metrics.py
+
+# Show detailed metrics:
+python3 scripts/show_metrics.py --detailed
+
+# Export to Prometheus:
+python3 scripts/show_metrics.py --export metrics.prom --format prometheus
+
+# Export to JSON:
+python3 scripts/show_metrics.py --export metrics.json --format json
+```
+
+See **[Performance Metrics Guide](docs/METRICS.md)** for complete documentation on:
+- Automatic metrics collection
+- Token efficiency tracking
+- Prometheus integration
+- Grafana dashboards
+- Performance optimization
+
 ## Implementation Status
 
 ### ✅ Phase 1: Core Infrastructure (100% Complete)
@@ -444,11 +594,19 @@ python -m mcp.server.server
 - 80+ tests (unit + integration)
 - Comprehensive documentation
 
+### ✅ Phase 4: Production Enhancements (100% Complete)
+- Complete `set_model_state()` implementation for teleporting models
+- 5 working usage examples with detailed documentation
+- Performance metrics and profiling system
+- Docker deployment (Dockerfile + docker-compose)
+- CI/CD pipeline (GitHub Actions)
+- Production deployment guide (systemd service)
+- Comprehensive deployment documentation
+
 ### 🔵 Future Enhancements
 - Real-time sensor streaming improvements
 - Advanced world generation tools
 - Multi-robot coordination helpers
-- Performance monitoring dashboard
 - Additional sensor types (thermal, radar)
 
 ## License

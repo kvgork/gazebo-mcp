@@ -215,6 +215,96 @@ Example:
             handler=model_management.get_model_state
         ),
 
-        # Note: set_model_state not yet implemented in model_management.py
-        # Will be added in future update
+        # Set model state tool:
+        MCPTool(
+            name="gazebo_set_model_state",
+            description="""
+Set model pose and/or velocity (teleport model or set initial conditions).
+
+Args:
+    model_name: Name of model to update (required)
+    pose: Target pose (optional):
+        {
+            "position": {"x": float, "y": float, "z": float},
+            "orientation": {"roll": float, "pitch": float, "yaw": float}
+                OR {"x": float, "y": float, "z": float, "w": float}
+        }
+    twist: Target velocity (optional):
+        {
+            "linear": {"x": float, "y": float, "z": float},
+            "angular": {"x": float, "y": float, "z": float}
+        }
+    reference_frame: Reference frame for pose (default: "world", optional)
+
+At least one of pose or twist must be provided.
+
+Returns operation result with update status.
+
+Examples:
+- gazebo_set_model_state("robot1", pose={"position": {"x": 2, "y": 1, "z": 0.5}})
+- gazebo_set_model_state("robot1", twist={"linear": {"x": 0.5, "y": 0, "z": 0}})
+- gazebo_set_model_state("robot1",
+    pose={"position": {"x": 0, "y": 0, "z": 0.5}, "orientation": {"roll": 0, "pitch": 0, "yaw": 1.57}},
+    twist={"linear": {"x": 0, "y": 0, "z": 0}}
+  )
+            """.strip(),
+            parameters={
+                "properties": {
+                    "model_name": {
+                        "type": "string",
+                        "description": "Name of model to update"
+                    },
+                    "pose": {
+                        "type": "object",
+                        "description": "Target pose with position and orientation",
+                        "properties": {
+                            "position": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"},
+                                    "y": {"type": "number"},
+                                    "z": {"type": "number"}
+                                },
+                                "required": ["x", "y", "z"]
+                            },
+                            "orientation": {
+                                "type": "object",
+                                "description": "Euler angles (roll, pitch, yaw) or quaternion (x, y, z, w)"
+                            }
+                        }
+                    },
+                    "twist": {
+                        "type": "object",
+                        "description": "Target velocity (linear and angular)",
+                        "properties": {
+                            "linear": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"},
+                                    "y": {"type": "number"},
+                                    "z": {"type": "number"}
+                                },
+                                "required": ["x", "y", "z"]
+                            },
+                            "angular": {
+                                "type": "object",
+                                "properties": {
+                                    "x": {"type": "number"},
+                                    "y": {"type": "number"},
+                                    "z": {"type": "number"}
+                                },
+                                "required": ["x", "y", "z"]
+                            }
+                        }
+                    },
+                    "reference_frame": {
+                        "type": "string",
+                        "description": "Reference frame for pose (default: 'world')",
+                        "default": "world"
+                    }
+                },
+                "required": ["model_name"]
+            },
+            handler=model_management.set_model_state
+        ),
     ]
