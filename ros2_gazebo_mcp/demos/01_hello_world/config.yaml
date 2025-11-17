@@ -1,0 +1,122 @@
+# Demo 7.1.1: Hello World - Configuration
+# Edit these values to customize the demo
+
+demo:
+  name: "Hello World - First Robot"
+  version: "1.0"
+  duration_minutes: 5
+  difficulty: "beginner"
+
+robot:
+  model: "turtlebot3"
+  variant: "burger"  # burger, waffle, or waffle_pi
+  spawn_position:
+    x: 0.0
+    y: 0.0
+    z: 0.0
+  spawn_orientation:
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+
+world:
+  name: "empty"
+  physics:
+    gravity: 9.81
+    step_size: 0.001
+  lighting:
+    ambient: [0.4, 0.4, 0.4, 1.0]
+    background: [0.7, 0.7, 0.7, 1.0]
+
+movements:
+  part3_forward_distance: 2.0  # meters
+  part3_rotation: 180.0  # degrees
+  part3_speed: 0.5  # m/s
+
+obstacles:
+  part4_count: 4
+  part4_pattern: "around_robot"  # around_robot, random, circle
+  part4_min_distance: 1.5  # meters from robot
+  part4_max_distance: 3.0  # meters from robot
+  part4_height: 0.5  # meters
+  part4_radius: 0.2  # meters
+
+timing:
+  part1_intro_seconds: 60
+  part2_spawn_seconds: 90
+  part3_movement_seconds: 120
+  part4_obstacles_seconds: 90
+  closing_seconds: 30
+
+recovery:
+  use_backup_video: false
+  backup_video_path: "./backup_video.mp4"
+  max_retries: 2
+  retry_delay_seconds: 3
+
+camera:
+  # Gazebo camera positioning
+  follow_robot: true
+  distance: 5.0  # meters from robot
+  height: 3.0  # meters above ground
+  angle: 45  # degrees from horizontal
+
+logging:
+  enable_logging: true
+  log_directory: "./logs"
+  log_level: "INFO"  # DEBUG, INFO, WARN, ERROR
+  save_sensor_data: false
+  record_video: false  # Set true to auto-record demo
+
+presentation:
+  screen_resolution: "1920x1080"
+  font_size: "large"
+  show_terminal: true
+  show_gazebo: true
+  gazebo_window_size: "80%"  # percentage of screen
+
+audience:
+  type: "mixed"  # technical, non_technical, mixed, executive
+  expected_size: 20
+  questions_enabled: true
+  interactive_suggestions: false  # Allow audience to suggest commands
+
+safety:
+  # Limits to prevent demo from going wrong
+  max_velocity: 1.0  # m/s
+  max_obstacles: 10
+  simulation_timeout: 300  # seconds
+  auto_stop_on_collision: false  # Usually keep false for demos
+
+# Claude prompts - customize if needed
+prompts:
+  spawn_robot: "Please start a Gazebo simulation and spawn a TurtleBot3 robot at the center of the world."
+  move_robot: "Make the robot drive forward 2 meters, then turn around and come back to the start."
+  add_obstacles: "Now add some obstacles around the robot and have it navigate around them back to the origin."
+
+# Demo variations - quick switching
+variations:
+  quick_demo:  # 3-minute version
+    skip_obstacles: true
+    duration_minutes: 3
+  extended_demo:  # 10-minute version
+    add_sensor_viz: true
+    add_multi_robot: true
+    duration_minutes: 10
+  technical_demo:  # For technical audiences
+    show_mcp_tools: true
+    show_ros_topics: true
+    explain_architecture: true
+
+# Notes for presenter
+notes: |
+  Remember to:
+  - Speak clearly and slowly
+  - Point to screen when referencing elements
+  - Pause after each command for effect
+  - Stay calm if failures occur
+  - Engage audience with questions
+
+  Emergency contacts:
+  - Tech support: [Your contact]
+  - Backup presenter: [Name]
