@@ -11,7 +11,7 @@
 
 **What you'll build**: Optional enhancements across ALL implementation phases, adding advanced features for development, production, and research
 
-**Tasks**: 170+ optional enhancements across 10 modules
+**Tasks**: 200+ optional enhancements across 11 modules
 
 **Phase 4 Enhancements** (World Generation):
 - Module 5.1: Reproducibility & Benchmarking (8 tasks)
@@ -25,7 +25,10 @@
 - Module 5.7: Phase 2 Enhancements - Infrastructure & Reliability (28 tasks)
 - Module 5.8: Phase 3 Enhancements - Advanced Control & Multi-Robot (27 tasks)
 - Module 5.9: Phase 6 Enhancements - Testing & Quality Assurance (18 tasks)
-- Module 5.10: Automated Testing Pipelines & AI Reasoning (25 tasks) ⭐ NEW
+- Module 5.10: Automated Testing Pipelines & AI Reasoning (25 tasks)
+
+**Advanced MCP Protocol Features**:
+- Module 5.11: Prompts, Resources, Sampling & Extended Thinking (30 tasks) ⭐ NEW
 
 **Success criteria**: Enhanced tools provide research-grade reproducibility, realistic environmental conditions, and advanced control while maintaining 100% backward compatibility
 
@@ -69,7 +72,8 @@
 - **Module 5.7**: Phase 2 enhancements (infrastructure)
 - **Module 5.8**: Phase 3 enhancements (control & robotics)
 - **Module 5.9**: Phase 6 enhancements (testing & QA)
-- **Module 5.10**: Automated testing pipelines with AI reasoning ⭐ NEW
+- **Module 5.10**: Automated testing pipelines with AI reasoning
+- **Module 5.11**: Advanced MCP protocol features (prompts, resources, sampling, extended thinking) ⭐ NEW
 
 All enhancements:
 - ✅ Use `Optional[]` type hints
@@ -2083,6 +2087,1119 @@ print(comparison.data["recommendation"])
 ---
 
 **This module transforms testing from "run and check" to "understand and improve" - the AI becomes your test analysis expert.** 🧠✨
+
+---
+
+## Module 5.11: Advanced MCP Protocol Features ⭐ NEW
+
+**Goal**: Leverage advanced MCP (Model Context Protocol) capabilities to create a more intelligent, self-documenting, and autonomous MCP server
+
+**Key Innovation**: These features transform the MCP server from a "tool provider" to an "intelligent agent" that can guide users, access rich resources, and perform complex reasoning autonomously.
+
+**Note**: These are official MCP protocol features that unlock powerful new interaction patterns.
+
+### Tasks (0/30)
+
+---
+
+## Part 1: MCP Prompts (8 tasks)
+
+**What are Prompts?** MCP prompts are pre-defined, reusable prompt templates that the server exposes to clients. They guide users through common tasks with optimal phrasing.
+
+**Why powerful?** Users don't need to know exact commands - they can select from curated prompts that demonstrate best practices.
+
+---
+
+#### 🔴 HIGH PRIORITY - Core Prompts (5 tasks)
+
+**Task 5.11.1: Robot Setup Prompts** ⏳
+```python
+# Expose prompts for common robot setup scenarios
+PROMPTS = {
+    "quick-start-turtlebot3": {
+        "name": "Quick Start: TurtleBot3",
+        "description": "Spawn a TurtleBot3 and test basic navigation",
+        "arguments": [
+            {
+                "name": "world_type",
+                "description": "Type of world to use",
+                "required": False,
+                "default": "empty"
+            },
+            {
+                "name": "difficulty",
+                "description": "Navigation difficulty",
+                "required": False,
+                "default": "easy"
+            }
+        ],
+        "prompt_template": """Please help me set up a TurtleBot3 robot for testing:
+
+1. Create a {{world_type}} world with {{difficulty}} difficulty obstacles
+2. Spawn a TurtleBot3 Waffle robot at the center
+3. Verify all sensors are working (LiDAR, camera, IMU)
+4. Test basic movement: drive forward 2 meters
+5. Run a simple navigation test to a goal 5 meters away
+
+Please provide real-time feedback on each step."""
+    },
+
+    "debug-navigation-failure": {
+        "name": "Debug Navigation Failure",
+        "description": "Diagnose why robot navigation failed",
+        "arguments": [
+            {
+                "name": "test_name",
+                "description": "Name of the failed test",
+                "required": True
+            }
+        ],
+        "prompt_template": """My robot navigation test "{{test_name}}" just failed.
+
+Please help me debug:
+1. Check the robot's last known position
+2. Review sensor data from the time of failure
+3. Analyze the navigation logs for errors
+4. Check for localization issues (AMCL covariance)
+5. Identify the root cause
+6. Suggest specific fixes with parameters to tune
+
+Be thorough and explain your reasoning."""
+    },
+
+    "benchmark-algorithm": {
+        "name": "Benchmark Navigation Algorithm",
+        "description": "Compare navigation algorithms rigorously",
+        "arguments": [
+            {
+                "name": "algorithm_name",
+                "description": "Name of algorithm to benchmark",
+                "required": True
+            },
+            {
+                "name": "num_trials",
+                "description": "Number of test trials",
+                "required": False,
+                "default": "30"
+            }
+        ],
+        "prompt_template": """I want to benchmark my navigation algorithm "{{algorithm_name}}"
+against the baseline.
+
+Please:
+1. Generate {{num_trials}} diverse test scenarios (easy to expert)
+2. Run tests with both baseline and {{algorithm_name}}
+3. Collect metrics: success rate, time, CPU, path efficiency
+4. Perform statistical significance tests
+5. Identify scenarios where each algorithm excels
+6. Provide a deployment recommendation
+
+Use reproducible seeds for fair comparison."""
+    },
+
+    "create-tutorial-world": {
+        "name": "Create Tutorial World",
+        "description": "Generate an educational simulation world",
+        "arguments": [
+            {
+                "name": "topic",
+                "description": "What to teach",
+                "required": True
+            },
+            {
+                "name": "difficulty",
+                "description": "Student level",
+                "required": False,
+                "default": "beginner"
+            }
+        ],
+        "prompt_template": """Create a tutorial world for teaching {{topic}} to {{difficulty}}-level students.
+
+Requirements:
+1. Design progressive challenges (3-5 difficulty levels)
+2. Include clear visual markers and objectives
+3. Add safety boundaries
+4. Create instructor notes explaining learning objectives
+5. Generate student handout with tasks
+6. Include success criteria for each challenge
+
+Make it engaging and educational!"""
+    },
+
+    "optimize-performance": {
+        "name": "Optimize System Performance",
+        "description": "Find and fix performance bottlenecks",
+        "prompt_template": """My simulation is running slower than expected.
+
+Please help optimize:
+1. Profile current performance (CPU, memory, FPS)
+2. Identify bottlenecks (rendering, physics, ROS2 messages)
+3. Suggest specific optimizations:
+   - Reduce sensor update rates if safe
+   - Optimize world complexity
+   - Tune physics parameters
+   - Configure ROS2 QoS settings
+4. Implement top 3 optimizations
+5. Measure improvement
+
+Target: 30+ FPS, <70% CPU usage"""
+    }
+}
+```
+
+**Use Cases**:
+- New users discover capabilities through prompts
+- Best practices encoded in prompt templates
+- Consistent task execution across team
+- Self-documenting server capabilities
+
+---
+
+**Task 5.11.2: Multi-Robot Coordination Prompts** ⏳
+```python
+PROMPTS = {
+    "swarm-demo": {
+        "name": "Swarm Robotics Demo",
+        "description": "Create impressive multi-robot coordination demo",
+        "arguments": [
+            {
+                "name": "num_robots",
+                "description": "Fleet size",
+                "required": False,
+                "default": "5"
+            },
+            {
+                "name": "behavior",
+                "description": "Swarm behavior pattern",
+                "required": False,
+                "default": "formation"
+            }
+        ],
+        "prompt_template": """Create a swarm robotics demonstration with {{num_robots}} robots
+showing {{behavior}} behavior.
+
+Demo flow:
+1. Spawn {{num_robots}} robots in starting formation
+2. Demonstrate swarm {{behavior}}:
+   - If formation: V-shape, line, circle patterns
+   - If flocking: Boid-like emergent behavior
+   - If coverage: Systematic area coverage
+3. Add dynamic obstacles to show collision avoidance
+4. Show task allocation (assign targets to robots)
+5. Demonstrate fault tolerance (remove one robot mid-demo)
+
+Make it visually impressive!"""
+    }
+}
+```
+
+---
+
+**Task 5.11.3: Research Experiment Prompts** ⏳
+```python
+PROMPTS = {
+    "reproducible-experiment": {
+        "name": "Reproducible Research Experiment",
+        "description": "Set up experiment with full reproducibility",
+        "arguments": [
+            {
+                "name": "experiment_description",
+                "description": "What you're testing",
+                "required": True
+            }
+        ],
+        "prompt_template": """Set up a reproducible experiment for: {{experiment_description}}
+
+Requirements for publication-ready experiment:
+1. Create experiment with fixed seed for reproducibility
+2. Generate exactly 50 trials with controlled variation
+3. Record ALL parameters (world config, robot config, algorithm params)
+4. Collect comprehensive metrics (success, time, path length, CPU, etc.)
+5. Export data in standard format (CSV, JSON)
+6. Generate plots (success rate, performance curves)
+7. Perform statistical analysis (mean, std, confidence intervals)
+8. Create metadata file for reproduction
+
+This must be reproducible by other researchers!"""
+    }
+}
+```
+
+---
+
+**Task 5.11.4: Educational Prompts** ⏳
+```python
+PROMPTS = {
+    "explain-concept": {
+        "name": "Explain Robotics Concept",
+        "description": "Learn a robotics concept through interactive demo",
+        "arguments": [
+            {
+                "name": "concept",
+                "description": "What to learn",
+                "required": True
+            }
+        ],
+        "prompt_template": """Teach me about {{concept}} using interactive simulation.
+
+Please:
+1. Explain the concept in simple terms
+2. Create a visual demonstration in Gazebo
+3. Show me the effect by varying parameters
+4. Explain what I'm seeing and why it matters
+5. Give me hands-on exercises to try
+6. Suggest related concepts to explore
+
+Make it interactive and intuitive!"""
+    }
+}
+```
+
+---
+
+**Task 5.11.5: Prompt Discovery & Management** ⏳
+```python
+async def list_available_prompts(
+    category: Optional[str] = None,  # setup, debug, benchmark, education, etc.
+    search_query: Optional[str] = None
+) -> OperationResult:
+    """
+    List all available prompts with descriptions.
+
+    Users can browse and discover prompts:
+    - By category (setup, debug, etc.)
+    - By search query
+    - View detailed descriptions
+    - See example usage
+    """
+
+async def get_prompt_template(
+    prompt_name: str,
+    arguments: Dict[str, Any]
+) -> OperationResult:
+    """
+    Get a rendered prompt with user's arguments filled in.
+
+    Example:
+        prompt = await get_prompt_template(
+            prompt_name="quick-start-turtlebot3",
+            arguments={
+                "world_type": "warehouse",
+                "difficulty": "medium"
+            }
+        )
+
+        # Returns ready-to-use prompt:
+        # "Please help me set up a TurtleBot3 robot for testing:
+        #  1. Create a warehouse world with medium difficulty obstacles..."
+    """
+```
+
+---
+
+#### 🟡 MEDIUM PRIORITY - Specialized Prompts (3 tasks)
+
+**Task 5.11.6: Troubleshooting Prompts** ⏳
+- "Why is my robot not moving?"
+- "Debug sensor issues"
+- "Fix localization problems"
+- "Resolve ROS2 communication errors"
+
+**Task 5.11.7: Advanced Feature Prompts** ⏳
+- "Set up dynamic reconfigure for live tuning"
+- "Create custom behavior tree"
+- "Implement recovery behaviors"
+- "Set up multi-machine ROS2 network"
+
+**Task 5.11.8: Integration Prompts** ⏳
+- "Connect real hardware to simulation"
+- "Set up hardware-in-the-loop testing"
+- "Bridge with external planning framework"
+- "Export to real robot deployment"
+
+---
+
+## Part 2: MCP Resources (8 tasks)
+
+**What are Resources?** MCP resources are URIs that the server exposes, allowing clients to read structured data like documentation, configuration files, world definitions, etc.
+
+**Why powerful?** Claude can directly access and understand your project's structure, documentation, and data without requiring file system access.
+
+---
+
+#### 🔴 HIGH PRIORITY - Core Resources (5 tasks)
+
+**Task 5.11.9: Documentation Resources** ⏳
+```python
+RESOURCES = {
+    "docs://api/tools": {
+        "uri": "docs://api/tools",
+        "name": "MCP Tools API Reference",
+        "description": "Complete API documentation for all MCP tools",
+        "mimeType": "text/markdown",
+        "
+": lambda: read_markdown("docs/API_REFERENCE.md")
+    },
+
+    "docs://tutorials/getting-started": {
+        "uri": "docs://tutorials/getting-started",
+        "name": "Getting Started Tutorial",
+        "description": "Step-by-step guide for new users",
+        "mimeType": "text/markdown",
+        "content": lambda: read_markdown("docs/tutorials/getting_started.md")
+    },
+
+    "docs://examples/navigation": {
+        "uri": "docs://examples/navigation",
+        "name": "Navigation Examples",
+        "description": "Collection of navigation code examples",
+        "mimeType": "text/markdown",
+        "content": lambda: generate_examples_doc("navigation")
+    }
+}
+
+# Claude can now ask:
+# "Read docs://api/tools to understand available tools"
+# "Show me docs://tutorials/getting-started"
+# "What examples are in docs://examples/navigation?"
+```
+
+**Use Cases**:
+- Claude reads docs to answer questions accurately
+- Users get context-aware help
+- Self-documenting system
+- Always up-to-date information
+
+---
+
+**Task 5.11.10: World & Model Resources** ⏳
+```python
+RESOURCES = {
+    "world://templates/warehouse": {
+        "uri": "world://templates/warehouse",
+        "name": "Warehouse World Template",
+        "description": "Configurable warehouse environment",
+        "mimeType": "application/sdf+xml",
+        "content": lambda: read_world_template("warehouse.sdf")
+    },
+
+    "models://robots/turtlebot3/specs": {
+        "uri": "models://robots/turtlebot3/specs",
+        "name": "TurtleBot3 Specifications",
+        "description": "Technical specs, dimensions, sensor configs",
+        "mimeType": "application/json",
+        "content": lambda: get_robot_specs("turtlebot3")
+    },
+
+    "models://objects/catalog": {
+        "uri": "models://objects/catalog",
+        "name": "Object Model Catalog",
+        "description": "All available objects for world building",
+        "mimeType": "application/json",
+        "content": lambda: list_available_models()
+    }
+}
+
+# Claude can inspect worlds and models:
+# "What's in world://templates/warehouse?"
+# "Show me models://robots/turtlebot3/specs"
+# "List all models in models://objects/catalog"
+```
+
+---
+
+**Task 5.11.11: Configuration Resources** ⏳
+```python
+RESOURCES = {
+    "config://server/current": {
+        "uri": "config://server/current",
+        "name": "Current Server Configuration",
+        "description": "Active MCP server configuration",
+        "mimeType": "application/json",
+        "content": lambda: get_current_config()
+    },
+
+    "config://ros2/qos-profiles": {
+        "uri": "config://ros2/qos-profiles",
+        "name": "ROS2 QoS Profiles",
+        "description": "Available Quality of Service configurations",
+        "mimeType": "application/json",
+        "content": lambda: get_qos_profiles()
+    },
+
+    "config://nav2/default-params": {
+        "uri": "config://nav2/default-params",
+        "name": "Nav2 Default Parameters",
+        "description": "Default navigation stack parameters",
+        "mimeType": "application/yaml",
+        "content": lambda: read_yaml("configs/nav2_default.yaml")
+    }
+}
+```
+
+---
+
+**Task 5.11.12: Runtime State Resources** ⏳
+```python
+RESOURCES = {
+    "state://gazebo/current": {
+        "uri": "state://gazebo/current",
+        "name": "Current Gazebo State",
+        "description": "Live simulation state",
+        "mimeType": "application/json",
+        "content": lambda: get_gazebo_state()
+        # Returns: running/paused, FPS, loaded models, etc.
+    },
+
+    "state://robots/active": {
+        "uri": "state://robots/active",
+        "name": "Active Robots",
+        "description": "All robots currently in simulation",
+        "mimeType": "application/json",
+        "content": lambda: list_active_robots()
+        # Returns: robot IDs, positions, states, sensor status
+    },
+
+    "state://performance/metrics": {
+        "uri": "state://performance/metrics",
+        "name": "Performance Metrics",
+        "description": "Real-time performance data",
+        "mimeType": "application/json",
+        "content": lambda: get_performance_metrics()
+        # Returns: CPU, memory, FPS, network, latency
+    }
+}
+
+# Dynamic resources update in real-time
+# Claude can monitor: "Check state://performance/metrics"
+```
+
+---
+
+**Task 5.11.13: Test & Benchmark Resources** ⏳
+```python
+RESOURCES = {
+    "tests://results/latest": {
+        "uri": "tests://results/latest",
+        "name": "Latest Test Results",
+        "description": "Most recent test execution results",
+        "mimeType": "application/json",
+        "content": lambda: get_latest_test_results()
+    },
+
+    "benchmarks://standard/nav2": {
+        "uri": "benchmarks://standard/nav2",
+        "name": "Nav2 Standard Benchmark",
+        "description": "Industry standard navigation benchmark",
+        "mimeType": "application/json",
+        "content": lambda: get_benchmark_definition("nav2_standard")
+    },
+
+    "tests://history/trends": {
+        "uri": "tests://history/trends",
+        "name": "Test Result Trends",
+        "description": "Historical test performance data",
+        "mimeType": "application/json",
+        "content": lambda: get_test_trends(days=30)
+    }
+}
+```
+
+---
+
+#### 🟡 MEDIUM PRIORITY - Extended Resources (3 tasks)
+
+**Task 5.11.14: Research Data Resources** ⏳
+- Experiment datasets
+- Published results
+- Ground truth data
+- Comparison baselines
+
+**Task 5.11.15: Learning Resources** ⏳
+- Video tutorials
+- Interactive examples
+- Troubleshooting guides
+- FAQ database
+
+**Task 5.11.16: Community Resources** ⏳
+- Shared worlds
+- Community robot models
+- User-contributed examples
+- Plugin repository
+
+---
+
+## Part 3: MCP Sampling (7 tasks)
+
+**What is Sampling?** MCP sampling allows the server to request LLM completions from the client. The server can ask Claude to reason about complex problems and use that reasoning in its logic.
+
+**Why powerful?** The server becomes truly intelligent - it can use Claude's reasoning for complex decisions, not just execute pre-programmed logic.
+
+---
+
+#### 🔴 HIGH PRIORITY - Core Sampling (4 tasks)
+
+**Task 5.11.17: Intelligent Path Planning with Sampling** ⏳
+```python
+async def plan_path_intelligent(
+    start: Pose,
+    goal: Pose,
+    obstacles: List[Obstacle],
+    robot_capabilities: Dict
+) -> OperationResult:
+    """
+    Use LLM sampling to reason about optimal path planning strategy.
+
+    Example:
+        # Server requests Claude to reason about path planning
+        reasoning = await sample_llm(
+            prompt=f'''
+            I need to plan a path for a robot with these capabilities:
+            {robot_capabilities}
+
+            From: {start}
+            To: {goal}
+
+            Obstacles: {obstacles}
+
+            Given the environment, what path planning strategy would work best?
+            Consider:
+            - Obstacle density and distribution
+            - Robot's turning radius and speed limits
+            - Goal urgency vs. safety tradeoffs
+            - Computational resources available
+
+            Recommend: algorithm choice, parameters to use, and explain why.
+            ''',
+            max_tokens=500
+        )
+
+        # Use Claude's reasoning to configure planner
+        strategy = parse_strategy(reasoning)
+        return execute_plan_with_strategy(strategy)
+```
+
+**This is revolutionary**: The server doesn't just follow rules - it reasons about the situation and makes intelligent decisions.
+
+---
+
+**Task 5.11.18: Adaptive Test Generation with Sampling** ⏳
+```python
+async def generate_adaptive_tests(
+    system_under_test: str,
+    previous_failures: List[Dict],
+    coverage_gaps: List[str]
+) -> OperationResult:
+    """
+    Use LLM to design tests that target weaknesses.
+
+    Example:
+        test_design = await sample_llm(
+            prompt=f'''
+            I'm testing {system_under_test}.
+
+            Previous failures:
+            {json.dumps(previous_failures, indent=2)}
+
+            Coverage gaps:
+            {coverage_gaps}
+
+            Design 5 new tests that:
+            1. Target the failure patterns we've seen
+            2. Cover the gaps in our test suite
+            3. Are likely to find new bugs
+            4. Test edge cases we haven't considered
+
+            For each test, provide:
+            - Test scenario description
+            - Why this test is valuable
+            - Expected difficulty level
+            - Success criteria
+
+            Be creative and think adversarially!
+            ''',
+            max_tokens=1000
+        )
+
+        return parse_and_generate_tests(test_design)
+```
+
+---
+
+**Task 5.11.19: Failure Diagnosis with Sampling** ⏳
+```python
+async def diagnose_failure_intelligent(
+    test_name: str,
+    sensor_data: Dict,
+    system_logs: List[str],
+    robot_state_history: List[Dict]
+) -> OperationResult:
+    """
+    Deep reasoning about test failures.
+
+    Example:
+        diagnosis = await sample_llm(
+            prompt=f'''
+            Test "{test_name}" failed. Help me diagnose the root cause.
+
+            Sensor data at failure:
+            {format_sensor_data(sensor_data)}
+
+            System logs (last 50 lines):
+            {'\n'.join(system_logs[-50:])}
+
+            Robot state history (last 30 seconds):
+            {format_state_history(robot_state_history)}
+
+            Analyze:
+            1. When exactly did failure occur?
+            2. What was happening in the moments before?
+            3. Were there any warning signs in the data?
+            4. What's the most likely root cause?
+            5. What are alternative explanations?
+            6. How can we fix this?
+            7. How can we prevent similar failures?
+
+            Be thorough and consider all evidence.
+            ''',
+            max_tokens=1500
+        )
+
+        return structure_diagnosis(diagnosis)
+```
+
+---
+
+**Task 5.11.20: Configuration Optimization with Sampling** ⏳
+```python
+async def optimize_configuration_intelligent(
+    current_config: Dict,
+    performance_metrics: Dict,
+    target_goals: Dict
+) -> OperationResult:
+    """
+    Reason about configuration improvements.
+
+    Example:
+        recommendations = await sample_llm(
+            prompt=f'''
+            Current configuration:
+            {json.dumps(current_config, indent=2)}
+
+            Performance metrics:
+            - Success rate: {performance_metrics['success_rate']}%
+            - Average time: {performance_metrics['avg_time']}s
+            - CPU usage: {performance_metrics['cpu_usage']}%
+
+            Target goals:
+            - Success rate: >{target_goals['min_success']}%
+            - Time: <{target_goals['max_time']}s
+            - CPU: <{target_goals['max_cpu']}%
+
+            Analyze the configuration and suggest specific parameter changes
+            to meet the goals. For each suggestion:
+            1. Parameter name
+            2. Current value
+            3. Recommended value
+            4. Expected impact
+            5. Risk level (low/medium/high)
+            6. Why this change helps
+
+            Prioritize by impact and safety.
+            ''',
+            max_tokens=1000
+        )
+
+        return parse_recommendations(recommendations)
+```
+
+---
+
+#### 🟡 MEDIUM PRIORITY - Advanced Sampling (3 tasks)
+
+**Task 5.11.21: Multi-Step Reasoning Tasks** ⏳
+```python
+async def solve_complex_task_with_reasoning(
+    task_description: str
+) -> OperationResult:
+    """
+    Break down complex tasks using LLM reasoning.
+
+    Example: "Create a complete autonomous delivery robot demo"
+
+    Server samples LLM to:
+    1. Break task into steps
+    2. Reason about dependencies
+    3. Identify potential issues
+    4. Generate execution plan
+    5. Execute plan with feedback loop
+    """
+```
+
+**Task 5.11.22: Code Generation with Sampling** ⏳
+```python
+async def generate_custom_behavior(
+    behavior_description: str,
+    constraints: List[str]
+) -> OperationResult:
+    """
+    Generate custom robot behaviors on-the-fly.
+
+    Server samples LLM to write Python code for custom behaviors,
+    validates it, and executes safely.
+    """
+```
+
+**Task 5.11.23: Interactive Tutoring with Sampling** ⏳
+```python
+async def provide_interactive_help(
+    user_question: str,
+    context: Dict
+) -> OperationResult:
+    """
+    Context-aware help system.
+
+    Server samples LLM with full context of current simulation state,
+    user's history, and question to provide intelligent assistance.
+    """
+```
+
+---
+
+## Part 4: Extended Thinking (7 tasks)
+
+**What is Extended Thinking?** Extended thinking allows Claude to take more time reasoning about complex problems before responding. Perfect for robotics challenges that require deep analysis.
+
+**Why powerful?** Complex robotics problems (path planning in cluttered environments, multi-objective optimization, failure diagnosis) benefit from extended reasoning time.
+
+---
+
+#### 🔴 HIGH PRIORITY - Core Extended Thinking (4 tasks)
+
+**Task 5.11.24: Complex World Generation with Extended Thinking** ⏳
+```python
+async def generate_complex_world_thoughtful(
+    requirements: List[str],
+    constraints: Dict,
+    optimization_goals: List[str]
+) -> OperationResult:
+    """
+    Generate worlds that meet complex requirements.
+
+    Example:
+        world = await generate_complex_world_thoughtful(
+            requirements=[
+                "Must test narrow corridor navigation",
+                "Include dynamic obstacles",
+                "Test localization in low-feature areas",
+                "Provide multiple difficulty paths",
+                "Include emergency scenarios"
+            ],
+            constraints={
+                "max_size": "20x20 meters",
+                "robot_type": "turtlebot3",
+                "must_be_solvable": True
+            },
+            optimization_goals=[
+                "Maximize test coverage",
+                "Balance difficulty progression",
+                "Minimize redundancy"
+            ],
+            enable_extended_thinking=True  # ← Give Claude more time to think
+        )
+
+    Extended thinking helps Claude:
+    - Consider trade-offs between requirements
+    - Reason about spatial layouts
+    - Validate solvability
+    - Optimize for multiple goals simultaneously
+    """
+```
+
+---
+
+**Task 5.11.25: Multi-Robot Task Allocation with Extended Thinking** ⏳
+```python
+async def allocate_tasks_optimal(
+    robots: List[Robot],
+    tasks: List[Task],
+    objectives: List[str],  # minimize_time, balance_load, maximize_robustness, etc.
+    constraints: Dict
+) -> OperationResult:
+    """
+    Optimal task allocation for robot fleets.
+
+    Example:
+        allocation = await allocate_tasks_optimal(
+            robots=[robot1, robot2, robot3, robot4, robot5],
+            tasks=list_of_50_delivery_tasks,
+            objectives=[
+                "minimize_total_completion_time",
+                "balance_workload_across_robots",
+                "maximize_fault_tolerance",
+                "minimize_conflicts"
+            ],
+            constraints={
+                "max_tasks_per_robot": 15,
+                "battery_limits": True,
+                "priority_tasks_first": True
+            },
+            enable_extended_thinking=True
+        )
+
+    Extended thinking allows reasoning about:
+    - Multi-objective optimization trade-offs
+    - Complex constraint satisfaction
+    - Failure scenarios and recovery
+    - Dynamic re-allocation strategies
+    """
+```
+
+---
+
+**Task 5.11.26: Algorithm Selection & Tuning with Extended Thinking** ⏳
+```python
+async def select_and_tune_algorithm(
+    problem_description: str,
+    environment_characteristics: Dict,
+    robot_capabilities: Dict,
+    performance_requirements: Dict
+) -> OperationResult:
+    """
+    Reason about which algorithm to use and how to configure it.
+
+    Example:
+        config = await select_and_tune_algorithm(
+            problem_description="Navigate through crowded warehouse",
+            environment_characteristics={
+                "obstacle_density": "high",
+                "obstacles_dynamic": True,
+                "space_constraints": "tight corridors",
+                "environment_changes": "frequent"
+            },
+            robot_capabilities={
+                "max_speed": 0.5,
+                "turning_radius": 0.2,
+                "sensors": ["lidar", "camera", "imu"],
+                "compute_power": "medium"
+            },
+            performance_requirements={
+                "success_rate": ">95%",
+                "max_time_per_task": "120s",
+                "safety": "critical",
+                "efficiency": "important"
+            },
+            enable_extended_thinking=True
+        )
+
+    Extended thinking helps choose between:
+    - DWA vs TEB vs MPC local planners
+    - A* vs RRT* vs informed RRT* global planners
+    - Parameter settings for chosen algorithms
+    - Fallback strategies
+    """
+```
+
+---
+
+**Task 5.11.27: Comprehensive System Diagnosis with Extended Thinking** ⏳
+```python
+async def diagnose_system_comprehensive(
+    symptoms: List[str],
+    system_logs: Dict,
+    performance_history: List[Dict],
+    recent_changes: List[str]
+) -> OperationResult:
+    """
+    Deep system-wide diagnosis.
+
+    Example:
+        diagnosis = await diagnose_system_comprehensive(
+            symptoms=[
+                "Navigation success rate dropped from 95% to 75%",
+                "CPU usage increased by 30%",
+                "Occasional localization divergence",
+                "Slower path planning"
+            ],
+            system_logs={...},  # Last week of logs
+            performance_history=[...],  # Last 100 test runs
+            recent_changes=[
+                "Updated Nav2 to v1.2.0",
+                "Added additional sensor",
+                "Changed QoS settings"
+            ],
+            enable_extended_thinking=True
+        )
+
+    Extended thinking helps:
+    - Correlate multiple symptoms
+    - Consider cascading failures
+    - Evaluate recent changes impact
+    - Rule out false leads
+    - Identify root cause vs symptoms
+    """
+```
+
+---
+
+#### 🟡 MEDIUM PRIORITY - Advanced Extended Thinking (3 tasks)
+
+**Task 5.11.28: Research Experiment Design** ⏳
+```python
+async def design_research_experiment(
+    research_question: str,
+    hypotheses: List[str],
+    available_resources: Dict
+) -> OperationResult:
+    """
+    Design rigorous scientific experiments.
+
+    Extended thinking helps:
+    - Design proper controls
+    - Select appropriate sample sizes
+    - Identify confounding variables
+    - Plan statistical analysis
+    - Consider experimental limitations
+    """
+```
+
+**Task 5.11.29: Safety Analysis & Verification** ⏳
+```python
+async def analyze_safety_comprehensive(
+    system_description: Dict,
+    operating_conditions: Dict,
+    safety_requirements: List[str]
+) -> OperationResult:
+    """
+    Thorough safety analysis.
+
+    Extended thinking helps identify:
+    - Edge cases and failure modes
+    - Safety-critical scenarios
+    - Mitigation strategies
+    - Verification methods
+    """
+```
+
+**Task 5.11.30: Architecture Design Recommendations** ⏳
+```python
+async def recommend_system_architecture(
+    project_requirements: Dict,
+    constraints: Dict,
+    future_needs: List[str]
+) -> OperationResult:
+    """
+    Design optimal system architecture.
+
+    Extended thinking helps:
+    - Evaluate architectural patterns
+    - Consider scalability
+    - Plan for evolution
+    - Balance trade-offs
+    """
+```
+
+---
+
+## Integration Example: All Features Together
+
+```python
+# User: "I need to test my new navigation algorithm comprehensively"
+
+# 1. PROMPT: User selects from available prompts
+prompts = await list_available_prompts(category="benchmark")
+# User selects: "benchmark-algorithm"
+
+# 2. EXTENDED THINKING: Plan the benchmarking approach
+plan = await sample_llm(
+    prompt="Design a comprehensive benchmark strategy for navigation algorithm...",
+    enable_extended_thinking=True  # Give Claude time to think deeply
+)
+
+# 3. RESOURCE: Claude reads relevant docs and benchmarks
+api_docs = await read_resource("docs://api/tools")
+benchmark_spec = await read_resource("benchmarks://standard/nav2")
+
+# 4. SAMPLING: Generate optimal test scenarios
+test_scenarios = await sample_llm(
+    prompt=f'''Given {benchmark_spec} and algorithm characteristics,
+    design 30 diverse test scenarios that will reveal strengths and weaknesses...''',
+    max_tokens=2000
+)
+
+# 5. Execute tests with intelligent monitoring
+results = await execute_tests_with_sampling(
+    scenarios=test_scenarios,
+    adaptive_difficulty=True,  # Use sampling to adjust difficulty
+    intelligent_monitoring=True  # Use sampling to watch for interesting patterns
+)
+
+# 6. EXTENDED THINKING: Comprehensive analysis
+analysis = await sample_llm(
+    prompt=f'''Analyze these test results comprehensively: {results}
+
+    Consider:
+    - Performance patterns
+    - Failure modes
+    - Comparison to baseline
+    - Statistical significance
+    - Production readiness
+    - Specific recommendations
+    ''',
+    enable_extended_thinking=True  # Deep analysis
+)
+
+# 7. RESOURCE: Store results for future reference
+await write_resource(
+    "tests://results/algorithm-v2-benchmark",
+    content=results
+)
+
+# 8. SAMPLING: Generate executive summary
+summary = await sample_llm(
+    prompt=f"Create executive summary of {analysis} for non-technical stakeholders",
+    max_tokens=300
+)
+
+# User gets: Comprehensive benchmark with deep insights, all automated
+```
+
+---
+
+## Success Criteria
+
+- [ ] 20+ useful prompts covering common tasks
+- [ ] 30+ resources exposing docs, state, configs
+- [ ] Sampling used for 5+ intelligent decision-making scenarios
+- [ ] Extended thinking improves complex problem solving by >50%
+- [ ] Users report prompts help them discover capabilities
+- [ ] Claude can answer questions by reading resources
+- [ ] System makes intelligent autonomous decisions
+- [ ] Complex problems solved more effectively
+
+---
+
+## Implementation Priority
+
+**Week 1-2 (Foundation)**:
+1. Core prompts (setup, debug, benchmark) - 5.11.1-5.11.4
+2. Documentation resources - 5.11.9
+3. Basic sampling for path planning - 5.11.17
+
+**Week 3-4 (Intelligence)**:
+4. World/model resources - 5.11.10-5.11.11
+5. Runtime state resources - 5.11.12
+6. Sampling for test generation - 5.11.18
+7. Extended thinking for world generation - 5.11.24
+
+**Week 5+ (Advanced)**:
+- Remaining prompts and resources
+- Advanced sampling scenarios
+- Extended thinking for complex optimizations
+
+---
+
+**These features transform the MCP server from a tool provider into an intelligent agent that can guide, reason, and make autonomous decisions.** 🤖🧠✨
 
 ---
 
