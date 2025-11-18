@@ -16,21 +16,17 @@ from datetime import datetime
 CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
 sys.path.insert(0, str(CLAUDE_ROOT))
 
-from skills.common.filters import ResultFilter
 from gazebo_mcp.utils import (
     OperationResult,
     success_result,
     error_result,
     model_not_found_error,
-    ros2_not_connected_error,
-    gazebo_not_running_error,
     invalid_parameter_error,
 )
 from gazebo_mcp.utils.exceptions import (
     GazeboMCPError,
     ROS2NotConnectedError,
-    GazeboNotRunningError,
-    ModelNotFoundError
+    ModelNotFoundError,
 )
 from gazebo_mcp.utils.validators import validate_model_name, validate_position, validate_orientation
 from gazebo_mcp.utils.converters import euler_to_quaternion
@@ -152,7 +148,7 @@ def list_models(response_format: str = "filtered") -> OperationResult:
                     "position": model_state.pose["position"],
                     "orientation": model_state.pose["orientation"],
                     "velocity": model_state.twist,
-                    "complexity": _estimate_complexity(model_state.name)
+                    "complexity": _estimate_complexity(model_state.name),
                 }
                 all_models.append(model_dict)
 
@@ -168,7 +164,7 @@ def list_models(response_format: str = "filtered") -> OperationResult:
             error=e.message,
             error_code=e.error_code,
             suggestions=e.suggestions,
-            example_fix=e.example_fix
+            example_fix=e.example_fix,
         )
 
     # Response format handling:
@@ -177,12 +173,9 @@ def list_models(response_format: str = "filtered") -> OperationResult:
         types = list(set(m.get("type", "unknown") for m in all_models))
         states = list(set(m.get("state", "unknown") for m in all_models))
 
-        return success_result({
-            "count": len(all_models),
-            "types": types,
-            "states": states,
-            "token_estimate": 50
-        })
+        return success_result(
+            {"count": len(all_models), "types": types, "states": states, "token_estimate": 50}
+        )
 
     elif response_format == "concise":
         # Names and basic info only:
@@ -191,39 +184,39 @@ def list_models(response_format: str = "filtered") -> OperationResult:
                 "name": m["name"],
                 "type": m.get("type", "unknown"),
                 "state": m.get("state", "unknown"),
-                "position": m.get("position", {})
+                "position": m.get("position", {}),
             }
             for m in all_models
         ]
 
-        return success_result({
-            "models": concise_models,
-            "count": len(all_models),
-            "token_estimate": len(all_models) * 20
-        })
+        return success_result(
+            {
+                "models": concise_models,
+                "count": len(all_models),
+                "token_estimate": len(all_models) * 20,
+            }
+        )
 
     elif response_format == "filtered":
         # THIS IS THE KEY PATTERN - full data + filtering guidance:
-        return success_result({
-            "models": all_models,  # Full data for local filtering
-            "count": len(all_models),
-
-            # Show agents how to filter locally:
-            "filter_examples": {
-                "search_by_name": "ResultFilter.search(models, 'turtlebot', ['name'])",
-                "filter_by_state": "ResultFilter.filter_by_field(models, 'state', 'active')",
-                "filter_by_type": "ResultFilter.filter_by_field(models, 'type', 'robot')",
-                "get_top_n_complex": "ResultFilter.top_n_by_field(models, 'complexity', 5)",
-                "limit_results": "ResultFilter.limit(models, 10)"
-            },
-
-            # Token usage information:
-            "token_estimate_unfiltered": len(all_models) * 100,
-            "token_estimate_filtered": 1000,
-            "token_savings_pct": 99.0 if len(all_models) > 10 else 0,
-
-            # Usage example:
-            "usage_example": """
+        return success_result(
+            {
+                "models": all_models,  # Full data for local filtering
+                "count": len(all_models),
+                # Show agents how to filter locally:
+                "filter_examples": {
+                    "search_by_name": "ResultFilter.search(models, 'turtlebot', ['name'])",
+                    "filter_by_state": "ResultFilter.filter_by_field(models, 'state', 'active')",
+                    "filter_by_type": "ResultFilter.filter_by_field(models, 'type', 'robot')",
+                    "get_top_n_complex": "ResultFilter.top_n_by_field(models, 'complexity', 5)",
+                    "limit_results": "ResultFilter.limit(models, 10)",
+                },
+                # Token usage information:
+                "token_estimate_unfiltered": len(all_models) * 100,
+                "token_estimate_filtered": 1000,
+                "token_savings_pct": 99.0 if len(all_models) > 10 else 0,
+                # Usage example:
+                "usage_example": """
 # Agent generates this code (runs locally, 0 tokens to model!):
 from skills.common.filters import ResultFilter
 
@@ -238,18 +231,21 @@ complex = ResultFilter.top_n_by_field(result.data["models"], "complexity", 5)
 
 # Combine filters:
 active_turtlebots = ResultFilter.filter_by_field(turtlebots, "state", "active")
-            """
-        })
+            """,
+            }
+        )
 
     else:  # detailed
         # Everything including heavy data:
         detailed_models = all_models  # In real implementation, add mesh, physics data
 
-        return success_result({
-            "models": detailed_models,
-            "count": len(all_models),
-            "token_estimate": len(all_models) * 500
-        })
+        return success_result(
+            {
+                "models": detailed_models,
+                "count": len(all_models),
+                "token_estimate": len(all_models) * 500,
+            }
+        )
 
 
 def spawn_model(
@@ -260,7 +256,7 @@ def spawn_model(
     roll: float = 0.0,
     pitch: float = 0.0,
     yaw: float = 0.0,
-    namespace: Optional[str] = None
+    namespace: Optional[str] = None,
 ) -> OperationResult:
     """
     Spawn a model in Gazebo simulation.
@@ -293,7 +289,7 @@ def spawn_model(
         qx, qy, qz, qw = euler_to_quaternion(roll, pitch, yaw)
         pose = {
             "position": {"x": x, "y": y, "z": z},
-            "orientation": {"x": qx, "y": qy, "z": qz, "w": qw}
+            "orientation": {"x": qx, "y": qy, "z": qz, "w": qw},
         }
 
         # Attempt to spawn in real Gazebo:
@@ -318,45 +314,46 @@ def spawn_model(
                 xml_content=sdf_content,
                 pose=pose,
                 reference_frame="world",
-                timeout=10.0
+                timeout=10.0,
             )
 
             if success:
                 _logger.log_model_event("spawned", model_name, position=pose["position"])
-                return success_result({
+                return success_result(
+                    {
+                        "model_name": model_name,
+                        "entity_name": namespace or model_name,
+                        "position": {"x": x, "y": y, "z": z},
+                        "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
+                        "namespace": namespace,
+                        "spawned_at": datetime.utcnow().isoformat() + "Z",
+                    }
+                )
+        else:
+            # Fall back to mock spawn:
+            _logger.warning(f"Mock spawning {model_name} - Gazebo not available")
+            return success_result(
+                {
                     "model_name": model_name,
                     "entity_name": namespace or model_name,
                     "position": {"x": x, "y": y, "z": z},
                     "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
                     "namespace": namespace,
-                    "spawned_at": datetime.utcnow().isoformat() + "Z"
-                })
-        else:
-            # Fall back to mock spawn:
-            _logger.warning(f"Mock spawning {model_name} - Gazebo not available")
-            return success_result({
-                "model_name": model_name,
-                "entity_name": namespace or model_name,
-                "position": {"x": x, "y": y, "z": z},
-                "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
-                "namespace": namespace,
-                "spawned_at": datetime.utcnow().isoformat() + "Z",
-                "note": "Mock spawn - Gazebo not available"
-            })
+                    "spawned_at": datetime.utcnow().isoformat() + "Z",
+                    "note": "Mock spawn - Gazebo not available",
+                }
+            )
 
     except GazeboMCPError as e:
         return error_result(
             error=e.message,
             error_code=e.error_code,
             suggestions=e.suggestions,
-            example_fix=e.example_fix
+            example_fix=e.example_fix,
         )
     except Exception as e:
         _logger.exception("Unexpected error during spawn", error=str(e))
-        return error_result(
-            error=f"Failed to spawn model: {e}",
-            error_code="SPAWN_ERROR"
-        )
+        return error_result(error=f"Failed to spawn model: {e}", error_code="SPAWN_ERROR")
 
 
 def delete_model(model_name: str) -> OperationResult:
@@ -385,34 +382,36 @@ def delete_model(model_name: str) -> OperationResult:
 
             if success:
                 _logger.log_model_event("deleted", model_name)
-                return success_result({
-                    "model_name": model_name,
-                    "deleted_at": datetime.utcnow().isoformat() + "Z"
-                })
+                return success_result(
+                    {"model_name": model_name, "deleted_at": datetime.utcnow().isoformat() + "Z"}
+                )
+            else:
+                return error_result(
+                    error=f"Failed to delete model '{model_name}'", error_code="DELETE_FAILED"
+                )
         else:
             # Fall back to mock deletion:
             _logger.warning(f"Mock deleting {model_name} - Gazebo not available")
-            return success_result({
-                "model_name": model_name,
-                "deleted_at": datetime.utcnow().isoformat() + "Z",
-                "note": "Mock deletion - Gazebo not available"
-            })
+            return success_result(
+                {
+                    "model_name": model_name,
+                    "deleted_at": datetime.utcnow().isoformat() + "Z",
+                    "note": "Mock deletion - Gazebo not available",
+                }
+            )
 
-    except ModelNotFoundError as e:
+    except ModelNotFoundError:
         return model_not_found_error(model_name)
     except GazeboMCPError as e:
         return error_result(
             error=e.message,
             error_code=e.error_code,
             suggestions=e.suggestions,
-            example_fix=e.example_fix
+            example_fix=e.example_fix,
         )
     except Exception as e:
         _logger.exception("Unexpected error during deletion", error=str(e))
-        return error_result(
-            error=f"Failed to delete model: {e}",
-            error_code="DELETE_ERROR"
-        )
+        return error_result(error=f"Failed to delete model: {e}", error_code="DELETE_ERROR")
 
 
 def get_model_state(model_name: str, response_format: str = "concise") -> OperationResult:
@@ -446,6 +445,7 @@ def get_model_state(model_name: str, response_format: str = "concise") -> Operat
 
             # Convert orientation quaternion to Euler angles:
             from gazebo_mcp.utils.converters import quaternion_to_euler
+
             orient = model_state.pose["orientation"]
             roll, pitch, yaw = quaternion_to_euler(
                 orient["x"], orient["y"], orient["z"], orient["w"]
@@ -453,73 +453,78 @@ def get_model_state(model_name: str, response_format: str = "concise") -> Operat
 
             # Return based on format:
             if response_format == "concise":
-                return success_result({
-                    "name": model_state.name,
-                    "position": model_state.pose["position"],
-                    "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
-                    "velocity": model_state.twist
-                })
+                return success_result(
+                    {
+                        "name": model_state.name,
+                        "position": model_state.pose["position"],
+                        "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
+                        "velocity": model_state.twist,
+                    }
+                )
             else:  # detailed
-                return success_result({
-                    "name": model_state.name,
-                    "position": model_state.pose["position"],
-                    "orientation": {
-                        "roll": roll,
-                        "pitch": pitch,
-                        "yaw": yaw,
-                        "quaternion": orient
-                    },
-                    "velocity": model_state.twist,
-                    "state": model_state.state
-                })
+                return success_result(
+                    {
+                        "name": model_state.name,
+                        "position": model_state.pose["position"],
+                        "orientation": {
+                            "roll": roll,
+                            "pitch": pitch,
+                            "yaw": yaw,
+                            "quaternion": orient,
+                        },
+                        "velocity": model_state.twist,
+                        "state": model_state.state,
+                    }
+                )
         else:
             # Fall back to mock state:
             _logger.warning(f"Mock state for {model_name} - Gazebo not available")
             if response_format == "concise":
-                return success_result({
-                    "name": model_name,
-                    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0},
-                    "velocity": {
-                        "linear": {"x": 0.0, "y": 0.0, "z": 0.0},
-                        "angular": {"x": 0.0, "y": 0.0, "z": 0.0}
-                    },
-                    "note": "Mock state - Gazebo not available"
-                })
+                return success_result(
+                    {
+                        "name": model_name,
+                        "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                        "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0},
+                        "velocity": {
+                            "linear": {"x": 0.0, "y": 0.0, "z": 0.0},
+                            "angular": {"x": 0.0, "y": 0.0, "z": 0.0},
+                        },
+                        "note": "Mock state - Gazebo not available",
+                    }
+                )
             else:  # detailed
-                return success_result({
-                    "name": model_name,
-                    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0},
-                    "velocity": {
-                        "linear": {"x": 0.0, "y": 0.0, "z": 0.0},
-                        "angular": {"x": 0.0, "y": 0.0, "z": 0.0}
-                    },
-                    "note": "Mock state - Gazebo not available"
-                })
+                return success_result(
+                    {
+                        "name": model_name,
+                        "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                        "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0},
+                        "velocity": {
+                            "linear": {"x": 0.0, "y": 0.0, "z": 0.0},
+                            "angular": {"x": 0.0, "y": 0.0, "z": 0.0},
+                        },
+                        "note": "Mock state - Gazebo not available",
+                    }
+                )
 
-    except ModelNotFoundError as e:
+    except ModelNotFoundError:
         return model_not_found_error(model_name)
     except GazeboMCPError as e:
         return error_result(
             error=e.message,
             error_code=e.error_code,
             suggestions=e.suggestions,
-            example_fix=e.example_fix
+            example_fix=e.example_fix,
         )
     except Exception as e:
         _logger.exception("Unexpected error getting model state", error=str(e))
-        return error_result(
-            error=f"Failed to get model state: {e}",
-            error_code="GET_STATE_ERROR"
-        )
+        return error_result(error=f"Failed to get model state: {e}", error_code="GET_STATE_ERROR")
 
 
 def set_model_state(
     model_name: str,
     pose: Optional[Dict] = None,
     twist: Optional[Dict] = None,
-    reference_frame: str = "world"
+    reference_frame: str = "world",
 ) -> OperationResult:
     """
     Set model pose and/or velocity.
@@ -570,22 +575,21 @@ def set_model_state(
         model_name = validate_model_name(model_name)
 
         if pose is None and twist is None:
-            return invalid_parameter_error(
-                "pose/twist",
-                "Must provide either pose or twist (or both)",
-                suggestions=[
-                    "Provide pose to teleport model",
-                    "Provide twist to set velocity",
-                    "Provide both to set position and velocity"
-                ]
-            )
+            return invalid_parameter_error("pose/twist", "None", "pose dict and/or twist dict")
 
         # Validate pose if provided:
         if pose:
             if "position" in pose:
-                validate_position(pose["position"])
+                pos = pose["position"]
+                validate_position(pos["x"], pos["y"], pos["z"])
             if "orientation" in pose:
-                validate_orientation(pose["orientation"])
+                orient = pose["orientation"]
+                # Support both Euler and quaternion:
+                if "roll" in orient:
+                    validate_orientation(
+                        orient["roll"], orient["pitch"], orient["yaw"], radians=True
+                    )
+                # Quaternion validation would go here if needed
 
         # Attempt to set state in real Gazebo:
         if _use_real_gazebo():
@@ -597,7 +601,7 @@ def set_model_state(
                 pose=pose,
                 twist=twist,
                 reference_frame=reference_frame,
-                timeout=10.0
+                timeout=10.0,
             )
 
             if success:
@@ -607,7 +611,7 @@ def set_model_state(
                 response_data = {
                     "model": model_name,
                     "updated": True,
-                    "reference_frame": reference_frame
+                    "reference_frame": reference_frame,
                 }
 
                 if pose:
@@ -619,7 +623,7 @@ def set_model_state(
             else:
                 return error_result(
                     error=f"Failed to set state for model '{model_name}'",
-                    error_code="SET_STATE_FAILED"
+                    error_code="SET_STATE_FAILED",
                 )
 
         else:
@@ -635,35 +639,39 @@ def set_model_state(
 
             if twist:
                 instructions.append("To set velocity, use ROS2 topics or Gazebo GUI")
-                instructions.append(f"Target linear velocity: {twist.get('linear', 'not specified')}")
-                instructions.append(f"Target angular velocity: {twist.get('angular', 'not specified')}")
+                instructions.append(
+                    f"Target linear velocity: {twist.get('linear', 'not specified')}"
+                )
+                instructions.append(
+                    f"Target angular velocity: {twist.get('angular', 'not specified')}"
+                )
 
-            return success_result({
-                "model": model_name,
-                "updated": False,
-                "note": "Mock mode - Gazebo not available",
-                "instructions": instructions,
-                "gazebo_connected": False
-            })
+            return success_result(
+                {
+                    "model": model_name,
+                    "updated": False,
+                    "note": "Mock mode - Gazebo not available",
+                    "instructions": instructions,
+                    "gazebo_connected": False,
+                }
+            )
 
-    except ModelNotFoundError as e:
+    except ModelNotFoundError:
         return model_not_found_error(model_name)
     except GazeboMCPError as e:
         return error_result(
             error=e.message,
             error_code=e.error_code,
             suggestions=e.suggestions,
-            example_fix=e.example_fix
+            example_fix=e.example_fix,
         )
     except Exception as e:
         _logger.exception("Unexpected error setting model state", error=str(e))
-        return error_result(
-            error=f"Failed to set model state: {e}",
-            error_code="SET_STATE_ERROR"
-        )
+        return error_result(error=f"Failed to set model state: {e}", error_code="SET_STATE_ERROR")
 
 
 # Helper functions:
+
 
 def _infer_model_type(model_name: str) -> str:
     """
@@ -690,7 +698,10 @@ def _infer_model_type(model_name: str) -> str:
         return "actor"
 
     # Props (obstacles, furniture, etc.):
-    if any(prop in name_lower for prop in ["box", "cylinder", "sphere", "obstacle", "wall", "chair", "table"]):
+    if any(
+        prop in name_lower
+        for prop in ["box", "cylinder", "sphere", "obstacle", "wall", "chair", "table"]
+    ):
         return "prop"
 
     return "unknown"
@@ -746,7 +757,7 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "position": {"x": 0, "y": 0, "z": 0},
             "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
             "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
-            "complexity": 1
+            "complexity": 1,
         },
         {
             "name": "turtlebot3_burger",
@@ -755,7 +766,7 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "position": {"x": 1.0, "y": 2.0, "z": 0.01},
             "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
             "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
-            "complexity": 45
+            "complexity": 45,
         },
         {
             "name": "turtlebot3_waffle",
@@ -764,7 +775,7 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "position": {"x": -1.0, "y": 0.0, "z": 0.01},
             "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
             "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
-            "complexity": 52
+            "complexity": 52,
         },
         {
             "name": "box_obstacle_1",
@@ -773,7 +784,7 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "position": {"x": 3.0, "y": 3.0, "z": 0.5},
             "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
             "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
-            "complexity": 2
+            "complexity": 2,
         },
         {
             "name": "cylinder_obstacle_1",
@@ -782,6 +793,6 @@ def _get_mock_models() -> List[Dict[str, Any]]:
             "position": {"x": -2.0, "y": 2.0, "z": 0.5},
             "orientation": {"x": 0, "y": 0, "z": 0, "w": 1},
             "velocity": {"linear": {"x": 0, "y": 0, "z": 0}, "angular": {"x": 0, "y": 0, "z": 0}},
-            "complexity": 3
+            "complexity": 3,
         },
     ]

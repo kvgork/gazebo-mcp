@@ -18,14 +18,13 @@ Supported sensor types:
 
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 # Add claude project to path for ResultFilter:
 CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
 sys.path.insert(0, str(CLAUDE_ROOT))
 
-from skills.common.filters import ResultFilter
 from gazebo_mcp.utils import (
     OperationResult,
     success_result,
@@ -35,14 +34,12 @@ from gazebo_mcp.utils.exceptions import (
     GazeboMCPError,
     ROS2NotConnectedError,
     SensorNotFoundError,
-    SensorDataUnavailableError
 )
 from gazebo_mcp.utils.validators import (
     validate_entity_name,
     validate_sensor_type,
     validate_timeout,
     validate_response_format,
-    VALID_SENSOR_TYPES
 )
 from gazebo_mcp.utils.logger import get_logger
 from gazebo_mcp.bridge import ConnectionManager, GazeboBridgeNode
@@ -101,7 +98,7 @@ def _use_real_gazebo() -> bool:
 def list_sensors(
     model_name: Optional[str] = None,
     sensor_type: Optional[str] = None,
-    response_format: str = "filtered"
+    response_format: str = "filtered",
 ) -> OperationResult:
     """
     List sensors in Gazebo simulation.
@@ -162,12 +159,9 @@ def list_sensors(
             types = list(set(s.get("type", "unknown") for s in all_sensors))
             models = list(set(s.get("model", "unknown") for s in all_sensors))
 
-            return success_result({
-                "count": len(all_sensors),
-                "types": types,
-                "models": models,
-                "token_estimate": 50
-            })
+            return success_result(
+                {"count": len(all_sensors), "types": types, "models": models, "token_estimate": 50}
+            )
 
         elif response_format == "concise":
             concise_sensors = [
@@ -175,61 +169,60 @@ def list_sensors(
                     "name": s["name"],
                     "type": s.get("type", "unknown"),
                     "model": s.get("model", "unknown"),
-                    "active": s.get("active", True)
+                    "active": s.get("active", True),
                 }
                 for s in all_sensors
             ]
 
-            return success_result({
-                "sensors": concise_sensors,
-                "count": len(all_sensors),
-                "token_estimate": len(all_sensors) * 20
-            })
+            return success_result(
+                {
+                    "sensors": concise_sensors,
+                    "count": len(all_sensors),
+                    "token_estimate": len(all_sensors) * 20,
+                }
+            )
 
         elif response_format == "filtered":
-            return success_result({
-                "sensors": all_sensors,
-                "count": len(all_sensors),
-
-                # Show agents how to filter locally:
-                "filter_examples": {
-                    "search_by_type": "ResultFilter.search(sensors, 'lidar', ['type'])",
-                    "filter_by_model": "ResultFilter.filter_by_field(sensors, 'model', 'turtlebot3')",
-                    "filter_by_active": "ResultFilter.filter_by_field(sensors, 'active', True)",
-                    "get_cameras": "ResultFilter.filter_by_field(sensors, 'type', 'camera')",
-                },
-
-                "token_estimate_unfiltered": len(all_sensors) * 100,
-                "token_estimate_filtered": 1000,
-                "token_savings_pct": 99.0 if len(all_sensors) > 10 else 0
-            })
+            return success_result(
+                {
+                    "sensors": all_sensors,
+                    "count": len(all_sensors),
+                    # Show agents how to filter locally:
+                    "filter_examples": {
+                        "search_by_type": "ResultFilter.search(sensors, 'lidar', ['type'])",
+                        "filter_by_model": "ResultFilter.filter_by_field(sensors, 'model', 'turtlebot3')",
+                        "filter_by_active": "ResultFilter.filter_by_field(sensors, 'active', True)",
+                        "get_cameras": "ResultFilter.filter_by_field(sensors, 'type', 'camera')",
+                    },
+                    "token_estimate_unfiltered": len(all_sensors) * 100,
+                    "token_estimate_filtered": 1000,
+                    "token_savings_pct": 99.0 if len(all_sensors) > 10 else 0,
+                }
+            )
 
         else:  # detailed
-            return success_result({
-                "sensors": all_sensors,
-                "count": len(all_sensors),
-                "token_estimate": len(all_sensors) * 500
-            })
+            return success_result(
+                {
+                    "sensors": all_sensors,
+                    "count": len(all_sensors),
+                    "token_estimate": len(all_sensors) * 500,
+                }
+            )
 
     except GazeboMCPError as e:
         return error_result(
             error=e.message,
             error_code=e.error_code,
             suggestions=e.suggestions,
-            example_fix=e.example_fix
+            example_fix=e.example_fix,
         )
     except Exception as e:
         _logger.exception("Unexpected error listing sensors", error=str(e))
-        return error_result(
-            error=f"Failed to list sensors: {e}",
-            error_code="LIST_SENSORS_ERROR"
-        )
+        return error_result(error=f"Failed to list sensors: {e}", error_code="LIST_SENSORS_ERROR")
 
 
 def get_sensor_data(
-    sensor_name: str,
-    timeout: float = 5.0,
-    response_format: str = "concise"
+    sensor_name: str, timeout: float = 5.0, response_format: str = "concise"
 ) -> OperationResult:
     """
     Get latest sensor data.
@@ -266,7 +259,9 @@ def get_sensor_data(
                 # TODO: Subscribe to sensor topic and wait for data
                 # For now, use mock data:
                 data = _get_mock_sensor_data(sensor_name)
-                _logger.warning(f"Using mock data for {sensor_name} - real data streaming not yet implemented")
+                _logger.warning(
+                    f"Using mock data for {sensor_name} - real data streaming not yet implemented"
+                )
         else:
             data = _get_mock_sensor_data(sensor_name)
             _logger.warning(f"Using mock data for {sensor_name} - Gazebo not available")
@@ -276,40 +271,35 @@ def get_sensor_data(
 
         # Format response:
         if response_format == "concise":
-            return success_result({
-                "sensor_name": sensor_name,
-                "type": data.get("type"),
-                "timestamp": data.get("timestamp"),
-                "data_summary": _summarize_sensor_data(data)
-            })
+            return success_result(
+                {
+                    "sensor_name": sensor_name,
+                    "type": data.get("type"),
+                    "timestamp": data.get("timestamp"),
+                    "data_summary": _summarize_sensor_data(data),
+                }
+            )
         else:  # detailed
             return success_result(data)
 
     except SensorNotFoundError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except GazeboMCPError as e:
         return error_result(
             error=e.message,
             error_code=e.error_code,
             suggestions=e.suggestions,
-            example_fix=e.example_fix
+            example_fix=e.example_fix,
         )
     except Exception as e:
         _logger.exception("Unexpected error getting sensor data", error=str(e))
         return error_result(
-            error=f"Failed to get sensor data: {e}",
-            error_code="GET_SENSOR_DATA_ERROR"
+            error=f"Failed to get sensor data: {e}", error_code="GET_SENSOR_DATA_ERROR"
         )
 
 
 def subscribe_sensor_stream(
-    sensor_name: str,
-    topic_name: str,
-    message_type: str = "auto"
+    sensor_name: str, topic_name: str, message_type: str = "auto"
 ) -> OperationResult:
     """
     Subscribe to sensor data stream.
@@ -351,44 +341,40 @@ def subscribe_sensor_stream(
 
             # Subscribe:
             subscription = bridge.subscribe_to_topic(
-                topic_name=topic_name,
-                msg_type=msg_type,
-                callback=sensor_callback
+                topic_name=topic_name, msg_type=msg_type, callback=sensor_callback
             )
 
             _logger.info(f"Subscribed to {topic_name} for {sensor_name}")
 
-            return success_result({
-                "sensor_name": sensor_name,
-                "topic": topic_name,
-                "message_type": message_type,
-                "subscribed": True,
-                "note": f"Data will be cached in memory and available via get_sensor_data('{sensor_name}')"
-            })
+            return success_result(
+                {
+                    "sensor_name": sensor_name,
+                    "topic": topic_name,
+                    "message_type": message_type,
+                    "subscribed": True,
+                    "note": f"Data will be cached in memory and available via get_sensor_data('{sensor_name}')",
+                }
+            )
         else:
             _logger.warning(f"Cannot subscribe - Gazebo not available")
-            return success_result({
-                "sensor_name": sensor_name,
-                "topic": topic_name,
-                "subscribed": False,
-                "note": "Mock mode - subscription not created"
-            })
+            return success_result(
+                {
+                    "sensor_name": sensor_name,
+                    "topic": topic_name,
+                    "subscribed": False,
+                    "note": "Mock mode - subscription not created",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error subscribing to sensor", error=str(e))
-        return error_result(
-            error=f"Failed to subscribe: {e}",
-            error_code="SUBSCRIBE_ERROR"
-        )
+        return error_result(error=f"Failed to subscribe: {e}", error_code="SUBSCRIBE_ERROR")
 
 
 # Helper functions:
+
 
 def _summarize_sensor_data(data: Dict[str, Any]) -> str:
     """Create a concise summary of sensor data."""
@@ -396,7 +382,11 @@ def _summarize_sensor_data(data: Dict[str, Any]) -> str:
 
     if sensor_type == "lidar" or sensor_type == "laser":
         ranges = data.get("ranges", [])
-        return f"{len(ranges)} range measurements, min={min(ranges):.2f}m, max={max(ranges):.2f}m" if ranges else "No range data"
+        return (
+            f"{len(ranges)} range measurements, min={min(ranges):.2f}m, max={max(ranges):.2f}m"
+            if ranges
+            else "No range data"
+        )
 
     elif sensor_type == "camera":
         return f"Image: {data.get('width', 0)}x{data.get('height', 0)}, encoding={data.get('encoding', 'unknown')}"
@@ -417,15 +407,19 @@ def _detect_message_type(topic_name: str):
     # Common topic patterns:
     if "/scan" in topic_name:
         from sensor_msgs.msg import LaserScan
+
         return LaserScan
     elif "/image" in topic_name or "/camera" in topic_name:
         from sensor_msgs.msg import Image
+
         return Image
     elif "/imu" in topic_name:
         from sensor_msgs.msg import Imu
+
         return Imu
     elif "/gps" in topic_name or "/navsat" in topic_name:
         from sensor_msgs.msg import NavSatFix
+
         return NavSatFix
     else:
         raise ValueError(f"Cannot auto-detect message type for topic: {topic_name}")
@@ -434,7 +428,7 @@ def _detect_message_type(topic_name: str):
 def _get_message_type_class(message_type: str):
     """Get ROS2 message class from string."""
     # Parse message type (e.g., "sensor_msgs/LaserScan"):
-    parts = message_type.split('/')
+    parts = message_type.split("/")
     if len(parts) != 2:
         raise ValueError(f"Invalid message type format: {message_type}")
 
@@ -468,7 +462,7 @@ def _message_to_dict(msg, sensor_name: str) -> Dict[str, Any]:
         return {
             "sensor_name": sensor_name,
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "error": f"Conversion failed: {e}"
+            "error": f"Conversion failed: {e}",
         }
 
 
@@ -489,8 +483,8 @@ def _get_mock_sensors() -> List[Dict[str, Any]]:
                 "max_range": 3.5,
                 "angle_min": -3.14,
                 "angle_max": 3.14,
-                "resolution": 360
-            }
+                "resolution": 360,
+            },
         },
         {
             "name": "camera_rgb",
@@ -499,12 +493,7 @@ def _get_mock_sensors() -> List[Dict[str, Any]]:
             "topic": "/camera/image_raw",
             "frame_id": "camera_link",
             "active": True,
-            "specs": {
-                "width": 1920,
-                "height": 1080,
-                "fov": 1.3962634,
-                "format": "RGB8"
-            }
+            "specs": {"width": 1920, "height": 1080, "fov": 1.3962634, "format": "RGB8"},
         },
         {
             "name": "imu_sensor",
@@ -513,10 +502,7 @@ def _get_mock_sensors() -> List[Dict[str, Any]]:
             "topic": "/imu",
             "frame_id": "imu_link",
             "active": True,
-            "specs": {
-                "update_rate": 200.0,
-                "noise": 0.01
-            }
+            "specs": {"update_rate": 200.0, "noise": 0.01},
         },
         {
             "name": "gps_sensor",
@@ -525,10 +511,7 @@ def _get_mock_sensors() -> List[Dict[str, Any]]:
             "topic": "/gps/fix",
             "frame_id": "gps_link",
             "active": True,
-            "specs": {
-                "horizontal_accuracy": 1.0,
-                "vertical_accuracy": 1.5
-            }
+            "specs": {"horizontal_accuracy": 1.0, "vertical_accuracy": 1.5},
         },
     ]
 
@@ -550,7 +533,7 @@ def _get_mock_sensor_data(sensor_name: str) -> Optional[Dict[str, Any]]:
                     "angle_min": -3.14,
                     "angle_max": 3.14,
                     "range_min": 0.12,
-                    "range_max": 3.5
+                    "range_max": 3.5,
                 }
 
             elif sensor_type == "camera":
@@ -561,7 +544,7 @@ def _get_mock_sensor_data(sensor_name: str) -> Optional[Dict[str, Any]]:
                     "width": 1920,
                     "height": 1080,
                     "encoding": "rgb8",
-                    "note": "Image data not included in mock"
+                    "note": "Image data not included in mock",
                 }
 
             elif sensor_type == "imu":
@@ -571,7 +554,7 @@ def _get_mock_sensor_data(sensor_name: str) -> Optional[Dict[str, Any]]:
                     "timestamp": datetime.utcnow().isoformat() + "Z",
                     "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
                     "angular_velocity": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "linear_acceleration": {"x": 0.0, "y": 0.0, "z": 9.81}
+                    "linear_acceleration": {"x": 0.0, "y": 0.0, "z": 9.81},
                 }
 
             elif sensor_type == "gps":
@@ -582,7 +565,7 @@ def _get_mock_sensor_data(sensor_name: str) -> Optional[Dict[str, Any]]:
                     "latitude": 37.7749,
                     "longitude": -122.4194,
                     "altitude": 10.0,
-                    "status": "FIX"
+                    "status": "FIX",
                 }
 
     return None

@@ -39,7 +39,7 @@
 | 1: Setup & Architecture | ✅ Complete | 100% | ~3 hours |
 | 2: Core Infrastructure | 🔵 Not Started | 0% | 2-3 days |
 | 3: Gazebo Control | 🔵 Not Started | 0% | 5-7 days |
-| 4: World Generation | 🔵 Not Started | 0% | 5-7 days |
+| 4: World Generation | 🟡 Partially Complete | 40% | 2-3 days remaining |
 | 5: Testing & Polish | 🔵 Not Started | 0% | 3-4 days |
 
 **Total Estimated Time**: 3-4 weeks
@@ -141,16 +141,25 @@ See **[PHASE_2_INFRASTRUCTURE.md](docs/implementation/PHASE_2_INFRASTRUCTURE.md)
 
 **Tasks**: 30 tasks across 4 modules
 
-### Phase 4: World Generation & Manipulation (Est. 5-7 days)
+### Phase 4: World Generation & Manipulation (Est. 2-3 days remaining) 🟡
 
-**Key Deliverables:**
-- World file management
-- Object placement (static & dynamic)
-- Terrain modification (heightmaps, surface types)
-- Lighting control (ambient, directional, point, spot, day/night)
-- Live world updates
+**Status**: 40% Complete - Core generation functions implemented
 
-**Tasks**: 25 tasks across 5 modules
+**Completed Deliverables:**
+- ✅ Random obstacle course generation (with seed support)
+- ✅ Material property system (6 materials)
+- ✅ Heightmap terrain generation (6 patterns)
+- ✅ Day/night cycle calculations (6 lighting presets)
+- ✅ Comprehensive test suite (61 passing tests)
+
+**Remaining Work:**
+- ❌ World file management (create_empty_world, load_world, save_world)
+- ❌ Static object placement tools (place_box, place_sphere, place_cylinder)
+- ❌ Live world updates (apply_force, apply_torque, set_wind)
+- ❌ Gazebo integration for lighting control
+- ❌ Surface type application to running simulation
+
+**Tasks**: 10 of 36 tasks complete (28%)
 
 ### Phase 5: Testing, Documentation & Examples (Est. 3-4 days)
 
@@ -173,10 +182,11 @@ See **[PHASE_2_INFRASTRUCTURE.md](docs/implementation/PHASE_2_INFRASTRUCTURE.md)
 - [ ] **M2**: MCP Server Running
 - [ ] **M3**: Basic Simulation Control Working
 - [ ] **M4**: TurtleBot3 Spawn & Control
-- [ ] **M5**: World Generation Operational
-- [ ] **M6**: All Tests Passing
-- [ ] **M7**: Documentation Complete
-- [ ] **M8**: Ready for Production
+- [x] **M5**: World Generation Core Functions (2024-11-17) - Obstacle course, materials, lighting, terrain
+- [ ] **M6**: World Generation Complete - Gazebo integration
+- [ ] **M7**: All Tests Passing
+- [ ] **M8**: Documentation Complete
+- [ ] **M9**: Ready for Production
 
 ### File Completion Tracker
 
@@ -190,13 +200,13 @@ See **[PHASE_2_INFRASTRUCTURE.md](docs/implementation/PHASE_2_INFRASTRUCTURE.md)
 - [ ] `src/gazebo_mcp/utils/converters.py`
 - [ ] `src/gazebo_mcp/utils/geometry.py`
 
-#### Tool Files (0/7)
+#### Tool Files (1/7)
 - [ ] `src/gazebo_mcp/tools/simulation_control.py`
 - [ ] `src/gazebo_mcp/tools/model_management.py`
 - [ ] `src/gazebo_mcp/tools/sensor_tools.py`
-- [ ] `src/gazebo_mcp/tools/world_generation.py`
-- [ ] `src/gazebo_mcp/tools/lighting_tools.py`
-- [ ] `src/gazebo_mcp/tools/terrain_tools.py`
+- [x] `src/gazebo_mcp/tools/world_generation.py` ✅ **PARTIAL** (736 lines, 4 core functions)
+- [ ] `src/gazebo_mcp/tools/lighting_tools.py` (integrated into world_generation.py)
+- [ ] `src/gazebo_mcp/tools/terrain_tools.py` (integrated into world_generation.py)
 - [ ] `src/gazebo_mcp/tools/live_update_tools.py`
 
 #### Configuration Files (0/4)
@@ -205,14 +215,14 @@ See **[PHASE_2_INFRASTRUCTURE.md](docs/implementation/PHASE_2_INFRASTRUCTURE.md)
 - [ ] `config/gazebo_config.yaml`
 - [ ] `config/models/turtlebot3_models.yaml`
 
-#### Test Files (0/8)
+#### Test Files (1/8)
 - [ ] `tests/test_server.py`
 - [ ] `tests/test_bridge_node.py`
 - [ ] `tests/test_connection_manager.py`
 - [ ] `tests/test_simulation_control.py`
 - [ ] `tests/test_model_management.py`
 - [ ] `tests/test_sensor_tools.py`
-- [ ] `tests/test_world_generation.py`
+- [x] `tests/unit/test_world_generation.py` ✅ **COMPLETE** (61 tests, all passing)
 - [ ] `tests/test_integration.py`
 
 #### Example Files (0/6)
@@ -319,6 +329,12 @@ docs(phase2): mark utilities module complete
 - 📝 Decision: Target ROS2 Humble (LTS) as primary platform
 - 📝 Decision: Target Gazebo Harmonic over legacy Gazebo 11
 - 📝 Decision: Python 3.10+ for modern type hints and performance
+
+### 2024-11-17
+- ✅ Phase 4 core functions implemented (obstacle course, materials, lighting, terrain)
+- ✅ 61 unit tests passing for world generation
+- 📝 Decision: Combined world_generation.py, lighting_tools.py, and terrain_tools.py into single file
+- 📝 Status: Phase 4 ~40% complete, requires Gazebo bridge integration for remaining features
 
 ### Future Decisions Needed
 - [ ] Choose between stdio and HTTP for MCP transport (or support both?)

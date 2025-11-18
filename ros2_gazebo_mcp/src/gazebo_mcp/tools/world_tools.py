@@ -7,7 +7,6 @@ Provides functions for loading, saving, and managing Gazebo world files and prop
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime
 
 # Add claude project to path for ResultFilter:
 CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
@@ -21,14 +20,10 @@ from gazebo_mcp.utils import (
 from gazebo_mcp.utils.exceptions import (
     GazeboMCPError,
     ROS2NotConnectedError,
-    WorldLoadError,
-    WorldSaveError
 )
 from gazebo_mcp.utils.validators import (
     validate_file_path,
-    validate_directory_path,
     validate_positive,
-    validate_non_negative
 )
 from gazebo_mcp.utils.logger import get_logger
 from gazebo_mcp.bridge import ConnectionManager, GazeboBridgeNode
@@ -100,17 +95,18 @@ def load_world(world_file_path: str) -> OperationResult:
                 error_code="INVALID_FILE_FORMAT",
                 suggestions=[
                     "Provide an SDF world file (.sdf extension)",
-                    "Convert URDF to SDF if needed"
-                ]
+                    "Convert URDF to SDF if needed",
+                ],
             )
 
         _logger.info(f"Validated world file", path=str(world_path))
 
         # Return instructions for loading:
-        return success_result({
-            "world_file": str(world_path),
-            "loaded": False,
-            "instructions": f"""
+        return success_result(
+            {
+                "world_file": str(world_path),
+                "loaded": False,
+                "instructions": f"""
 To load this world in Gazebo:
 
 1. Stop current Gazebo instance (if running)
@@ -124,21 +120,15 @@ To load this world in Gazebo:
 Note: Gazebo must be restarted to load a different world file.
 The MCP server will automatically reconnect when Gazebo is ready.
             """.strip(),
-            "alternative": "You can also load models individually using spawn_model() instead of loading a whole new world"
-        })
+                "alternative": "You can also load models individually using spawn_model() instead of loading a whole new world",
+            }
+        )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error loading world", error=str(e))
-        return error_result(
-            error=f"Failed to load world: {e}",
-            error_code="WORLD_LOAD_ERROR"
-        )
+        return error_result(error=f"Failed to load world: {e}", error_code="WORLD_LOAD_ERROR")
 
 
 def save_world(output_path: str) -> OperationResult:
@@ -165,18 +155,19 @@ def save_world(output_path: str) -> OperationResult:
                 error_code="DIRECTORY_NOT_FOUND",
                 suggestions=[
                     f"Create directory: mkdir -p {output_path_obj.parent}",
-                    "Use an existing directory"
-                ]
+                    "Use an existing directory",
+                ],
             )
 
         if _use_real_gazebo():
             # TODO: Implement real world saving via Gazebo services
             _logger.warning("Real world saving not yet implemented - returning instructions")
 
-            return success_result({
-                "output_path": str(output_path),
-                "saved": False,
-                "instructions": f"""
+            return success_result(
+                {
+                    "output_path": str(output_path),
+                    "saved": False,
+                    "instructions": f"""
 To save the current world state:
 
 1. Using Gazebo GUI:
@@ -191,27 +182,23 @@ To save the current world state:
 
 Note: World saving via MCP will be implemented in a future update.
                 """.strip(),
-                "note": "Mock mode - save instructions provided"
-            })
+                    "note": "Mock mode - save instructions provided",
+                }
+            )
         else:
-            return success_result({
-                "output_path": str(output_path),
-                "saved": False,
-                "note": "Gazebo not running - cannot save world"
-            })
+            return success_result(
+                {
+                    "output_path": str(output_path),
+                    "saved": False,
+                    "note": "Gazebo not running - cannot save world",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error saving world", error=str(e))
-        return error_result(
-            error=f"Failed to save world: {e}",
-            error_code="WORLD_SAVE_ERROR"
-        )
+        return error_result(error=f"Failed to save world: {e}", error_code="WORLD_SAVE_ERROR")
 
 
 def get_world_properties() -> OperationResult:
@@ -239,16 +226,11 @@ def get_world_properties() -> OperationResult:
         return success_result(properties)
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error getting world properties", error=str(e))
         return error_result(
-            error=f"Failed to get world properties: {e}",
-            error_code="GET_PROPERTIES_ERROR"
+            error=f"Failed to get world properties: {e}", error_code="GET_PROPERTIES_ERROR"
         )
 
 
@@ -281,12 +263,13 @@ def set_world_property(property_name: str, value: Any) -> OperationResult:
             # TODO: Implement real property setting
             _logger.warning(f"Real property setting not yet implemented for {property_name}")
 
-            return success_result({
-                "property": property_name,
-                "value": value,
-                "set": False,
-                "note": "Property setting via MCP will be implemented in a future update",
-                "instructions": f"""
+            return success_result(
+                {
+                    "property": property_name,
+                    "value": value,
+                    "set": False,
+                    "note": "Property setting via MCP will be implemented in a future update",
+                    "instructions": f"""
 To set {property_name} manually:
 
 1. Edit world SDF file before launching Gazebo
@@ -294,55 +277,48 @@ To set {property_name} manually:
    ros2 service call /gazebo/set_physics_properties ...
 
 Note: Some properties can only be set before Gazebo starts.
-                """.strip()
-            })
+                """.strip(),
+                }
+            )
         else:
-            return success_result({
-                "property": property_name,
-                "value": value,
-                "set": False,
-                "note": "Gazebo not running - cannot set property"
-            })
+            return success_result(
+                {
+                    "property": property_name,
+                    "value": value,
+                    "set": False,
+                    "note": "Gazebo not running - cannot set property",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error setting world property", error=str(e))
-        return error_result(
-            error=f"Failed to set property: {e}",
-            error_code="SET_PROPERTY_ERROR"
-        )
+        return error_result(error=f"Failed to set property: {e}", error_code="SET_PROPERTY_ERROR")
 
 
 # Helper functions:
+
 
 def _get_mock_world_properties() -> Dict[str, Any]:
     """Get mock world properties for fallback."""
     return {
         "world_name": "default",
-        "gravity": {
-            "x": 0.0,
-            "y": 0.0,
-            "z": -9.81
-        },
+        "gravity": {"x": 0.0, "y": 0.0, "z": -9.81},
         "physics": {
             "engine": "ode",
             "update_rate": 1000.0,
             "max_step_size": 0.001,
             "real_time_factor": 1.0,
-            "real_time_update_rate": 1000.0
+            "real_time_update_rate": 1000.0,
         },
         "scene": {
             "ambient": {"r": 0.4, "g": 0.4, "b": 0.4, "a": 1.0},
             "background": {"r": 0.7, "g": 0.7, "b": 0.7, "a": 1.0},
             "shadows": True,
-            "grid": True
+            "grid": True,
         },
         "simulation_time": 0.0,
         "real_time": 0.0,
-        "iterations": 0
+        "iterations": 0,
     }

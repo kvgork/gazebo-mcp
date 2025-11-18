@@ -10,7 +10,7 @@ Provides functions for controlling simulation physics, time, and state:
 
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Optional
 from datetime import datetime
 
 # Add claude project to path for ResultFilter:
@@ -22,15 +22,8 @@ from gazebo_mcp.utils import (
     success_result,
     error_result,
 )
-from gazebo_mcp.utils.exceptions import (
-    GazeboMCPError,
-    ROS2NotConnectedError,
-    GazeboNotRunningError
-)
-from gazebo_mcp.utils.validators import (
-    validate_positive,
-    validate_timeout
-)
+from gazebo_mcp.utils.exceptions import GazeboMCPError, ROS2NotConnectedError
+from gazebo_mcp.utils.validators import validate_positive, validate_timeout
 from gazebo_mcp.utils.logger import get_logger
 from gazebo_mcp.bridge import ConnectionManager, GazeboBridgeNode
 
@@ -104,37 +97,28 @@ def pause_simulation(timeout: float = 5.0) -> OperationResult:
             if success:
                 _simulation_paused = True
                 _logger.info("Paused simulation")
-                return success_result({
-                    "paused": True,
-                    "timestamp": datetime.utcnow().isoformat() + "Z"
-                })
-            else:
-                return error_result(
-                    error="Failed to pause simulation",
-                    error_code="PAUSE_FAILED"
+                return success_result(
+                    {"paused": True, "timestamp": datetime.utcnow().isoformat() + "Z"}
                 )
+            else:
+                return error_result(error="Failed to pause simulation", error_code="PAUSE_FAILED")
         else:
             # Mock pause:
             _simulation_paused = True
             _logger.warning("Mock pause - Gazebo not available")
-            return success_result({
-                "paused": True,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "note": "Mock mode - Gazebo not available"
-            })
+            return success_result(
+                {
+                    "paused": True,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "note": "Mock mode - Gazebo not available",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error pausing simulation", error=str(e))
-        return error_result(
-            error=f"Failed to pause simulation: {e}",
-            error_code="PAUSE_ERROR"
-        )
+        return error_result(error=f"Failed to pause simulation: {e}", error_code="PAUSE_ERROR")
 
 
 def unpause_simulation(timeout: float = 5.0) -> OperationResult:
@@ -166,37 +150,30 @@ def unpause_simulation(timeout: float = 5.0) -> OperationResult:
             if success:
                 _simulation_paused = False
                 _logger.info("Unpaused simulation")
-                return success_result({
-                    "paused": False,
-                    "timestamp": datetime.utcnow().isoformat() + "Z"
-                })
+                return success_result(
+                    {"paused": False, "timestamp": datetime.utcnow().isoformat() + "Z"}
+                )
             else:
                 return error_result(
-                    error="Failed to unpause simulation",
-                    error_code="UNPAUSE_FAILED"
+                    error="Failed to unpause simulation", error_code="UNPAUSE_FAILED"
                 )
         else:
             # Mock unpause:
             _simulation_paused = False
             _logger.warning("Mock unpause - Gazebo not available")
-            return success_result({
-                "paused": False,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "note": "Mock mode - Gazebo not available"
-            })
+            return success_result(
+                {
+                    "paused": False,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "note": "Mock mode - Gazebo not available",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error unpausing simulation", error=str(e))
-        return error_result(
-            error=f"Failed to unpause simulation: {e}",
-            error_code="UNPAUSE_ERROR"
-        )
+        return error_result(error=f"Failed to unpause simulation: {e}", error_code="UNPAUSE_ERROR")
 
 
 def reset_simulation(timeout: float = 10.0) -> OperationResult:
@@ -230,37 +207,31 @@ def reset_simulation(timeout: float = 10.0) -> OperationResult:
 
             if success:
                 _logger.info("Reset simulation")
-                return success_result({
-                    "reset": True,
-                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                    "simulation_time": 0.0
-                })
-            else:
-                return error_result(
-                    error="Failed to reset simulation",
-                    error_code="RESET_FAILED"
+                return success_result(
+                    {
+                        "reset": True,
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "simulation_time": 0.0,
+                    }
                 )
+            else:
+                return error_result(error="Failed to reset simulation", error_code="RESET_FAILED")
         else:
             _logger.warning("Mock reset - Gazebo not available")
-            return success_result({
-                "reset": True,
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-                "simulation_time": 0.0,
-                "note": "Mock mode - Gazebo not available"
-            })
+            return success_result(
+                {
+                    "reset": True,
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "simulation_time": 0.0,
+                    "note": "Mock mode - Gazebo not available",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error resetting simulation", error=str(e))
-        return error_result(
-            error=f"Failed to reset simulation: {e}",
-            error_code="RESET_ERROR"
-        )
+        return error_result(error=f"Failed to reset simulation: {e}", error_code="RESET_ERROR")
 
 
 def set_simulation_speed(speed_factor: float) -> OperationResult:
@@ -290,11 +261,12 @@ def set_simulation_speed(speed_factor: float) -> OperationResult:
             # TODO: Implement real speed setting via Gazebo services
             _logger.warning("Real simulation speed setting not yet implemented")
 
-            return success_result({
-                "speed_factor": speed_factor,
-                "set": False,
-                "note": "Simulation speed control via MCP will be implemented in a future update",
-                "instructions": """
+            return success_result(
+                {
+                    "speed_factor": speed_factor,
+                    "set": False,
+                    "note": "Simulation speed control via MCP will be implemented in a future update",
+                    "instructions": """
 To set simulation speed manually:
 
 1. Edit Gazebo world file (before launch):
@@ -307,26 +279,24 @@ To set simulation speed manually:
    - Adjust "Real Time Factor"
 
 Note: Speed factor may be limited by system performance.
-                """.strip()
-            })
+                """.strip(),
+                }
+            )
         else:
-            return success_result({
-                "speed_factor": speed_factor,
-                "set": False,
-                "note": "Gazebo not running - cannot set speed"
-            })
+            return success_result(
+                {
+                    "speed_factor": speed_factor,
+                    "set": False,
+                    "note": "Gazebo not running - cannot set speed",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error setting speed", error=str(e))
         return error_result(
-            error=f"Failed to set simulation speed: {e}",
-            error_code="SET_SPEED_ERROR"
+            error=f"Failed to set simulation speed: {e}", error_code="SET_SPEED_ERROR"
         )
 
 
@@ -349,33 +319,32 @@ def get_simulation_time() -> OperationResult:
             # TODO: Implement real time query
             _logger.warning("Using mock time data - real query not yet implemented")
 
-            return success_result({
-                "simulation_time": 123.456,
-                "real_time": 125.678,
-                "paused": _simulation_paused,
-                "iterations": 123456,
-                "note": "Mock data - real time query not yet implemented"
-            })
+            return success_result(
+                {
+                    "simulation_time": 123.456,
+                    "real_time": 125.678,
+                    "paused": _simulation_paused,
+                    "iterations": 123456,
+                    "note": "Mock data - real time query not yet implemented",
+                }
+            )
         else:
-            return success_result({
-                "simulation_time": 0.0,
-                "real_time": 0.0,
-                "paused": _simulation_paused,
-                "iterations": 0,
-                "note": "Gazebo not running"
-            })
+            return success_result(
+                {
+                    "simulation_time": 0.0,
+                    "real_time": 0.0,
+                    "paused": _simulation_paused,
+                    "iterations": 0,
+                    "note": "Gazebo not running",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error getting time", error=str(e))
         return error_result(
-            error=f"Failed to get simulation time: {e}",
-            error_code="GET_TIME_ERROR"
+            error=f"Failed to get simulation time: {e}", error_code="GET_TIME_ERROR"
         )
 
 
@@ -399,34 +368,33 @@ def get_simulation_status() -> OperationResult:
             # Get time info:
             time_result = get_simulation_time()
 
-            return success_result({
-                "running": True,
-                "paused": _simulation_paused,
-                "simulation_time": time_result.data.get("simulation_time", 0.0),
-                "real_time": time_result.data.get("real_time", 0.0),
-                "iterations": time_result.data.get("iterations", 0),
-                "gazebo_connected": True
-            })
+            return success_result(
+                {
+                    "running": True,
+                    "paused": _simulation_paused,
+                    "simulation_time": time_result.data.get("simulation_time", 0.0),
+                    "real_time": time_result.data.get("real_time", 0.0),
+                    "iterations": time_result.data.get("iterations", 0),
+                    "gazebo_connected": True,
+                }
+            )
         else:
-            return success_result({
-                "running": False,
-                "paused": False,
-                "simulation_time": 0.0,
-                "real_time": 0.0,
-                "iterations": 0,
-                "gazebo_connected": False,
-                "note": "Gazebo not running"
-            })
+            return success_result(
+                {
+                    "running": False,
+                    "paused": False,
+                    "simulation_time": 0.0,
+                    "real_time": 0.0,
+                    "iterations": 0,
+                    "gazebo_connected": False,
+                    "note": "Gazebo not running",
+                }
+            )
 
     except GazeboMCPError as e:
-        return error_result(
-            error=e.message,
-            error_code=e.error_code,
-            suggestions=e.suggestions
-        )
+        return error_result(error=e.message, error_code=e.error_code, suggestions=e.suggestions)
     except Exception as e:
         _logger.exception("Unexpected error getting status", error=str(e))
         return error_result(
-            error=f"Failed to get simulation status: {e}",
-            error_code="GET_STATUS_ERROR"
+            error=f"Failed to get simulation status: {e}", error_code="GET_STATUS_ERROR"
         )

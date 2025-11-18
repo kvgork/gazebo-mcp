@@ -1,0 +1,281 @@
+# ROS2 Configuration for Gazebo MCP Server
+#
+# This file configures ROS2-specific settings including node configuration,
+# QoS policies, topic names, and service endpoints.
+
+# ROS2 node configuration
+node:
+  # Node name (must be unique in the ROS2 network)
+  name: "gazebo_mcp_bridge"
+
+  # ROS2 namespace for this node
+  namespace: "/gazebo_mcp"
+
+  # Node initialization timeout (seconds)
+  init_timeout: 10.0
+
+  # Spin rate for executor (Hz)
+  spin_rate: 100
+
+  # Use multi-threaded executor
+  multi_threaded: true
+  executor_threads: 4
+
+# ROS2 domain configuration
+domain:
+  # ROS2 domain ID (0-232)
+  # Use different domains to isolate ROS2 networks
+  domain_id: 0
+
+  # Enable localhost-only communication
+  localhost_only: false
+
+# Quality of Service (QoS) profiles
+qos:
+  # Default QoS profile for most operations
+  default:
+    reliability: "reliable"      # Options: "reliable", "best_effort"
+    durability: "volatile"       # Options: "volatile", "transient_local"
+    history: "keep_last"         # Options: "keep_last", "keep_all"
+    depth: 10                    # Queue depth for keep_last
+
+  # QoS for sensor data subscriptions
+  sensor_data:
+    reliability: "best_effort"   # Sensors generate data frequently
+    durability: "volatile"
+    history: "keep_last"
+    depth: 5                     # Lower depth for high-frequency data
+
+  # QoS for service calls
+  services:
+    reliability: "reliable"      # Services must be reliable
+    durability: "volatile"
+    history: "keep_last"
+    depth: 10
+
+  # QoS for robot control commands
+  control:
+    reliability: "reliable"      # Control commands must arrive
+    durability: "volatile"
+    history: "keep_last"
+    depth: 10
+
+  # QoS for system state information
+  system_state:
+    reliability: "reliable"
+    durability: "transient_local"  # Keep last state for late joiners
+    history: "keep_last"
+    depth: 1
+
+# Topic names and remapping
+topics:
+  # Simulation control topics
+  clock: "/clock"
+  simulation_state: "/gazebo/simulation_state"
+
+  # Model state topics (templates, {model_name} will be replaced)
+  model_states: "/gazebo/model_states"
+  joint_states: "/{model_name}/joint_states"
+
+  # Robot command topics (templates)
+  cmd_vel: "/{model_name}/cmd_vel"
+  cmd_joint: "/{model_name}/cmd_joint"
+
+  # Sensor topics (templates)
+  camera_rgb: "/{model_name}/camera/image_raw"
+  camera_depth: "/{model_name}/camera/depth/image_raw"
+  camera_info: "/{model_name}/camera/camera_info"
+  lidar_scan: "/{model_name}/scan"
+  lidar_points: "/{model_name}/points"
+  imu: "/{model_name}/imu"
+  gps: "/{model_name}/gps/fix"
+  odom: "/{model_name}/odom"
+
+# Service names and endpoints
+services:
+  # Gazebo simulation services
+  spawn_entity: "/gazebo/spawn_entity"
+  delete_entity: "/gazebo/delete_entity"
+  get_entity_state: "/gazebo/get_entity_state"
+  set_entity_state: "/gazebo/set_entity_state"
+  pause_physics: "/gazebo/pause_physics"
+  unpause_physics: "/gazebo/unpause_physics"
+  reset_simulation: "/gazebo/reset_simulation"
+  reset_world: "/gazebo/reset_world"
+
+  # Link state services
+  get_link_state: "/gazebo/get_link_state"
+  set_link_state: "/gazebo/set_link_state"
+
+  # Joint control services
+  get_joint_properties: "/gazebo/get_joint_properties"
+  set_joint_properties: "/gazebo/set_joint_properties"
+
+  # Physics services
+  get_physics_properties: "/gazebo/get_physics_properties"
+  set_physics_properties: "/gazebo/set_physics_properties"
+
+  # Model services
+  get_model_list: "/gazebo/get_model_list"
+  get_model_properties: "/gazebo/get_model_properties"
+  set_model_configuration: "/gazebo/set_model_configuration"
+
+  # World services
+  get_world_properties: "/gazebo/get_world_properties"
+  set_world_properties: "/gazebo/set_world_properties"
+
+  # Force/torque application
+  apply_body_wrench: "/gazebo/apply_body_wrench"
+  apply_joint_effort: "/gazebo/apply_joint_effort"
+
+# Message type mappings
+message_types:
+  # Standard ROS2 message types used
+  twist: "geometry_msgs/msg/Twist"
+  pose: "geometry_msgs/msg/Pose"
+  pose_stamped: "geometry_msgs/msg/PoseStamped"
+  point: "geometry_msgs/msg/Point"
+  quaternion: "geometry_msgs/msg/Quaternion"
+  vector3: "geometry_msgs/msg/Vector3"
+  wrench: "geometry_msgs/msg/Wrench"
+
+  # Sensor message types
+  image: "sensor_msgs/msg/Image"
+  camera_info: "sensor_msgs/msg/CameraInfo"
+  laser_scan: "sensor_msgs/msg/LaserScan"
+  point_cloud2: "sensor_msgs/msg/PointCloud2"
+  imu: "sensor_msgs/msg/Imu"
+  nav_sat_fix: "sensor_msgs/msg/NavSatFix"
+  joint_state: "sensor_msgs/msg/JointState"
+
+  # Gazebo-specific message types
+  model_states: "gazebo_msgs/msg/ModelStates"
+  link_states: "gazebo_msgs/msg/LinkStates"
+  contact_state: "gazebo_msgs/msg/ContactState"
+
+# TurtleBot3 specific configuration
+turtlebot3:
+  # Default TurtleBot3 variant
+  default_variant: "burger"  # Options: "burger", "waffle", "waffle_pi"
+
+  # Model file paths (relative to TurtleBot3 package)
+  models:
+    burger:
+      urdf: "model://turtlebot3_burger/model.sdf"
+      description: "TurtleBot3 Burger - Basic model with LDS-01 LiDAR"
+    waffle:
+      urdf: "model://turtlebot3_waffle/model.sdf"
+      description: "TurtleBot3 Waffle - Larger with Intel RealSense camera"
+    waffle_pi:
+      urdf: "model://turtlebot3_waffle_pi/model.sdf"
+      description: "TurtleBot3 Waffle Pi - With Raspberry Pi camera"
+
+  # Default spawn configuration
+  spawn:
+    initial_height: 0.01  # Meters above ground
+    orientation: [0.0, 0.0, 0.0]  # Roll, pitch, yaw in radians
+
+  # Velocity limits
+  velocity_limits:
+    linear:
+      max: 0.22    # m/s
+      min: -0.22
+    angular:
+      max: 2.84    # rad/s
+      min: -2.84
+
+  # Sensor configurations
+  sensors:
+    burger:
+      - type: "lidar"
+        topic: "/scan"
+        frame_id: "base_scan"
+    waffle:
+      - type: "lidar"
+        topic: "/scan"
+        frame_id: "base_scan"
+      - type: "camera"
+        topic: "/camera/image_raw"
+        frame_id: "camera_rgb_optical_frame"
+    waffle_pi:
+      - type: "lidar"
+        topic: "/scan"
+        frame_id: "base_scan"
+      - type: "camera"
+        topic: "/camera/image_raw"
+        frame_id: "camera_rgb_optical_frame"
+
+# Connection retry configuration
+connection_retry:
+  # Maximum number of service call retries
+  max_retries: 3
+
+  # Retry delay (seconds)
+  retry_delay: 0.5
+
+  # Exponential backoff multiplier
+  backoff_multiplier: 2.0
+
+  # Maximum retry delay (seconds)
+  max_retry_delay: 5.0
+
+# Performance tuning
+performance:
+  # Message queue sizes
+  publisher_queue_size: 10
+  subscriber_queue_size: 10
+
+  # Callback group configuration
+  use_reentrant_callback_group: true
+
+  # Enable zero-copy transport (if supported)
+  zero_copy: false
+
+  # Maximum message size (bytes)
+  max_message_size: 1048576  # 1 MB
+
+# Security (DDS Security)
+security:
+  # Enable DDS security
+  enable: false
+
+  # Security configuration (if enabled)
+  # cert_path: "/path/to/certs"
+  # key_path: "/path/to/keys"
+  # ca_path: "/path/to/ca"
+
+# Logging
+logging:
+  # Enable ROS2 logging
+  enable_ros_logging: true
+
+  # RCUTILS log level
+  rcutils_log_level: "INFO"  # Options: "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
+
+  # Log to rosout topic
+  log_to_rosout: true
+
+  # Console output format
+  console_output_format: "[{severity}] [{name}]: {message}"
+
+# Diagnostics
+diagnostics:
+  # Enable diagnostics publishing
+  enable: false
+
+  # Diagnostics publish rate (Hz)
+  publish_rate: 1.0
+
+  # Diagnostics topic
+  topic: "/diagnostics"
+
+# Time synchronization
+time:
+  # Use simulation time
+  use_sim_time: true
+
+  # Clock topic
+  clock_topic: "/clock"
+
+  # Time source priority: "system", "sim_time", "steady"
+  time_source: "sim_time"

@@ -1,0 +1,136 @@
+# Gazebo MCP Server Configuration
+#
+# This file configures the MCP server behavior, timeouts, and operational parameters.
+
+server:
+  # Server identification
+  name: "gazebo-mcp"
+  version: "0.1.0"
+
+  # Communication protocol
+  protocol: "stdio"  # Options: "stdio", "http"
+
+  # Logging configuration
+  log_level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+  log_file: "logs/gazebo_mcp.log"  # Set to null to disable file logging
+  log_format: "structured"  # Options: "structured", "simple"
+
+  # Enable debug mode (provides additional logging and mock data fallback)
+  debug_mode: false
+
+  # Enable performance metrics collection
+  enable_metrics: true
+  metrics_file: "logs/metrics.json"
+
+# Timeout configurations (in seconds)
+timeouts:
+  # ROS2 service call timeout
+  service_call: 10.0
+
+  # ROS2 connection establishment timeout
+  connection: 5.0
+
+  # General operation timeout (spawn, delete, etc.)
+  operation: 30.0
+
+  # Sensor data retrieval timeout
+  sensor_data: 2.0
+
+  # Simulation state query timeout
+  simulation_query: 1.0
+
+# Connection management
+connection:
+  # Auto-reconnect on connection loss
+  auto_reconnect: true
+
+  # Maximum reconnection attempts (0 = infinite)
+  max_reconnect_attempts: 5
+
+  # Reconnection backoff strategy
+  reconnect_backoff: "exponential"  # Options: "exponential", "linear", "constant"
+
+  # Initial reconnect delay (seconds)
+  reconnect_delay: 1.0
+
+  # Maximum reconnect delay (seconds)
+  max_reconnect_delay: 30.0
+
+  # Connection health check interval (seconds, 0 = disabled)
+  health_check_interval: 10.0
+
+# Gazebo-specific settings
+gazebo:
+  # Graceful fallback when Gazebo not running
+  allow_mock_mode: true
+
+  # Expected Gazebo services
+  required_services:
+    - "/gazebo/spawn_entity"
+    - "/gazebo/delete_entity"
+    - "/gazebo/set_entity_state"
+    - "/gazebo/get_entity_state"
+
+  # Service availability check timeout
+  service_check_timeout: 5.0
+
+# Performance optimization
+performance:
+  # Enable result filtering for token efficiency
+  enable_result_filter: true
+
+  # Default response format for list operations
+  default_response_format: "summary"  # Options: "summary", "filtered", "full"
+
+  # Cache settings
+  enable_cache: true
+  cache_ttl: 60  # Cache time-to-live in seconds
+
+  # Maximum concurrent operations
+  max_concurrent_operations: 10
+
+# Safety and validation
+validation:
+  # Strict input validation
+  strict_mode: true
+
+  # Model name validation pattern
+  model_name_pattern: "^[a-zA-Z0-9_-]+$"
+
+  # Maximum coordinate values (meters)
+  max_coordinate_value: 1000.0
+
+  # Maximum model spawn height (meters)
+  max_spawn_height: 100.0
+
+  # Minimum distance between models for collision detection (meters)
+  min_model_distance: 0.1
+
+# Development settings
+development:
+  # Enable additional debugging output
+  verbose: false
+
+  # Pretty-print JSON responses
+  pretty_json: true
+
+  # Include stack traces in error responses
+  include_stack_traces: false
+
+  # Enable profiling
+  enable_profiling: false
+  profiling_output: "logs/profiling.json"
+
+# Feature flags
+features:
+  # Enable experimental features
+  experimental_features: false
+
+  # Enable multi-robot coordination (Phase 5 enhancement)
+  multi_robot: false
+
+  # Enable advanced world generation (Phase 4)
+  world_generation: false
+
+  # Enable sensor streaming (Phase 3 enhancement)
+  sensor_streaming: false
