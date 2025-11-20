@@ -10,6 +10,7 @@ Provides functions for creating and manipulating Gazebo worlds programmatically:
 
 import random
 import math
+from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
@@ -35,45 +36,217 @@ _logger = get_logger("world_generation")
 _connection_manager: Optional['ConnectionManager'] = None
 _bridge_node: Optional['GazeboBridgeNode'] = None
 
+# Phase 5B: Difficulty multipliers for obstacle courses
+DIFFICULTY_MULTIPLIERS = {
+    "easy": {
+        "density": 0.7,
+        "spacing": 1.3,
+        "complexity": 0.8
+    },
+    "medium": {
+        "density": 1.0,
+        "spacing": 1.0,
+        "complexity": 1.0
+    },
+    "hard": {
+        "density": 1.5,
+        "spacing": 0.8,
+        "complexity": 1.2
+    },
+    "expert": {
+        "density": 2.0,
+        "spacing": 0.6,
+        "complexity": 1.5
+    }
+}
+
 # Material property library
 MATERIAL_PROPERTIES = {
+    # Phase 4 materials (enhanced in Phase 5A with rolling_friction and wetness)
     "grass": {
         "friction": 0.8,
+        "rolling_friction": 0.03,
         "restitution": 0.1,
+        "wetness": 0.2,
         "color": {"r": 0.2, "g": 0.8, "b": 0.2, "a": 1.0},
         "description": "Natural grass surface",
     },
     "concrete": {
         "friction": 1.0,
+        "rolling_friction": 0.005,
         "restitution": 0.01,
+        "wetness": 0.0,
         "color": {"r": 0.5, "g": 0.5, "b": 0.5, "a": 1.0},
         "description": "Hard concrete surface",
     },
     "ice": {
         "friction": 0.1,
+        "rolling_friction": 0.001,
         "restitution": 0.9,
+        "wetness": 0.5,
         "color": {"r": 0.8, "g": 0.9, "b": 1.0, "a": 0.7},
         "description": "Slippery ice surface",
     },
     "sand": {
         "friction": 0.6,
+        "rolling_friction": 0.15,
         "restitution": 0.05,
+        "wetness": 0.0,
         "color": {"r": 0.9, "g": 0.8, "b": 0.6, "a": 1.0},
         "description": "Sandy terrain",
     },
     "wood": {
         "friction": 0.7,
+        "rolling_friction": 0.02,
         "restitution": 0.3,
+        "wetness": 0.0,
         "color": {"r": 0.6, "g": 0.4, "b": 0.2, "a": 1.0},
         "description": "Wooden surface",
     },
     "rubber": {
         "friction": 0.9,
+        "rolling_friction": 0.01,
         "restitution": 0.8,
+        "wetness": 0.0,
         "color": {"r": 0.2, "g": 0.2, "b": 0.2, "a": 1.0},
         "description": "Rubber surface",
     },
+
+    # Phase 5A: Extended materials for realistic environments
+    "asphalt": {
+        "friction": 0.9,
+        "rolling_friction": 0.01,
+        "restitution": 0.05,
+        "wetness": 0.0,
+        "color": {"r": 0.2, "g": 0.2, "b": 0.2, "a": 1.0},
+        "description": "Smooth asphalt road surface - ideal for wheeled robots",
+    },
+    "gravel": {
+        "friction": 0.7,
+        "rolling_friction": 0.1,
+        "restitution": 0.1,
+        "wetness": 0.0,
+        "color": {"r": 0.6, "g": 0.6, "b": 0.5, "a": 1.0},
+        "description": "Loose gravel - challenging for wheels",
+    },
+    "mud": {
+        "friction": 0.4,
+        "rolling_friction": 0.2,
+        "restitution": 0.01,
+        "wetness": 0.9,
+        "color": {"r": 0.4, "g": 0.3, "b": 0.2, "a": 1.0},
+        "description": "Wet muddy terrain - very challenging",
+    },
+    "snow": {
+        "friction": 0.3,
+        "rolling_friction": 0.05,
+        "restitution": 0.1,
+        "wetness": 0.7,
+        "color": {"r": 0.9, "g": 0.9, "b": 0.95, "a": 1.0},
+        "description": "Snow-covered surface - slippery and wet",
+    },
+    "metal": {
+        "friction": 0.6,
+        "rolling_friction": 0.005,
+        "restitution": 0.2,
+        "wetness": 0.0,
+        "color": {"r": 0.7, "g": 0.7, "b": 0.75, "a": 1.0},
+        "description": "Metal surface - hard and smooth",
+    },
+    "carpet": {
+        "friction": 1.2,
+        "rolling_friction": 0.08,
+        "restitution": 0.05,
+        "wetness": 0.0,
+        "color": {"r": 0.5, "g": 0.4, "b": 0.4, "a": 1.0},
+        "description": "Indoor carpet - high friction, hard for wheels",
+    },
+    "tile": {
+        "friction": 0.8,
+        "rolling_friction": 0.003,
+        "restitution": 0.05,
+        "wetness": 0.0,
+        "color": {"r": 0.9, "g": 0.9, "b": 0.85, "a": 1.0},
+        "description": "Smooth tile floor - low rolling resistance",
+    },
+    "dirt": {
+        "friction": 0.7,
+        "rolling_friction": 0.06,
+        "restitution": 0.05,
+        "wetness": 0.1,
+        "color": {"r": 0.5, "g": 0.4, "b": 0.3, "a": 1.0},
+        "description": "Packed dirt - moderate friction",
+    },
+    "wet_concrete": {
+        "friction": 0.6,
+        "rolling_friction": 0.008,
+        "restitution": 0.01,
+        "wetness": 0.8,
+        "color": {"r": 0.4, "g": 0.4, "b": 0.4, "a": 1.0},
+        "description": "Wet concrete - reduced friction, high wetness",
+    },
 }
+
+
+def _generate_maze_grid(
+    rows: int,
+    cols: int,
+    seed: Optional[int] = None,
+    sparsity: float = 0.7
+) -> set:
+    """
+    Generate maze using recursive backtracking algorithm.
+
+    Args:
+        rows: Number of rows in maze grid
+        cols: Number of columns in maze grid
+        seed: Random seed for reproducibility
+        sparsity: Fraction of cells to visit (0.0-1.0). Lower = more walls
+
+    Returns:
+        Set of (row, col) coordinates that are paths (not walls)
+    """
+    if seed is not None:
+        random.seed(seed)
+
+    # Initialize grid: False = unvisited/wall, True = path
+    grid = [[False] * cols for _ in range(rows)]
+
+    # Calculate target number of path cells
+    total_cells = rows * cols
+    target_path_cells = int(total_cells * sparsity)
+
+    # Stack for depth-first search
+    stack = []
+    start = (random.randint(0, rows-1), random.randint(0, cols-1))
+    grid[start[0]][start[1]] = True
+    stack.append(start)
+    path_count = 1
+
+    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # right, down, left, up
+
+    while stack and path_count < target_path_cells:
+        current = stack[-1]
+        neighbors = []
+
+        # Find unvisited neighbors
+        for dr, dc in directions:
+            nr, nc = current[0] + dr, current[1] + dc
+            if 0 <= nr < rows and 0 <= nc < cols and not grid[nr][nc]:
+                neighbors.append((nr, nc))
+
+        if neighbors:
+            # Choose random unvisited neighbor
+            next_cell = random.choice(neighbors)
+            grid[next_cell[0]][next_cell[1]] = True
+            path_count += 1
+            stack.append(next_cell)
+        else:
+            # Backtrack
+            stack.pop()
+
+    # Return path cells as set
+    return {(r, c) for r in range(rows) for c in range(cols) if grid[r][c]}
 
 
 def create_obstacle_course(
@@ -82,12 +255,16 @@ def create_obstacle_course(
     obstacle_types: Optional[List[str]] = None,
     min_distance: float = 2.0,
     seed: Optional[int] = None,
+
+    # Phase 5B: Pattern and difficulty system
+    pattern_type: str = "random",
+    difficulty: str = "medium",
 ) -> OperationResult:
     """
-    Generate a random obstacle course for robot navigation testing.
+    Generate obstacle course with various patterns for robot navigation testing.
 
-    Creates a layout of randomly placed obstacles with configurable density,
-    types, and spacing. Perfect for testing navigation algorithms.
+    Creates obstacle layouts with configurable patterns, density, types, and spacing.
+    Perfect for testing navigation algorithms in different scenarios.
 
     Args:
         num_obstacles: Number of obstacles to place (1-100)
@@ -96,21 +273,47 @@ def create_obstacle_course(
                        If None, uses all types
         min_distance: Minimum distance between obstacles in meters (0.5-5.0)
         seed: Random seed for reproducible layouts (optional)
+        pattern_type: Pattern layout ("random", "maze", "grid", "circular")
+        difficulty: Difficulty preset ("easy", "medium", "hard", "expert")
+
+    Pattern Types:
+        - "random": Random placement with min_distance constraints
+        - "maze": Maze-like layout using recursive backtracking
+        - "grid": Regular grid pattern with even spacing
+        - "circular": Concentric circular arrangement
+
+    Difficulty Levels:
+        - "easy": Fewer obstacles (70%), wider spacing (130%)
+        - "medium": Baseline density and spacing
+        - "hard": More obstacles (150%), tighter spacing (80%)
+        - "expert": Maximum density (200%), minimal spacing (60%)
 
     Returns:
         OperationResult with obstacle course layout and SDF generation info
 
-    Example:
+    Examples:
+        >>> # Random pattern (Phase 4 compatible)
         >>> result = create_obstacle_course(
         ...     num_obstacles=15,
         ...     area_size=20.0,
-        ...     obstacle_types=['box', 'cylinder'],
-        ...     min_distance=2.5,
         ...     seed=42
         ... )
-        >>> if result.success:
-        ...     print(f"Created {len(result.data['obstacles'])} obstacles")
-        ...     print(f"Course area: {result.data['area_size']}m²")
+
+        >>> # Maze pattern with expert difficulty (Phase 5B)
+        >>> result = create_obstacle_course(
+        ...     num_obstacles=30,
+        ...     area_size=20.0,
+        ...     pattern_type="maze",
+        ...     difficulty="expert",
+        ...     seed=42
+        ... )
+
+        >>> # Circular pattern with easy difficulty
+        >>> result = create_obstacle_course(
+        ...     num_obstacles=20,
+        ...     pattern_type="circular",
+        ...     difficulty="easy"
+        ... )
     """
     try:
         # Validate parameters
@@ -152,39 +355,183 @@ def create_obstacle_course(
                         ],
                     )
 
+        # Phase 5B: Validate pattern_type and difficulty
+        valid_patterns = ["random", "maze", "grid", "circular"]
+        if pattern_type not in valid_patterns:
+            return error_result(
+                error=f"Invalid pattern_type: {pattern_type}",
+                error_code="INVALID_PARAMETER",
+                suggestions=[f"Valid patterns: {', '.join(valid_patterns)}"],
+            )
+
+        if difficulty not in DIFFICULTY_MULTIPLIERS:
+            return error_result(
+                error=f"Invalid difficulty: {difficulty}",
+                error_code="INVALID_PARAMETER",
+                suggestions=[f"Valid difficulties: {', '.join(DIFFICULTY_MULTIPLIERS.keys())}"],
+            )
+
+        # Apply difficulty multipliers
+        multiplier = DIFFICULTY_MULTIPLIERS[difficulty]
+        adjusted_num_obstacles = int(num_obstacles * multiplier["density"])
+        adjusted_min_distance = min_distance / multiplier["spacing"]
+
         # Set random seed if provided
         if seed is not None:
             random.seed(seed)
 
-        # Generate obstacle positions
+        # Generate obstacle positions based on pattern type
         obstacles = []
-        max_retries = 1000
 
-        for i in range(num_obstacles):
-            placed = False
-            for attempt in range(max_retries):
-                # Random position in area
-                x = random.uniform(-area_size / 2, area_size / 2)
-                y = random.uniform(-area_size / 2, area_size / 2)
-                z = 0.5  # Height above ground
+        if pattern_type == "maze":
+            # Phase 5B: Maze pattern using recursive backtracking
+            cell_size = 2.0 / multiplier["complexity"]
+            grid_cols = max(3, int(area_size / cell_size))
+            grid_rows = max(3, int(area_size / cell_size))
 
-                # Check distance to existing obstacles
-                too_close = False
-                for existing in obstacles:
-                    dist = math.sqrt(
-                        (x - existing["position"]["x"]) ** 2 + (y - existing["position"]["y"]) ** 2
-                    )
-                    if dist < min_distance:
-                        too_close = True
+            # Sparsity: more difficult = more paths (fewer walls to hide behind)
+            sparsity = 0.5 + (0.2 * multiplier["complexity"])  # easy: 0.66, expert: 0.8
+
+            # Generate maze
+            path_cells = _generate_maze_grid(grid_rows, grid_cols, seed, sparsity)
+
+            # Place obstacles in wall cells (cells NOT in path)
+            wall_cells = []
+            for r in range(grid_rows):
+                for c in range(grid_cols):
+                    if (r, c) not in path_cells:
+                        wall_cells.append((r, c))
+
+            # Limit to adjusted_num_obstacles
+            random.shuffle(wall_cells)
+            wall_cells = wall_cells[:adjusted_num_obstacles]
+
+            for obstacle_count, (r, c) in enumerate(wall_cells):
+                x = -area_size/2 + c * cell_size + cell_size/2
+                y = -area_size/2 + r * cell_size + cell_size/2
+                z = 0.5
+
+                obstacle_type = random.choice(obstacle_types)
+                size = min(cell_size * 0.9, random.uniform(0.3, 1.5))
+
+                obstacles.append({
+                    "name": f"obstacle_{obstacle_count}",
+                    "type": obstacle_type,
+                    "position": {"x": x, "y": y, "z": z},
+                    "size": size,
+                    "color": {
+                        "r": random.uniform(0.3, 0.9),
+                        "g": random.uniform(0.3, 0.9),
+                        "b": random.uniform(0.3, 0.9),
+                        "a": 1.0,
+                    },
+                })
+
+        elif pattern_type == "grid":
+            # Phase 5B: Grid pattern with regular spacing
+            base_spacing = area_size / math.sqrt(adjusted_num_obstacles)
+            spacing = max(adjusted_min_distance, base_spacing)
+
+            cols = max(2, int(area_size / spacing))
+            rows = max(2, int(area_size / spacing))
+
+            obstacle_count = 0
+            for r in range(rows):
+                for c in range(cols):
+                    if obstacle_count >= adjusted_num_obstacles:
                         break
 
-                if not too_close:
-                    # Choose random obstacle type and size
+                    x = -area_size/2 + c * spacing + spacing/2
+                    y = -area_size/2 + r * spacing + spacing/2
+                    z = 0.5
+
                     obstacle_type = random.choice(obstacle_types)
                     size = random.uniform(0.3, 1.5)
 
-                    obstacles.append(
-                        {
+                    obstacles.append({
+                        "name": f"obstacle_{obstacle_count}",
+                        "type": obstacle_type,
+                        "position": {"x": x, "y": y, "z": z},
+                        "size": size,
+                        "color": {
+                            "r": random.uniform(0.3, 0.9),
+                            "g": random.uniform(0.3, 0.9),
+                            "b": random.uniform(0.3, 0.9),
+                            "a": 1.0,
+                        },
+                    })
+                    obstacle_count += 1
+
+        elif pattern_type == "circular":
+            # Phase 5B: Circular pattern with concentric circles
+            num_circles = max(2, int(3 * multiplier["complexity"]))
+            max_radius = area_size / 2 * 0.9
+
+            obstacle_count = 0
+            for circle_idx in range(num_circles):
+                if obstacle_count >= adjusted_num_obstacles:
+                    break
+
+                radius = max_radius * (circle_idx + 1) / num_circles
+
+                # Obstacles per circle proportional to circumference
+                obstacles_per_circle = max(4, int(2 * math.pi * radius / 2.0))
+                obstacles_per_circle = min(obstacles_per_circle, adjusted_num_obstacles - obstacle_count)
+
+                for i in range(obstacles_per_circle):
+                    if obstacle_count >= adjusted_num_obstacles:
+                        break
+
+                    angle = 2 * math.pi * i / obstacles_per_circle
+                    x = radius * math.cos(angle)
+                    y = radius * math.sin(angle)
+                    z = 0.5
+
+                    obstacle_type = random.choice(obstacle_types)
+                    size = random.uniform(0.3, 1.5)
+
+                    obstacles.append({
+                        "name": f"obstacle_{obstacle_count}",
+                        "type": obstacle_type,
+                        "position": {"x": x, "y": y, "z": z},
+                        "size": size,
+                        "color": {
+                            "r": random.uniform(0.3, 0.9),
+                            "g": random.uniform(0.3, 0.9),
+                            "b": random.uniform(0.3, 0.9),
+                            "a": 1.0,
+                        },
+                    })
+                    obstacle_count += 1
+
+        else:  # random (default, Phase 4 compatible)
+            # Original random placement algorithm
+            max_retries = 1000
+
+            for i in range(adjusted_num_obstacles):
+                placed = False
+                for attempt in range(max_retries):
+                    # Random position in area
+                    x = random.uniform(-area_size / 2, area_size / 2)
+                    y = random.uniform(-area_size / 2, area_size / 2)
+                    z = 0.5
+
+                    # Check distance to existing obstacles
+                    too_close = False
+                    for existing in obstacles:
+                        dist = math.sqrt(
+                            (x - existing["position"]["x"]) ** 2 +
+                            (y - existing["position"]["y"]) ** 2
+                        )
+                        if dist < adjusted_min_distance:
+                            too_close = True
+                            break
+
+                    if not too_close:
+                        obstacle_type = random.choice(obstacle_types)
+                        size = random.uniform(0.3, 1.5)
+
+                        obstacles.append({
                             "name": f"obstacle_{i}",
                             "type": obstacle_type,
                             "position": {"x": x, "y": y, "z": z},
@@ -195,24 +542,27 @@ def create_obstacle_course(
                                 "b": random.uniform(0.3, 0.9),
                                 "a": 1.0,
                             },
-                        }
+                        })
+                        placed = True
+                        break
+
+                if not placed:
+                    _logger.warning(f"Could not place obstacle {i} after {max_retries} attempts")
+                    return error_result(
+                        error=f"Could not place all obstacles (placed {len(obstacles)}/{adjusted_num_obstacles})",
+                        error_code="GENERATION_ERROR",
+                        suggestions=[
+                            "Reduce num_obstacles",
+                            "Increase area_size",
+                            "Reduce min_distance",
+                            "Try a different pattern_type",
+                        ],
                     )
-                    placed = True
-                    break
 
-            if not placed:
-                _logger.warning(f"Could not place obstacle {i} after {max_retries} attempts")
-                return error_result(
-                    error=f"Could not place all obstacles (placed {len(obstacles)}/{num_obstacles})",
-                    error_code="GENERATION_ERROR",
-                    suggestions=[
-                        "Reduce num_obstacles",
-                        "Increase area_size",
-                        "Reduce min_distance",
-                    ],
-                )
-
-        _logger.info(f"Generated obstacle course with {len(obstacles)} obstacles")
+        _logger.info(
+            f"Generated obstacle course with {len(obstacles)} obstacles "
+            f"[pattern={pattern_type}, difficulty={difficulty}]"
+        )
 
         return success_result(
             {
@@ -220,6 +570,8 @@ def create_obstacle_course(
                 "num_obstacles": len(obstacles),
                 "area_size": area_size,
                 "min_distance": min_distance,
+                "pattern_type": pattern_type,
+                "difficulty": difficulty,
                 "seed": seed,
                 "timestamp": datetime.utcnow().isoformat() + "Z",
                 "note": "Obstacle course layout generated. Use spawn_model() to place obstacles.",
@@ -2024,38 +2376,189 @@ def apply_torque(
         )
 
 
+def set_shadow_quality(
+    quality_level: str = "medium",
+    shadow_resolution: Optional[int] = None,
+    pcf_enabled: Optional[bool] = None,
+    cascade_count: Optional[int] = None
+) -> OperationResult:
+    """
+    Configure shadow rendering quality (Phase 5B).
+
+    Controls shadow map resolution, PCF filtering, and cascade count for
+    directional lights. Higher quality improves shadow appearance but
+    impacts performance.
+
+    Args:
+        quality_level: Preset quality ("low", "medium", "high", "ultra")
+        shadow_resolution: Override resolution (512-8192, power of 2)
+        pcf_enabled: Override PCF (Percentage Closer Filtering)
+        cascade_count: Override cascade count (1-4, directional lights)
+
+    Quality Presets:
+        - "low": 1024px, no PCF, 1 cascade (best performance)
+        - "medium": 2048px, PCF enabled, 2 cascades (balanced)
+        - "high": 4096px, PCF enabled, 3 cascades (high quality)
+        - "ultra": 8192px, PCF enabled, 4 cascades (maximum quality)
+
+    Returns:
+        OperationResult with shadow configuration and SDF content
+
+    Examples:
+        >>> # Use preset
+        >>> result = set_shadow_quality(quality_level="ultra")
+
+        >>> # Custom settings
+        >>> result = set_shadow_quality(
+        ...     quality_level="high",
+        ...     shadow_resolution=8192,
+        ...     pcf_enabled=True
+        ... )
+    """
+    try:
+        # Define quality presets
+        SHADOW_PRESETS = {
+            "low": {
+                "resolution": 1024,
+                "pcf": False,
+                "cascades": 1
+            },
+            "medium": {
+                "resolution": 2048,
+                "pcf": True,
+                "cascades": 2
+            },
+            "high": {
+                "resolution": 4096,
+                "pcf": True,
+                "cascades": 3
+            },
+            "ultra": {
+                "resolution": 8192,
+                "pcf": True,
+                "cascades": 4
+            }
+        }
+
+        # Validate quality_level
+        if quality_level not in SHADOW_PRESETS:
+            return error_result(
+                error=f"Invalid quality_level: {quality_level}",
+                error_code="INVALID_PARAMETER",
+                suggestions=[f"Valid options: {', '.join(SHADOW_PRESETS.keys())}"],
+            )
+
+        # Start with preset configuration
+        config = SHADOW_PRESETS[quality_level].copy()
+
+        # Apply parameter overrides
+        if shadow_resolution is not None:
+            if shadow_resolution < 512 or shadow_resolution > 8192:
+                return error_result(
+                    error="shadow_resolution must be between 512 and 8192",
+                    error_code="INVALID_PARAMETER",
+                )
+            # Check if power of 2
+            if shadow_resolution & (shadow_resolution - 1) != 0:
+                return error_result(
+                    error="shadow_resolution must be a power of 2 (512, 1024, 2048, 4096, 8192)",
+                    error_code="INVALID_PARAMETER",
+                    suggestions=["Use: 512, 1024, 2048, 4096, or 8192"],
+                )
+            config["resolution"] = shadow_resolution
+
+        if pcf_enabled is not None:
+            config["pcf"] = pcf_enabled
+
+        if cascade_count is not None:
+            if cascade_count < 1 or cascade_count > 4:
+                return error_result(
+                    error="cascade_count must be between 1 and 4",
+                    error_code="INVALID_PARAMETER",
+                )
+            config["cascades"] = cascade_count
+
+        # Generate SDF content for shadow configuration
+        sdf_content = f"""<scene>
+  <shadows>
+    <resolution>{config['resolution']}</resolution>
+    <pcf>{str(config['pcf']).lower()}</pcf>
+    <cascades>{config['cascades']}</cascades>
+  </shadows>
+</scene>"""
+
+        _logger.info(
+            f"Configured shadow quality [quality={quality_level}, "
+            f"resolution={config['resolution']}, pcf={config['pcf']}, "
+            f"cascades={config['cascades']}]"
+        )
+
+        return success_result({
+            "quality_level": quality_level,
+            "resolution": config["resolution"],
+            "pcf_enabled": config["pcf"],
+            "cascade_count": config["cascades"],
+            "sdf_content": sdf_content,
+            "performance_note": (
+                f"Higher settings improve shadow quality but may reduce frame rate. "
+                f"Current: {quality_level} ({config['resolution']}px)"
+            )
+        })
+
+    except (InvalidParameterError, GazeboMCPError) as e:
+        return error_result(error=str(e), error_code=getattr(e, "error_code", "SHADOW_CONFIG_ERROR"))
+    except Exception as e:
+        _logger.exception("Unexpected error configuring shadow quality", error=str(e))
+        return error_result(
+            error=f"Failed to configure shadow quality: {e}",
+            error_code="SHADOW_CONFIG_ERROR"
+        )
+
+
 def set_wind(
     linear_x: float,
     linear_y: float,
-    linear_z: float = 0.0
+    linear_z: float = 0.0,
+    # Phase 5A enhancements
+    turbulence: float = 0.0,
+    gust_enabled: bool = False,
+    gust_period: float = 10.0,
+    gust_magnitude: float = 2.0
 ) -> OperationResult:
     """
-    Configure global wind settings for the simulation.
+    Configure global wind settings for the simulation (enhanced in Phase 5A).
+
+    Phase 4: Basic constant wind
+    Phase 5A: Adds turbulence and gust system for realistic drone/aerial testing
 
     Note: This function generates wind configuration but does not directly
     apply it to a running simulation. Wind in Gazebo requires physics plugin
     configuration in the world file.
 
-    This function provides the configuration and instructions for setting up wind.
-
     Args:
         linear_x: Wind velocity in X direction (m/s)
         linear_y: Wind velocity in Y direction (m/s)
         linear_z: Wind velocity in Z direction (m/s, usually 0)
+        turbulence: Turbulence intensity (0.0-1.0, 0 = smooth, 1 = very turbulent)
+        gust_enabled: Enable periodic wind gusts
+        gust_period: Time between gusts in seconds
+        gust_magnitude: Additional wind force during gusts (m/s)
 
     Returns:
         OperationResult with wind configuration and setup instructions
 
     Example:
-        >>> # Configure eastward wind at 2 m/s
+        >>> # Phase 4 usage (backward compatible)
+        >>> result = set_wind(linear_x=2.0, linear_y=0.0, linear_z=0.0)
+        >>>
+        >>> # Phase 5A: Turbulent wind for drone testing
         >>> result = set_wind(
-        ...     linear_x=2.0,
+        ...     linear_x=5.0,
         ...     linear_y=0.0,
-        ...     linear_z=0.0
+        ...     turbulence=0.3,
+        ...     gust_enabled=True,
+        ...     gust_period=15.0
         ... )
-        >>> if result.success:
-        ...     print("Wind configuration:")
-        ...     print(result.data["plugin_instructions"])
     """
     try:
         # Create wind configuration
@@ -2108,6 +2611,11 @@ def set_wind(
             "wind_config": wind_config,
             "wind_speed_ms": wind_speed,
             "wind_direction_deg": wind_direction_deg,
+            # Phase 5A enhancements
+            "turbulence": turbulence,
+            "gust_enabled": gust_enabled,
+            "gust_period": gust_period,
+            "gust_magnitude": gust_magnitude,
             "plugin_xml": plugin_xml.strip(),
             "plugin_instructions": instructions,
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -2148,12 +2656,16 @@ def spawn_light(
     spot_inner_angle: float = 0.0,
     spot_outer_angle: float = 0.0,
     spot_falloff: float = 0.0,
+    # Phase 5B: Volumetric lighting
+    volumetric_enabled: bool = False,
+    volumetric_density: float = 0.1,
+    volumetric_scattering: float = 0.5,
     timeout: float = 10.0
 ) -> OperationResult:
     """
     Generate light SDF and spawn it in Gazebo simulation.
 
-    Supports three light types:
+    Supports three light types with optional volumetric effects (Phase 5B):
     - **directional**: Sun-like parallel light (requires direction)
     - **point**: Omnidirectional bulb-like light
     - **spot**: Flashlight-like cone of light (requires direction and angles)
@@ -2173,12 +2685,15 @@ def spawn_light(
         spot_inner_angle: Inner cone angle in radians (spot only)
         spot_outer_angle: Outer cone angle in radians (spot only)
         spot_falloff: Light falloff exponent (spot only)
+        volumetric_enabled: Enable god rays / light shafts (Phase 5B, spot/directional only)
+        volumetric_density: Scattering intensity 0.0-1.0 (Phase 5B)
+        volumetric_scattering: Light shaft visibility 0.0-1.0 (Phase 5B)
         timeout: Spawn timeout
 
     Returns:
         OperationResult with spawn status
 
-    Example:
+    Examples:
         >>> # Spawn a warm point light (lamp)
         >>> result = spawn_light(
         ...     name="lamp_1",
@@ -2188,14 +2703,16 @@ def spawn_light(
         ...     attenuation_range=10.0
         ... )
         >>>
-        >>> # Spawn a spotlight
+        >>> # Spawn volumetric spotlight (Phase 5B)
         >>> result = spawn_light(
         ...     name="spotlight_1",
         ...     light_type="spot",
         ...     position={"x": 0, "y": 0, "z": 5},
         ...     direction={"x": 0, "y": 0, "z": -1},
         ...     spot_inner_angle=0.5,
-        ...     spot_outer_angle=1.0
+        ...     spot_outer_angle=1.0,
+        ...     volumetric_enabled=True,
+        ...     volumetric_density=0.3
         ... )
     """
     try:
@@ -2214,6 +2731,27 @@ def spawn_light(
                 error=f"{light_type} light requires direction parameter",
                 error_code="MISSING_PARAMETER"
             )
+
+        # Phase 5B: Validate volumetric parameters
+        if volumetric_enabled:
+            if light_type not in ["spot", "directional"]:
+                return error_result(
+                    error="Volumetric lighting only supported for spot and directional lights",
+                    error_code="INVALID_PARAMETER",
+                    suggestions=["Use light_type='spot' or 'directional' for volumetric effects"]
+                )
+
+            if not 0.0 <= volumetric_density <= 1.0:
+                return error_result(
+                    error="volumetric_density must be between 0.0 and 1.0",
+                    error_code="INVALID_PARAMETER"
+                )
+
+            if not 0.0 <= volumetric_scattering <= 1.0:
+                return error_result(
+                    error="volumetric_scattering must be between 0.0 and 1.0",
+                    error_code="INVALID_PARAMETER"
+                )
 
         # Default colors
         if diffuse is None:
@@ -2263,6 +2801,16 @@ def spawn_light(
                 f'      <outer_angle>{spot_outer_angle}</outer_angle>',
                 f'      <falloff>{spot_falloff}</falloff>',
                 '    </spot>',
+            ])
+
+        # Phase 5B: Volumetric lighting (god rays / light shafts)
+        if volumetric_enabled:
+            sdf_parts.extend([
+                '    <volumetric>',
+                '      <enabled>true</enabled>',
+                f'      <density>{volumetric_density}</density>',
+                f'      <scattering>{volumetric_scattering}</scattering>',
+                '    </volumetric>',
             ])
 
         # Shadows
@@ -2333,6 +2881,746 @@ def spawn_light(
             error=f"Failed to spawn light: {e}",
             error_code="LIGHT_SPAWN_ERROR"
         )
+
+
+# Phase 5B: Feature 4 - Animation System
+def create_animated_object(
+    object_name: str,
+    model_type: str,  # "box", "sphere", "cylinder"
+    animation_type: str = "linear_path",
+
+    # Path animation
+    path_points: Optional[List[Tuple[float, float, float]]] = None,
+
+    # Circular animation
+    center: Optional[Tuple[float, float, float]] = None,
+    radius: Optional[float] = None,
+
+    # Oscillating animation
+    axis: str = "x",  # "x", "y", "z"
+    amplitude: float = 1.0,
+    frequency: float = 1.0,
+
+    # Common parameters
+    speed: float = 1.0,
+    loop: str = "repeat",  # "once", "repeat", "ping_pong"
+    start_delay: float = 0.0,
+    size: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+    mass: float = 1.0
+) -> OperationResult:
+    """
+    Create animated object with scripted motion (Phase 5B).
+
+    Animation Types:
+        - "linear_path": Move through waypoints
+        - "circular": Orbit around center point
+        - "oscillating": Sinusoidal back-and-forth
+
+    Loop Modes:
+        - "once": Play animation once, stop at end
+        - "repeat": Loop continuously from start
+        - "ping_pong": Reverse direction at ends
+
+    Args:
+        object_name: Unique name for the animated object
+        model_type: Shape type ("box", "sphere", "cylinder")
+        animation_type: Type of animation ("linear_path", "circular", "oscillating")
+        path_points: Waypoints for linear_path [(x,y,z), ...]
+        center: Center point for circular animation (x,y,z)
+        radius: Radius for circular animation
+        axis: Oscillation axis ("x", "y", "z")
+        amplitude: Oscillation amplitude (meters)
+        frequency: Oscillation frequency (Hz)
+        speed: Animation speed (m/s)
+        loop: Loop mode ("once", "repeat", "ping_pong")
+        start_delay: Delay before starting animation (seconds)
+        size: Object size (width, height, depth) in meters
+        mass: Object mass (kg)
+
+    Returns:
+        OperationResult with animation configuration and SDF content
+
+    Example:
+        >>> # Linear path
+        >>> result = create_animated_object(
+        ...     "patrol_bot",
+        ...     "box",
+        ...     animation_type="linear_path",
+        ...     path_points=[(0,0,0), (5,0,0), (5,5,0), (0,5,0)],
+        ...     speed=2.0,
+        ...     loop="repeat"
+        ... )
+
+        >>> # Circular orbit
+        >>> result = create_animated_object(
+        ...     "orbiter",
+        ...     "sphere",
+        ...     animation_type="circular",
+        ...     center=(0, 0, 1),
+        ...     radius=3.0,
+        ...     speed=1.0,
+        ...     loop="repeat"
+        ... )
+
+        >>> # Oscillating platform
+        >>> result = create_animated_object(
+        ...     "platform",
+        ...     "box",
+        ...     animation_type="oscillating",
+        ...     axis="z",
+        ...     amplitude=2.0,
+        ...     frequency=0.5,
+        ...     speed=1.0,
+        ...     loop="repeat"
+        ... )
+    """
+    # Validate animation_type
+    valid_types = ["linear_path", "circular", "oscillating"]
+    if animation_type not in valid_types:
+        return error_result(
+            error=f"Invalid animation_type: {animation_type}",
+            error_code="INVALID_ANIMATION_TYPE",
+            suggestions=[f"Use one of: {', '.join(valid_types)}"]
+        )
+
+    # Validate loop mode
+    valid_loops = ["once", "repeat", "ping_pong"]
+    if loop not in valid_loops:
+        return error_result(
+            error=f"Invalid loop mode: {loop}",
+            error_code="INVALID_LOOP_MODE",
+            suggestions=[f"Use one of: {', '.join(valid_loops)}"]
+        )
+
+    # Validate model_type
+    valid_model_types = ["box", "sphere", "cylinder"]
+    if model_type not in valid_model_types:
+        return error_result(
+            error=f"Invalid model_type: {model_type}",
+            error_code="INVALID_MODEL_TYPE",
+            suggestions=[f"Use one of: {', '.join(valid_model_types)}"]
+        )
+
+    # Validate parameters per animation type
+    if animation_type == "linear_path":
+        if not path_points or len(path_points) < 2:
+            return error_result(
+                error="linear_path requires at least 2 path_points",
+                error_code="INVALID_PATH_POINTS",
+                suggestions=["Provide path_points=[(x1,y1,z1), (x2,y2,z2), ...]"]
+            )
+
+    elif animation_type == "circular":
+        if center is None or radius is None:
+            return error_result(
+                error="circular animation requires center and radius",
+                error_code="MISSING_CIRCULAR_PARAMS",
+                suggestions=["Provide center=(x,y,z) and radius=value"]
+            )
+        if radius <= 0:
+            return error_result(
+                error="radius must be positive",
+                error_code="INVALID_RADIUS"
+            )
+
+    elif animation_type == "oscillating":
+        if axis not in ["x", "y", "z"]:
+            return error_result(
+                error=f"Invalid axis: {axis}",
+                error_code="INVALID_AXIS",
+                suggestions=["Use 'x', 'y', or 'z'"]
+            )
+        if amplitude <= 0:
+            return error_result(
+                error="amplitude must be positive",
+                error_code="INVALID_AMPLITUDE"
+            )
+        if frequency <= 0:
+            return error_result(
+                error="frequency must be positive",
+                error_code="INVALID_FREQUENCY"
+            )
+
+    # Validate common parameters
+    if speed <= 0:
+        return error_result(
+            error="speed must be positive",
+            error_code="INVALID_SPEED"
+        )
+
+    if start_delay < 0:
+        return error_result(
+            error="start_delay must be non-negative",
+            error_code="INVALID_START_DELAY"
+        )
+
+    if any(s <= 0 for s in size):
+        return error_result(
+            error="size dimensions must be positive",
+            error_code="INVALID_SIZE"
+        )
+
+    if mass <= 0:
+        return error_result(
+            error="mass must be positive",
+            error_code="INVALID_MASS"
+        )
+
+    # Generate trajectory waypoints based on animation type
+    waypoints: List[Tuple[float, float, float]] = []
+
+    if animation_type == "linear_path":
+        waypoints = list(path_points)  # type: ignore
+
+    elif animation_type == "circular":
+        # Generate waypoints around circle
+        num_waypoints = 32  # Smooth circle
+        cx, cy, cz = center  # type: ignore
+
+        for i in range(num_waypoints):
+            angle = 2 * math.pi * i / num_waypoints
+            x = cx + radius * math.cos(angle)  # type: ignore
+            y = cy + radius * math.sin(angle)  # type: ignore
+            z = cz
+            waypoints.append((x, y, z))
+
+        # Close the loop
+        waypoints.append(waypoints[0])
+
+    elif animation_type == "oscillating":
+        # Generate sinusoidal waypoints
+        num_waypoints = 20
+
+        for i in range(num_waypoints):
+            t = i / (num_waypoints - 1)  # 0 to 1
+            offset = amplitude * math.sin(2 * math.pi * frequency * t)
+
+            if axis == "x":
+                waypoints.append((offset, 0.0, 0.0))
+            elif axis == "y":
+                waypoints.append((0.0, offset, 0.0))
+            else:  # z
+                waypoints.append((0.0, 0.0, offset))
+
+    # Calculate total path length and time
+    total_distance = 0.0
+    for i in range(len(waypoints) - 1):
+        dx = waypoints[i+1][0] - waypoints[i][0]
+        dy = waypoints[i+1][1] - waypoints[i][1]
+        dz = waypoints[i+1][2] - waypoints[i][2]
+        total_distance += math.sqrt(dx*dx + dy*dy + dz*dz)
+
+    total_time = total_distance / speed if total_distance > 0 else 1.0
+
+    # Generate actor SDF with script
+    script_waypoints = ""
+    for i, (x, y, z) in enumerate(waypoints):
+        time = start_delay + (total_time * i / (len(waypoints) - 1) if len(waypoints) > 1 else 0)
+        script_waypoints += f"""
+        <waypoint>
+          <time>{time:.4f}</time>
+          <pose>{x:.4f} {y:.4f} {z:.4f} 0 0 0</pose>
+        </waypoint>"""
+
+    # Loop control
+    script_loop = "true" if loop in ["repeat", "ping_pong"] else "false"
+    script_auto_start = "true"
+
+    # Generate geometry based on model type
+    if model_type == "box":
+        geometry_xml = f"""
+            <box>
+              <size>{size[0]} {size[1]} {size[2]}</size>
+            </box>"""
+    elif model_type == "sphere":
+        # For sphere, use first size dimension as radius
+        radius_val = size[0] / 2.0
+        geometry_xml = f"""
+            <sphere>
+              <radius>{radius_val}</radius>
+            </sphere>"""
+    elif model_type == "cylinder":
+        # For cylinder, use first size as radius, third as length
+        radius_val = size[0] / 2.0
+        length_val = size[2]
+        geometry_xml = f"""
+            <cylinder>
+              <radius>{radius_val}</radius>
+              <length>{length_val}</length>
+            </cylinder>"""
+
+    sdf_content = f"""<?xml version="1.0"?>
+<sdf version="1.6">
+  <actor name="{object_name}">
+    <pose>0 0 0 0 0 0</pose>
+    <link name="link">
+      <visual name="visual">
+        <geometry>{geometry_xml}
+        </geometry>
+      </visual>
+      <collision name="collision">
+        <geometry>{geometry_xml}
+        </geometry>
+      </collision>
+      <inertial>
+        <mass>{mass}</mass>
+      </inertial>
+    </link>
+    <script>
+      <loop>{script_loop}</loop>
+      <auto_start>{script_auto_start}</auto_start>
+      <trajectory id="0" type="line">{script_waypoints}
+      </trajectory>
+    </script>
+  </actor>
+</sdf>"""
+
+    _logger.info(
+        f"Created animated object [name={object_name}, type={animation_type}, "
+        f"waypoints={len(waypoints)}, duration={total_time:.2f}s, loop={loop}]"
+    )
+
+    return success_result({
+        "object_name": object_name,
+        "model_type": model_type,
+        "animation_type": animation_type,
+        "num_waypoints": len(waypoints),
+        "total_distance": total_distance,
+        "duration": total_time,
+        "loop": loop,
+        "sdf_content": sdf_content.strip()
+    })
+
+
+# Phase 5B: Feature 5 - Trigger Zones
+class TriggerZone(ABC):
+    """Base class for trigger zones (Phase 5B)."""
+
+    def __init__(self, zone_name: str, center: Tuple[float, float, float]):
+        """
+        Initialize trigger zone.
+
+        Args:
+            zone_name: Unique name for the zone
+            center: Center position (x, y, z)
+        """
+        self.zone_name = zone_name
+        self.center = center
+
+    @abstractmethod
+    def contains(self, x: float, y: float, z: float) -> bool:
+        """
+        Check if point is inside zone.
+
+        Args:
+            x: X coordinate
+            y: Y coordinate
+            z: Z coordinate
+
+        Returns:
+            True if point is inside zone
+        """
+        pass
+
+    @abstractmethod
+    def to_sdf(self) -> str:
+        """
+        Generate SDF for zone visualization.
+
+        Returns:
+            SDF XML string
+        """
+        pass
+
+
+class BoxTriggerZone(TriggerZone):
+    """Box-shaped trigger zone (Phase 5B)."""
+
+    def __init__(
+        self,
+        zone_name: str,
+        center: Tuple[float, float, float],
+        size: Tuple[float, float, float]
+    ):
+        """
+        Initialize box trigger zone.
+
+        Args:
+            zone_name: Unique name for the zone
+            center: Center position (x, y, z)
+            size: Box dimensions (width, depth, height)
+        """
+        super().__init__(zone_name, center)
+        self.size = size
+
+        # Calculate bounds for fast containment check
+        self.min_x = center[0] - size[0] / 2
+        self.max_x = center[0] + size[0] / 2
+        self.min_y = center[1] - size[1] / 2
+        self.max_y = center[1] + size[1] / 2
+        self.min_z = center[2] - size[2] / 2
+        self.max_z = center[2] + size[2] / 2
+
+    def contains(self, x: float, y: float, z: float) -> bool:
+        """Check if point is inside box."""
+        return (
+            self.min_x <= x <= self.max_x and
+            self.min_y <= y <= self.max_y and
+            self.min_z <= z <= self.max_z
+        )
+
+    def to_sdf(self) -> str:
+        """Generate box visual for zone."""
+        cx, cy, cz = self.center
+        sx, sy, sz = self.size
+
+        return f"""
+    <model name="{self.zone_name}_visual">
+      <pose>{cx} {cy} {cz} 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>{sx} {sy} {sz}</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0 1 0 0.3</ambient>
+            <diffuse>0 1 0 0.3</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+"""
+
+
+class SphereTriggerZone(TriggerZone):
+    """Sphere-shaped trigger zone (Phase 5B)."""
+
+    def __init__(
+        self,
+        zone_name: str,
+        center: Tuple[float, float, float],
+        radius: float
+    ):
+        """
+        Initialize sphere trigger zone.
+
+        Args:
+            zone_name: Unique name for the zone
+            center: Center position (x, y, z)
+            radius: Sphere radius
+        """
+        super().__init__(zone_name, center)
+        self.radius = radius
+        self.radius_squared = radius * radius
+
+    def contains(self, x: float, y: float, z: float) -> bool:
+        """Check if point is inside sphere."""
+        dx = x - self.center[0]
+        dy = y - self.center[1]
+        dz = z - self.center[2]
+        distance_squared = dx*dx + dy*dy + dz*dz
+        return distance_squared <= self.radius_squared
+
+    def to_sdf(self) -> str:
+        """Generate sphere visual for zone."""
+        cx, cy, cz = self.center
+
+        return f"""
+    <model name="{self.zone_name}_visual">
+      <pose>{cx} {cy} {cz} 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <sphere>
+              <radius>{self.radius}</radius>
+            </sphere>
+          </geometry>
+          <material>
+            <ambient>0 1 0 0.3</ambient>
+            <diffuse>0 1 0 0.3</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+"""
+
+
+class CylinderTriggerZone(TriggerZone):
+    """Cylinder-shaped trigger zone (Phase 5B)."""
+
+    def __init__(
+        self,
+        zone_name: str,
+        center: Tuple[float, float, float],
+        radius: float,
+        height: float
+    ):
+        """
+        Initialize cylinder trigger zone.
+
+        Args:
+            zone_name: Unique name for the zone
+            center: Center position (x, y, z)
+            radius: Cylinder radius
+            height: Cylinder height
+        """
+        super().__init__(zone_name, center)
+        self.radius = radius
+        self.radius_squared = radius * radius
+        self.height = height
+        self.min_z = center[2] - height / 2
+        self.max_z = center[2] + height / 2
+
+    def contains(self, x: float, y: float, z: float) -> bool:
+        """Check if point is inside cylinder."""
+        # Check height bounds
+        if not (self.min_z <= z <= self.max_z):
+            return False
+
+        # Check radial distance
+        dx = x - self.center[0]
+        dy = y - self.center[1]
+        radial_distance_squared = dx*dx + dy*dy
+        return radial_distance_squared <= self.radius_squared
+
+    def to_sdf(self) -> str:
+        """Generate cylinder visual for zone."""
+        cx, cy, cz = self.center
+
+        return f"""
+    <model name="{self.zone_name}_visual">
+      <pose>{cx} {cy} {cz} 0 0 0</pose>
+      <static>true</static>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>{self.radius}</radius>
+              <length>{self.height}</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0 1 0 0.3</ambient>
+            <diffuse>0 1 0 0.3</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+"""
+
+
+def create_trigger_zone(
+    zone_name: str,
+    zone_shape: str = "box",
+    center: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+
+    # Box parameters
+    size: Optional[Tuple[float, float, float]] = None,
+
+    # Sphere parameters
+    radius: Optional[float] = None,
+
+    # Cylinder parameters
+    height: Optional[float] = None,
+
+    # Trigger configuration
+    trigger_events: Optional[List[str]] = None,
+    actions: Optional[List[Dict[str, Any]]] = None,
+    visualize: bool = True
+) -> OperationResult:
+    """
+    Create trigger zone with event-driven actions (Phase 5B).
+
+    Trigger zones detect when objects enter, exit, or stay within a defined region,
+    and can execute actions in response.
+
+    Args:
+        zone_name: Unique name for zone
+        zone_shape: Shape type ("box", "sphere", "cylinder")
+        center: Zone center position (x, y, z)
+        size: Box dimensions (width, depth, height) for box shape
+        radius: Radius for sphere/cylinder shapes
+        height: Height for cylinder shape
+        trigger_events: Events to listen for (["enter"], ["exit"], ["stay"])
+        actions: List of actions to execute on trigger
+        visualize: Show zone boundaries in simulation
+
+    Actions format:
+        [
+            {
+                "event": "enter",  # Which event triggers this action
+                "type": "log",     # Action type: "log", "teleport", "apply_force"
+                "params": {...}    # Action-specific parameters
+            },
+            ...
+        ]
+
+    Returns:
+        OperationResult with zone configuration and SDF content
+
+    Example:
+        >>> # Create box trigger zone
+        >>> result = create_trigger_zone(
+        ...     "goal_zone",
+        ...     zone_shape="box",
+        ...     center=(10, 0, 0),
+        ...     size=(2, 2, 2),
+        ...     trigger_events=["enter"],
+        ...     actions=[{
+        ...         "event": "enter",
+        ...         "type": "log",
+        ...         "params": {"message": "Goal reached!"}
+        ...     }]
+        ... )
+
+        >>> # Create sphere trigger zone
+        >>> result = create_trigger_zone(
+        ...     "danger_zone",
+        ...     zone_shape="sphere",
+        ...     center=(5, 5, 0),
+        ...     radius=3.0,
+        ...     trigger_events=["enter", "stay"],
+        ...     visualize=True
+        ... )
+
+        >>> # Create cylinder trigger zone
+        >>> result = create_trigger_zone(
+        ...     "checkpoint",
+        ...     zone_shape="cylinder",
+        ...     center=(0, 0, 1),
+        ...     radius=2.0,
+        ...     height=4.0,
+        ...     trigger_events=["enter"]
+        ... )
+    """
+    # Validate zone_shape
+    valid_shapes = ["box", "sphere", "cylinder"]
+    if zone_shape not in valid_shapes:
+        return error_result(
+            error=f"Invalid zone_shape: {zone_shape}",
+            error_code="INVALID_ZONE_SHAPE",
+            suggestions=[f"Use one of: {', '.join(valid_shapes)}"]
+        )
+
+    # Create zone based on shape
+    zone: TriggerZone
+
+    if zone_shape == "box":
+        if size is None:
+            return error_result(
+                error="box zone requires size parameter",
+                error_code="MISSING_SIZE",
+                suggestions=["Provide size=(width, depth, height)"]
+            )
+        if any(s <= 0 for s in size):
+            return error_result(
+                error="size dimensions must be positive",
+                error_code="INVALID_SIZE"
+            )
+        zone = BoxTriggerZone(zone_name, center, size)
+
+    elif zone_shape == "sphere":
+        if radius is None:
+            return error_result(
+                error="sphere zone requires radius parameter",
+                error_code="MISSING_RADIUS",
+                suggestions=["Provide radius=value"]
+            )
+        if radius <= 0:
+            return error_result(
+                error="radius must be positive",
+                error_code="INVALID_RADIUS"
+            )
+        zone = SphereTriggerZone(zone_name, center, radius)
+
+    elif zone_shape == "cylinder":
+        if radius is None or height is None:
+            return error_result(
+                error="cylinder zone requires radius and height parameters",
+                error_code="MISSING_CYLINDER_PARAMS",
+                suggestions=["Provide radius=value and height=value"]
+            )
+        if radius <= 0 or height <= 0:
+            return error_result(
+                error="radius and height must be positive",
+                error_code="INVALID_CYLINDER_PARAMS"
+            )
+        zone = CylinderTriggerZone(zone_name, center, radius, height)
+
+    # Validate trigger_events
+    if trigger_events is None:
+        trigger_events = ["enter"]
+
+    valid_events = ["enter", "exit", "stay"]
+    for event in trigger_events:
+        if event not in valid_events:
+            return error_result(
+                error=f"Invalid trigger event: {event}",
+                error_code="INVALID_TRIGGER_EVENT",
+                suggestions=[f"Use one of: {', '.join(valid_events)}"]
+            )
+
+    # Validate actions
+    if actions is None:
+        actions = []
+
+    valid_action_types = ["log", "teleport", "apply_force", "custom_script"]
+    for i, action in enumerate(actions):
+        if "type" not in action:
+            return error_result(
+                error=f"Action {i} missing 'type' field",
+                error_code="MISSING_ACTION_TYPE"
+            )
+        if action["type"] not in valid_action_types:
+            return error_result(
+                error=f"Invalid action type: {action['type']}",
+                error_code="INVALID_ACTION_TYPE",
+                suggestions=[f"Use one of: {', '.join(valid_action_types)}"]
+            )
+        if "params" not in action:
+            return error_result(
+                error=f"Action {i} missing 'params' field",
+                error_code="MISSING_ACTION_PARAMS"
+            )
+
+    # Generate SDF
+    sdf_content = ""
+
+    # Add visualization if requested
+    if visualize:
+        sdf_content = zone.to_sdf()
+
+    # Add plugin for trigger detection
+    # Note: This would need a custom Gazebo plugin or ROS2 node
+    # For now, generate configuration that could be used by such a plugin
+    plugin_config = {
+        "zone_name": zone_name,
+        "zone_shape": zone_shape,
+        "center": center,
+        "trigger_events": trigger_events,
+        "actions": actions
+    }
+
+    _logger.info(
+        f"Created trigger zone [name={zone_name}, shape={zone_shape}, "
+        f"events={trigger_events}, actions={len(actions)}]"
+    )
+
+    return success_result({
+        "zone_name": zone_name,
+        "zone_shape": zone_shape,
+        "center": center,
+        "trigger_events": trigger_events,
+        "num_actions": len(actions),
+        "visualize": visualize,
+        "sdf_content": sdf_content.strip(),
+        "plugin_config": plugin_config,
+        "zone": zone  # Include zone object for containment checks
+    })
 
 
 def delete_light(
@@ -3068,4 +4356,333 @@ def spawn_multiple(
         return error_result(
             error=f"Batch spawn failed: {e}",
             error_code="BATCH_SPAWN_ERROR"
+        )
+
+
+# ==============================================================================
+# Phase 5A: High-Priority Enhancements
+# ==============================================================================
+
+
+def create_benchmark_world(
+    benchmark_type: str,
+    difficulty: str = "medium",
+    seed: Optional[int] = None,
+    export_metadata: bool = False
+) -> OperationResult:
+    """
+    Create standardized benchmark world for research and testing.
+
+    Generates reproducible test environments with known configurations,
+    perfect for comparing navigation algorithms or robot performance.
+
+    Args:
+        benchmark_type: Type of benchmark ("nav2_standard", "obstacle_course", "maze")
+        difficulty: Difficulty level ("easy", "medium", "hard")
+        seed: Random seed for reproducibility (None = random)
+        export_metadata: If True, save configuration to /tmp/benchmark_metadata.json
+
+    Returns:
+        OperationResult with world SDF and configuration metadata
+
+    Example:
+        >>> # Create reproducible benchmark for research
+        >>> result = create_benchmark_world(
+        ...     benchmark_type="nav2_standard",
+        ...     difficulty="medium",
+        ...     seed=42,
+        ...     export_metadata=True
+        ... )
+        >>> print(f"Obstacles: {result.data['obstacles']}")
+        >>> # Use in paper: "We used nav2_standard benchmark with seed=42"
+    """
+    try:
+        # Validate parameters
+        valid_types = ["nav2_standard", "obstacle_course", "maze"]
+        if benchmark_type not in valid_types:
+            return error_result(
+                error=f"Invalid benchmark_type: {benchmark_type}",
+                error_code="INVALID_BENCHMARK_TYPE",
+                suggestions=[f"Valid types: {', '.join(valid_types)}"]
+            )
+
+        valid_difficulties = ["easy", "medium", "hard"]
+        if difficulty not in valid_difficulties:
+            return error_result(
+                error=f"Invalid difficulty: {difficulty}",
+                error_code="INVALID_DIFFICULTY",
+                suggestions=[f"Valid difficulties: {', '.join(valid_difficulties)}"]
+            )
+
+        # Set seed if provided
+        if seed is not None:
+            import random
+            random.seed(seed)
+
+        # Configure based on type and difficulty
+        metadata = {
+            "benchmark_type": benchmark_type,
+            "difficulty": difficulty,
+            "seed": seed,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+
+        if benchmark_type == "nav2_standard":
+            # Standard nav2 benchmark: Open world with scattered obstacles
+            obstacle_counts = {"easy": 5, "medium": 10, "hard": 20}
+            area_sizes = {"easy": 30, "medium": 20, "hard": 15}
+
+            num_obstacles = obstacle_counts[difficulty]
+            area_size = area_sizes[difficulty]
+
+            # Create base world
+            world_result = create_empty_world(
+                world_name=f"nav2_benchmark_{difficulty}",
+                include_ground_plane=True,
+                include_sun=True
+            )
+
+            if not world_result.success:
+                return world_result
+
+            # Create obstacle course
+            obstacles_result = create_obstacle_course(
+                num_obstacles=num_obstacles,
+                area_size=area_size,
+                seed=seed
+            )
+
+            metadata.update({
+                "obstacles": num_obstacles,
+                "area_size": area_size,
+                "world_size": [area_size, area_size],
+                "obstacle_types": ["box", "cylinder", "sphere"]
+            })
+
+        elif benchmark_type == "obstacle_course":
+            # Dense obstacle course
+            obstacle_counts = {"easy": 10, "medium": 20, "hard": 40}
+            num_obstacles = obstacle_counts[difficulty]
+
+            world_result = create_empty_world(
+                world_name=f"obstacle_benchmark_{difficulty}",
+                include_ground_plane=True,
+                include_sun=True
+            )
+
+            if not world_result.success:
+                return world_result
+
+            obstacles_result = create_obstacle_course(
+                num_obstacles=num_obstacles,
+                area_size=20.0,
+                min_distance=1.5 if difficulty == "easy" else 1.0,
+                seed=seed
+            )
+
+            metadata.update({
+                "obstacles": num_obstacles,
+                "area_size": 20.0,
+                "min_distance": 1.5 if difficulty == "easy" else 1.0
+            })
+
+        elif benchmark_type == "maze":
+            # Maze-like environment (future enhancement)
+            return error_result(
+                error="Maze benchmark not yet implemented",
+                error_code="NOT_IMPLEMENTED",
+                suggestions=["Use 'nav2_standard' or 'obstacle_course' for now"]
+            )
+
+        # Export metadata if requested
+        if export_metadata:
+            export_result = export_world_metadata(
+                world_name=f"{benchmark_type}_{difficulty}",
+                world_data=metadata,
+                file_path=f"/tmp/benchmark_{benchmark_type}_{difficulty}_metadata.json"
+            )
+
+            if export_result.success:
+                metadata["metadata_file"] = export_result.data["file_path"]
+
+        _logger.info(
+            f"Created benchmark world",
+            benchmark_type=benchmark_type,
+            difficulty=difficulty,
+            seed=seed
+        )
+
+        return success_result({
+            **metadata,
+            "sdf_content": world_result.data["sdf_content"]
+        })
+
+    except Exception as e:
+        _logger.exception("Error creating benchmark world", error=str(e))
+        return error_result(
+            error=f"Failed to create benchmark world: {e}",
+            error_code="BENCHMARK_CREATION_ERROR"
+        )
+
+
+def export_world_metadata(
+    world_name: str,
+    world_data: Dict[str, Any],
+    file_path: str = "/tmp/world_metadata.json"
+) -> OperationResult:
+    """
+    Export world configuration metadata to JSON file.
+
+    Saves world parameters for reproducibility and documentation.
+    Essential for research papers and benchmark sharing.
+
+    Args:
+        world_name: Name of the world
+        world_data: Dictionary containing world configuration
+        file_path: Path to save JSON file
+
+    Returns:
+        OperationResult with file path
+
+    Example:
+        >>> metadata = {
+        ...     "obstacles": 10,
+        ...     "size": [20, 20],
+        ...     "seed": 42,
+        ...     "material": "asphalt"
+        ... }
+        >>> result = export_world_metadata("test_world", metadata)
+        >>> # Now you can share this file for reproducible research!
+    """
+    try:
+        import json
+
+        # Prepare metadata
+        full_metadata = {
+            "world_name": world_name,
+            "export_timestamp": datetime.utcnow().isoformat() + "Z",
+            "configuration": world_data
+        }
+
+        # Ensure directory exists
+        import os
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        # Write JSON
+        with open(file_path, 'w') as f:
+            json.dump(full_metadata, f, indent=2)
+
+        _logger.info(
+            f"Exported world metadata",
+            world_name=world_name,
+            file_path=file_path
+        )
+
+        return success_result({
+            "world_name": world_name,
+            "file_path": file_path,
+            "format": "json",
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        })
+
+    except Exception as e:
+        _logger.exception("Error exporting metadata", error=str(e))
+        return error_result(
+            error=f"Failed to export metadata: {e}",
+            error_code="METADATA_EXPORT_ERROR"
+        )
+
+
+def set_fog(
+    density: float = 0.0,
+    color: Optional[Dict[str, float]] = None,
+    fog_type: str = "linear"
+) -> OperationResult:
+    """
+    Configure fog and atmospheric effects for the world.
+
+    Creates realistic atmospheric conditions for vision algorithm testing.
+    Affects camera sensors and visual appearance in Gazebo.
+
+    Args:
+        density: Fog density (0.0 = no fog, 1.0 = very thick fog)
+        color: RGB color of fog (default: light gray)
+        fog_type: Fog calculation type ("linear", "exponential")
+
+    Returns:
+        OperationResult with fog configuration SDF
+
+    Example:
+        >>> # Light morning fog
+        >>> result = set_fog(
+        ...     density=0.2,
+        ...     color={"r": 0.9, "g": 0.9, "b": 0.95}
+        ... )
+        >>>
+        >>> # Dense fog for vision testing
+        >>> result = set_fog(density=0.7)
+    """
+    try:
+        # Validate density
+        if density < 0.0 or density > 1.0:
+            return error_result(
+                error=f"Invalid fog density: {density}",
+                error_code="INVALID_DENSITY",
+                suggestions=["Density must be between 0.0 (no fog) and 1.0 (dense fog)"]
+            )
+
+        # Default color (light gray)
+        if color is None:
+            color = {"r": 0.8, "g": 0.8, "b": 0.8}
+
+        # Check if fog is enabled
+        enabled = density > 0.0
+
+        # Generate SDF fog configuration
+        sdf_parts = [
+            '<?xml version="1.0"?>',
+            '<sdf version="1.7">',
+            '  <world name="world_with_fog">',
+            '    <scene>',
+        ]
+
+        if enabled:
+            cr, cg, cb = color["r"], color["g"], color["b"]
+            sdf_parts.extend([
+                '      <fog>',
+                f'        <color>{cr} {cg} {cb}</color>',
+                f'        <type>{fog_type}</type>',
+                f'        <density>{density}</density>',
+                '      </fog>',
+            ])
+
+        sdf_parts.extend([
+            '    </scene>',
+            '  </world>',
+            '</sdf>'
+        ])
+
+        sdf_content = '\n'.join(sdf_parts)
+
+        _logger.info(
+            f"Configured fog",
+            density=density,
+            enabled=enabled,
+            fog_type=fog_type
+        )
+
+        return success_result({
+            "density": density,
+            "color": color,
+            "fog_type": fog_type,
+            "enabled": enabled,
+            "sdf_content": sdf_content,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        })
+
+    except Exception as e:
+        _logger.exception("Error configuring fog", error=str(e))
+        return error_result(
+            error=f"Failed to configure fog: {e}",
+            error_code="FOG_CONFIGURATION_ERROR"
         )

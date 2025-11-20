@@ -1697,3 +1697,260 @@ class TestSpawnMultiple:
         assert result.data["total"] == 2
         assert result.data["spawned"] == 1
         assert result.data["failed"] == 1
+
+
+# ==============================================================================
+# Phase 5A: High-Priority Enhancements - Tests
+# ==============================================================================
+
+
+class TestExtendedMaterials:
+    """Test Phase 5A extended material library."""
+
+    def test_extended_material_count(self):
+        """Test that we have 15+ materials."""
+        result = world_generation.list_materials()
+
+        assert result.success is True
+        assert len(result.data["materials"]) >= 15
+
+    def test_new_materials_exist(self):
+        """Test that new Phase 5A materials are present."""
+        result = world_generation.list_materials()
+        materials = result.data["materials"]
+
+        # Phase 5A materials
+        new_materials = [
+            "asphalt", "gravel", "mud", "snow",
+            "metal", "carpet", "tile", "dirt", "wet_concrete"
+        ]
+
+        for material in new_materials:
+            assert material in materials, f"Material '{material}' not found"
+
+    def test_rolling_friction_parameter(self):
+        """Test that all materials have rolling_friction."""
+        result = world_generation.list_materials()
+        materials = result.data["materials"]
+
+        for name, props in materials.items():
+            assert "rolling_friction" in props, f"Material '{name}' missing rolling_friction"
+            assert isinstance(props["rolling_friction"], (int, float))
+            assert 0.0 <= props["rolling_friction"] <= 1.0
+
+    def test_wetness_parameter(self):
+        """Test that materials have wetness parameter."""
+        result = world_generation.list_materials()
+        materials = result.data["materials"]
+
+        for name, props in materials.items():
+            assert "wetness" in props, f"Material '{name}' missing wetness"
+            assert isinstance(props["wetness"], (int, float))
+            assert 0.0 <= props["wetness"] <= 1.0
+
+    def test_asphalt_properties(self):
+        """Test asphalt has correct properties for roads."""
+        result = world_generation.list_materials()
+        asphalt = result.data["materials"]["asphalt"]
+
+        # Asphalt should have high friction, low rolling friction
+        assert asphalt["friction"] >= 0.8
+        assert asphalt["rolling_friction"] <= 0.02
+        assert asphalt["restitution"] <= 0.1
+
+    def test_snow_properties(self):
+        """Test snow has low friction and high wetness."""
+        result = world_generation.list_materials()
+        snow = result.data["materials"]["snow"]
+
+        # Snow should be slippery and wet
+        assert snow["friction"] <= 0.4
+        assert snow["wetness"] >= 0.7
+
+    def test_metal_properties(self):
+        """Test metal has high friction and reflectivity."""
+        result = world_generation.list_materials()
+        metal = result.data["materials"]["metal"]
+
+        # Metal should have decent friction, low rolling friction
+        assert metal["friction"] >= 0.6
+        assert metal["rolling_friction"] <= 0.01
+
+
+class TestBenchmarkWorlds:
+    """Test Phase 5A benchmark world generation."""
+
+    def test_create_benchmark_world_nav2_standard(self):
+        """Test creating standard nav2 benchmark."""
+        result = world_generation.create_benchmark_world(
+            benchmark_type="nav2_standard",
+            difficulty="medium"
+        )
+
+        assert result.success is True
+        assert "sdf_content" in result.data
+        assert result.data["benchmark_type"] == "nav2_standard"
+        assert result.data["difficulty"] == "medium"
+
+    def test_create_benchmark_world_with_seed(self):
+        """Test that seed produces reproducible benchmarks."""
+        result1 = world_generation.create_benchmark_world(
+            benchmark_type="nav2_standard",
+            seed=42
+        )
+        result2 = world_generation.create_benchmark_world(
+            benchmark_type="nav2_standard",
+            seed=42
+        )
+
+        assert result1.success is True
+        assert result2.success is True
+        # Same seed should produce identical worlds
+        assert result1.data["sdf_content"] == result2.data["sdf_content"]
+
+    def test_create_benchmark_world_different_seeds(self):
+        """Test that different seeds produce different obstacle configurations."""
+        result1 = world_generation.create_benchmark_world(
+            benchmark_type="nav2_standard",
+            seed=42
+        )
+        result2 = world_generation.create_benchmark_world(
+            benchmark_type="nav2_standard",
+            seed=123
+        )
+
+        assert result1.success is True
+        assert result2.success is True
+        # Different seeds should be recorded in metadata
+        assert result1.data["seed"] == 42
+        assert result2.data["seed"] == 123
+        # Both should have same number of obstacles (same difficulty)
+        assert result1.data["obstacles"] == result2.data["obstacles"]
+
+    def test_create_benchmark_world_obstacle_course(self):
+        """Test creating obstacle course benchmark."""
+        result = world_generation.create_benchmark_world(
+            benchmark_type="obstacle_course",
+            difficulty="hard",
+            seed=42
+        )
+
+        assert result.success is True
+        assert result.data["benchmark_type"] == "obstacle_course"
+        assert "obstacles" in result.data
+        assert result.data["obstacles"] > 0
+
+    def test_create_benchmark_world_invalid_type(self):
+        """Test error handling for invalid benchmark type."""
+        result = world_generation.create_benchmark_world(
+            benchmark_type="invalid_type"
+        )
+
+        assert result.success is False
+        assert "INVALID_BENCHMARK_TYPE" in result.error_code
+
+    def test_export_world_metadata(self):
+        """Test exporting world metadata to JSON."""
+        result = world_generation.export_world_metadata(
+            world_name="test_world",
+            world_data={
+                "obstacles": 10,
+                "size": [20, 20],
+                "seed": 42
+            },
+            file_path="/tmp/test_metadata.json"
+        )
+
+        assert result.success is True
+        assert result.data["file_path"] == "/tmp/test_metadata.json"
+        assert result.data["format"] == "json"
+
+        # Verify file was created
+        import os
+        assert os.path.exists("/tmp/test_metadata.json")
+
+
+class TestFogSystem:
+    """Test Phase 5A fog and atmospheric effects."""
+
+    def test_set_fog_basic(self):
+        """Test basic fog configuration."""
+        result = world_generation.set_fog(
+            density=0.5,
+            color={"r": 0.8, "g": 0.8, "b": 0.8}
+        )
+
+        assert result.success is True
+        assert result.data["density"] == 0.5
+        assert result.data["color"]["r"] == 0.8
+
+    def test_set_fog_sdf_content(self):
+        """Test that fog generates valid SDF."""
+        result = world_generation.set_fog(density=0.3)
+
+        assert result.success is True
+        assert "sdf_content" in result.data
+        assert "<fog>" in result.data["sdf_content"]
+        assert "0.3" in result.data["sdf_content"]
+
+    def test_set_fog_zero_density(self):
+        """Test fog with zero density (no fog)."""
+        result = world_generation.set_fog(density=0.0)
+
+        assert result.success is True
+        assert result.data["density"] == 0.0
+        assert result.data["enabled"] is False
+
+    def test_set_fog_invalid_density(self):
+        """Test error handling for invalid density."""
+        result = world_generation.set_fog(density=1.5)  # > 1.0
+
+        assert result.success is False
+        assert "INVALID_DENSITY" in result.error_code
+
+
+class TestAdvancedWind:
+    """Test Phase 5A enhanced wind system."""
+
+    def test_set_wind_with_turbulence(self):
+        """Test wind with turbulence parameter."""
+        result = world_generation.set_wind(
+            linear_x=5.0,
+            linear_y=0.0,
+            linear_z=0.0,
+            turbulence=0.3
+        )
+
+        assert result.success is True
+        assert result.data["turbulence"] == 0.3
+        assert "plugin_xml" in result.data
+
+    def test_set_wind_with_gusts(self):
+        """Test wind with gust system."""
+        result = world_generation.set_wind(
+            linear_x=5.0,
+            linear_y=0.0,
+            linear_z=0.0,
+            gust_enabled=True,
+            gust_period=10.0,
+            gust_magnitude=2.0
+        )
+
+        assert result.success is True
+        assert result.data["gust_enabled"] is True
+        assert result.data["gust_period"] == 10.0
+        assert result.data["gust_magnitude"] == 2.0
+
+    def test_set_wind_backward_compatible(self):
+        """Test that old set_wind calls still work."""
+        # Phase 4 call (no turbulence/gusts)
+        result = world_generation.set_wind(
+            linear_x=3.0,
+            linear_y=1.0,
+            linear_z=0.0
+        )
+
+        assert result.success is True
+        # Should have default turbulence/gust values
+        assert "turbulence" in result.data
+        assert "gust_enabled" in result.data

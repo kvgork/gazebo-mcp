@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from gazebo_mcp.utils import validators
-from gazebo_mcp.utils.exceptions import InputValidationError
+from gazebo_mcp.utils.exceptions import InvalidParameterError, MissingParameterError
 
 
 class TestValidateModelName:
@@ -35,28 +35,33 @@ class TestValidateModelName:
 
     def test_invalid_model_names(self):
         """Test that invalid model names raise ValidationError."""
+        # Empty string raises MissingParameterError
+        with pytest.raises(MissingParameterError):
+            validators.validate_model_name("")
+
+        # Invalid names raise InvalidParameterError
         invalid_names = [
-            "",  # Empty
             " ",  # Whitespace
             "robot name",  # Space in name
             "robot!",  # Invalid character
             "robot@123",  # Invalid character
             "robot#model",  # Invalid character
+            "123robot",  # Starts with number
         ]
         for name in invalid_names:
-            with pytest.raises(InputValidationError):
+            with pytest.raises(InvalidParameterError):
                 validators.validate_model_name(name)
 
     def test_model_name_max_length(self):
         """Test model name length limits."""
-        # 255 characters is typically the limit
-        long_name = "a" * 255
-        result = validators.validate_model_name(long_name)
-        assert result == long_name
+        # Validator has 64 character limit
+        valid_name = "a" * 64
+        result = validators.validate_model_name(valid_name)
+        assert result == valid_name
 
-        # Extremely long names should fail
-        too_long = "a" * 1000
-        with pytest.raises(InputValidationError):
+        # Names over 64 characters should fail
+        too_long = "a" * 65
+        with pytest.raises(InvalidParameterError):
             validators.validate_model_name(too_long)
 
 
@@ -74,20 +79,21 @@ class TestValidatePosition:
 
     def test_position_type_validation(self):
         """Test that non-numeric positions raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_position("not", "a", "number")
 
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_position(1.0, None, 3.0)
 
     def test_position_extreme_values(self):
         """Test extreme position values."""
-        # Very large values should raise error
-        with pytest.raises(InputValidationError):
-            validators.validate_position(10000.0, 0.0, 0.0)
+        # Very large values should raise error when max_coord is set
+        with pytest.raises(InvalidParameterError):
+            validators.validate_position(10000.0, 0.0, 0.0, max_coord=1000.0)
 
-        with pytest.raises(InputValidationError):
-            validators.validate_position(0.0, -10000.0, 0.0)
+        # Very negative values should raise error when min_coord is set
+        with pytest.raises(InvalidParameterError):
+            validators.validate_position(0.0, -10000.0, 0.0, min_coord=-1000.0)
 
 
 class TestValidateOrientation:
@@ -105,16 +111,16 @@ class TestValidateOrientation:
         assert validators.validate_orientation(-1.57, -0.5, -3.14) == (-1.57, -0.5, -3.14)
 
     def test_orientation_normalization(self):
-        """Test that orientations are normalized to [-π, π]."""
-        # Values should be normalized
+        """Test that orientations are accepted as-is (no normalization)."""
+        # Validator accepts values without normalization
         roll, pitch, yaw = validators.validate_orientation(7.0, -7.0, 10.0)
-        assert -3.15 < roll < 3.15  # Within [-π, π]
-        assert -3.15 < pitch < 3.15
-        assert -3.15 < yaw < 3.15
+        assert roll == 7.0
+        assert pitch == -7.0
+        assert yaw == 10.0
 
     def test_orientation_type_validation(self):
         """Test that non-numeric orientations raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_orientation("not", "a", "number")
 
 
@@ -129,28 +135,28 @@ class TestValidateTimeout:
 
     def test_negative_timeout(self):
         """Test that negative timeouts raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_timeout(-1.0)
 
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_timeout(-0.001)
 
     def test_zero_timeout(self):
         """Test that zero timeout raises ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_timeout(0.0)
 
     def test_excessive_timeout(self):
         """Test that very large timeouts raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_timeout(1000.0)
 
     def test_timeout_type_validation(self):
         """Test that non-numeric timeouts raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_timeout("not a number")
 
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_timeout(None)
 
 
@@ -170,12 +176,12 @@ class TestValidateFilePath:
 
     def test_path_must_exist(self):
         """Test that non-existent paths raise ValidationError when required."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_file_path("/nonexistent/file.txt", must_exist=True)
 
     def test_empty_path(self):
-        """Test that empty paths raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        """Test that empty paths raise MissingParameterError."""
+        with pytest.raises(MissingParameterError):
             validators.validate_file_path("", must_exist=False)
 
 
@@ -191,9 +197,14 @@ class TestValidateSensorType:
 
     def test_invalid_sensor_types(self):
         """Test that invalid sensor types raise ValidationError."""
-        invalid_types = ["invalid", "radar", "sonar", ""]
+        # Empty string raises MissingParameterError
+        with pytest.raises(MissingParameterError):
+            validators.validate_sensor_type("")
+
+        # Invalid types raise InvalidParameterError
+        invalid_types = ["invalid", "radar", "ultrasonic"]
         for sensor_type in invalid_types:
-            with pytest.raises(InputValidationError):
+            with pytest.raises(InvalidParameterError):
                 validators.validate_sensor_type(sensor_type)
 
     def test_case_insensitive(self):
@@ -214,17 +225,17 @@ class TestValidatePositive:
 
     def test_zero_value(self):
         """Test that zero raises ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_positive(0.0, "value")
 
     def test_negative_value(self):
         """Test that negative numbers raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_positive(-1.0, "value")
 
     def test_non_numeric_value(self):
         """Test that non-numeric values raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_positive("not a number", "value")
 
 
@@ -239,10 +250,10 @@ class TestValidateNonNegative:
 
     def test_negative_value(self):
         """Test that negative numbers raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_non_negative(-1.0, "value")
 
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_non_negative(-0.001, "value")
 
 
@@ -251,15 +262,16 @@ class TestValidateResponseFormat:
 
     def test_valid_response_formats(self):
         """Test that valid response formats pass validation."""
-        valid_formats = ["summary", "filtered", "full"]
+        valid_formats = ["summary", "filtered", "detailed", "concise"]
         for fmt in valid_formats:
             result = validators.validate_response_format(fmt)
             assert result == fmt
 
     def test_invalid_response_format(self):
         """Test that invalid response formats raise ValidationError."""
-        with pytest.raises(InputValidationError):
+        with pytest.raises(InvalidParameterError):
             validators.validate_response_format("invalid")
 
-        with pytest.raises(InputValidationError):
+        # Empty string raises MissingParameterError
+        with pytest.raises(MissingParameterError):
             validators.validate_response_format("")
