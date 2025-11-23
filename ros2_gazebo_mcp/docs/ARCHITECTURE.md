@@ -268,6 +268,66 @@ class ConnectionState(Enum):
   - Navigation goals
   - Complex world generation tasks
 
+#### Adapter Pattern Architecture
+
+**Problem**: Support both Classic Gazebo 11 (deprecated) and Modern Gazebo (Fortress/Garden/Harmonic) with different ROS2 APIs.
+
+**Solution**: Adapter pattern with abstract interface and backend-specific implementations.
+
+**Architecture**:
+```
+GazeboInterface (Abstract)
+├── EntityPose, EntityTwist, WorldInfo (Common data structures)
+├── 10 core methods (spawn_entity, delete_entity, etc.)
+│
+├── ClassicGazeboAdapter (Deprecated)
+│   └── Wraps gazebo_msgs package
+│       - Service paths: /gazebo/* and /spawn_entity
+│       - Field names: .xml, .initial_pose
+│       - Single world only
+│
+└── ModernGazeboAdapter (Primary)
+    └── Wraps ros_gz_interfaces package
+        - Service paths: /world/{world_name}/*
+        - Field names: .sdf, .pose
+        - Multi-world support
+```
+
+**Backend Selection**:
+- Environment variable: `GAZEBO_BACKEND` (modern, classic, auto)
+- Default: **modern** (Classic deprecated, removed in v2.0.0)
+- Auto-detection: Service-based discovery + process fallback
+
+**Key Differences**:
+
+| Aspect | Classic (Deprecated) | Modern (Primary) |
+|--------|---------------------|------------------|
+| Package | gazebo_msgs | ros_gz_interfaces |
+| Service Path | /gazebo/* | /world/{world}/* |
+| SDF Field | .xml | .sdf |
+| Pose Field | .initial_pose | .pose |
+| Multi-World | ❌ Single only | ✅ Full support |
+| Entity Type | String | Entity message (name/id/type) |
+| Control | Separate services | ControlWorld unified |
+
+**Dependency Injection**:
+```python
+# GazeboBridgeNode supports adapter injection for testing
+bridge = GazeboBridgeNode(
+    ros2_node,
+    adapter=mock_adapter,  # Inject mock for tests
+    world="test_world"
+)
+```
+
+**Files**:
+- `bridge/gazebo_interface.py` - Abstract interface
+- `bridge/config.py` - Configuration and env vars
+- `bridge/detection.py` - Auto-detection logic
+- `bridge/factory.py` - Adapter factory
+- `bridge/adapters/classic_adapter.py` - Classic implementation (deprecated)
+- `bridge/adapters/modern_adapter.py` - Modern implementation (primary)
+
 ### 4. Tools Module (`src/gazebo_mcp/tools/`)
 
 **Organization**:
