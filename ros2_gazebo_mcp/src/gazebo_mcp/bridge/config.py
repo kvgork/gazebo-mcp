@@ -21,9 +21,12 @@ class GazeboConfig:
     Configuration for Gazebo backend selection.
 
     Environment Variables:
-    - GAZEBO_BACKEND: 'classic', 'modern', or 'auto' (default: auto)
+    - GAZEBO_BACKEND: 'classic', 'modern', or 'auto' (default: modern)
     - GAZEBO_WORLD_NAME: Default world name for Modern (default: 'default')
     - GAZEBO_TIMEOUT: Service call timeout in seconds (default: 5.0)
+
+    NOTE: Classic Gazebo is DEPRECATED and will be removed in v2.0.0.
+          Default is now 'modern' to encourage migration.
     """
 
     def __init__(
@@ -41,8 +44,9 @@ class GazeboConfig:
             timeout: Service call timeout in seconds
         """
         # Read from environment if not provided
+        # Default changed from 'auto' to 'modern' (Classic is deprecated)
         if backend is None:
-            backend_str = os.getenv('GAZEBO_BACKEND', 'auto').lower()
+            backend_str = os.getenv('GAZEBO_BACKEND', 'modern').lower()
             try:
                 backend = GazeboBackend(backend_str)
             except ValueError:

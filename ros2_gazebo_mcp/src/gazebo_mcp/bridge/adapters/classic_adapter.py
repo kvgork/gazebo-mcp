@@ -2,11 +2,30 @@
 Classic Gazebo adapter using gazebo_msgs.
 
 Wraps Classic Gazebo (Gazebo 11) ROS2 integration.
+
+⚠️  DEPRECATION WARNING ⚠️
+This adapter is DEPRECATED and will be removed in v2.0.0.
+Please migrate to Modern Gazebo (Fortress/Garden/Harmonic) using ModernGazeboAdapter.
+
+Classic Gazebo 11 is no longer actively maintained. Modern Gazebo provides:
+- Better performance
+- Multi-world support
+- Modern ROS 2 integration (ros_gz)
+- Active development and support
 """
 
 import time
+import warnings
 from typing import Dict, List, Optional, Any
 from geometry_msgs.msg import Pose, Twist, Vector3, Quaternion, Point
+
+# Issue deprecation warning at module import
+warnings.warn(
+    "ClassicGazeboAdapter is deprecated and will be removed in v2.0.0. "
+    "Please migrate to Modern Gazebo (Fortress/Garden/Harmonic) using ModernGazeboAdapter.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 from ..gazebo_interface import (
     GazeboInterface,
@@ -27,6 +46,9 @@ class ClassicGazeboAdapter(GazeboInterface):
     """
     Adapter for Gazebo Classic (gazebo_msgs).
 
+    ⚠️  DEPRECATED: This adapter will be removed in v2.0.0.
+    Use ModernGazeboAdapter for Modern Gazebo (Fortress/Garden/Harmonic).
+
     Maps GazeboInterface methods to Classic Gazebo service calls.
     Classic uses:
     - Package: gazebo_msgs
@@ -39,6 +61,8 @@ class ClassicGazeboAdapter(GazeboInterface):
         """
         Initialize Classic Gazebo adapter.
 
+        ⚠️  DEPRECATION WARNING: Classic Gazebo support will be removed in v2.0.0.
+
         Args:
             node: ROS2 node for creating service clients
             timeout: Default service call timeout
@@ -46,6 +70,13 @@ class ClassicGazeboAdapter(GazeboInterface):
         self.node = node
         self.timeout = timeout
         self.logger = get_logger("classic_adapter")
+
+        # Issue runtime deprecation warning
+        self.logger.warning(
+            "⚠️  Classic Gazebo adapter is DEPRECATED and will be removed in v2.0.0. "
+            "Please migrate to Modern Gazebo (Fortress/Garden/Harmonic). "
+            "Set GAZEBO_BACKEND=modern to use the Modern adapter."
+        )
 
         # Lazy-initialized service clients
         self._spawn_client = None
@@ -61,7 +92,7 @@ class ClassicGazeboAdapter(GazeboInterface):
         self._model_states_sub = None
         self._model_states_data = None
 
-        self.logger.info("Initialized Classic Gazebo adapter")
+        self.logger.info("Initialized Classic Gazebo adapter (DEPRECATED)")
 
     def get_backend_name(self) -> str:
         """Return backend identifier."""
