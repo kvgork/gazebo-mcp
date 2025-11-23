@@ -1,0 +1,747 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gazebo_mcp.utils.validators &mdash; ROS2 Gazebo MCP Server 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ROS2 Gazebo MCP Server
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API Modules:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">gazebo_mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../gazebo_mcp.html">gazebo_mcp package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ROS2 Gazebo MCP Server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gazebo_mcp.utils.validators</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gazebo_mcp.utils.validators</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Input Validators for Gazebo MCP.</span>
+
+<span class="sd">Provides validation functions for common parameter types:</span>
+<span class="sd">- Coordinates (x, y, z)</span>
+<span class="sd">- Orientations (roll, pitch, yaw, quaternions)</span>
+<span class="sd">- Model names</span>
+<span class="sd">- Sensor types</span>
+<span class="sd">- Timeouts and numeric ranges</span>
+<span class="sd">- File paths</span>
+
+<span class="sd">Raises appropriate exceptions with helpful messages when validation fails.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">InvalidParameterError</span><span class="p">,</span> <span class="n">MissingParameterError</span>
+
+
+<span class="c1"># Coordinate validation:</span>
+
+<div class="viewcode-block" id="validate_coordinate">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_coordinate">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_coordinate</span><span class="p">(</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">min_value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">max_value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a coordinate value.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Coordinate value to validate</span>
+<span class="sd">        name: Parameter name (for error messages)</span>
+<span class="sd">        min_value: Optional minimum value</span>
+<span class="sd">        max_value: Optional maximum value</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated coordinate value</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidParameterError: If validation fails</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; x = validate_coordinate(1.5, &quot;x&quot;, min_value=-10, max_value=10)</span>
+<span class="sd">        &gt;&gt;&gt; # Returns: 1.5</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; x = validate_coordinate(100, &quot;x&quot;, max_value=10)</span>
+<span class="sd">        &gt;&gt;&gt; # Raises: InvalidParameterError</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Check type:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="s2">&quot;numeric value (int or float)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Check if NaN or Inf:</span>
+    <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="ow">or</span> <span class="n">math</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="s2">&quot;finite numeric value (not NaN or Inf)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Check range:</span>
+    <span class="k">if</span> <span class="n">min_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="n">min_value</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;value &gt;= </span><span class="si">{</span><span class="n">min_value</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">max_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">value</span> <span class="o">&gt;</span> <span class="n">max_value</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;value &lt;= </span><span class="si">{</span><span class="n">max_value</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="validate_position">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_position">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_position</span><span class="p">(</span>
+    <span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">z</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">min_coord</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">max_coord</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a 3D position.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        x, y, z: Position coordinates</span>
+<span class="sd">        min_coord: Optional minimum coordinate value</span>
+<span class="sd">        max_coord: Optional maximum coordinate value</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated (x, y, z) tuple</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; pos = validate_position(1.0, 2.0, 0.5)</span>
+<span class="sd">        &gt;&gt;&gt; # Returns: (1.0, 2.0, 0.5)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">validate_coordinate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="n">min_coord</span><span class="p">,</span> <span class="n">max_coord</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">validate_coordinate</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="n">min_coord</span><span class="p">,</span> <span class="n">max_coord</span><span class="p">)</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">validate_coordinate</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="n">min_coord</span><span class="p">,</span> <span class="n">max_coord</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># Orientation validation:</span>
+
+<div class="viewcode-block" id="validate_angle">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_angle">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_angle</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">radians</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate an angle.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Angle value</span>
+<span class="sd">        name: Parameter name</span>
+<span class="sd">        radians: If True, expect radians; if False, expect degrees</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated angle (always in radians)</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; roll = validate_angle(0.5, &quot;roll&quot;)  # Radians</span>
+<span class="sd">        &gt;&gt;&gt; yaw = validate_angle(90, &quot;yaw&quot;, radians=False)  # Degrees -&gt; radians</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;numeric value&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="ow">or</span> <span class="n">math</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;finite numeric value&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Convert to radians if needed:</span>
+    <span class="k">if</span> <span class="n">radians</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="n">value</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="validate_orientation">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_orientation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_orientation</span><span class="p">(</span>
+    <span class="n">roll</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">pitch</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">yaw</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">radians</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate Euler angles orientation.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        roll, pitch, yaw: Euler angles</span>
+<span class="sd">        radians: If True, angles are in radians; if False, in degrees</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated (roll, pitch, yaw) tuple in radians</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; orient = validate_orientation(0.0, 0.0, 1.57)  # Radians</span>
+<span class="sd">        &gt;&gt;&gt; orient = validate_orientation(0, 0, 90, radians=False)  # Degrees</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">roll</span> <span class="o">=</span> <span class="n">validate_angle</span><span class="p">(</span><span class="n">roll</span><span class="p">,</span> <span class="s2">&quot;roll&quot;</span><span class="p">,</span> <span class="n">radians</span><span class="p">)</span>
+    <span class="n">pitch</span> <span class="o">=</span> <span class="n">validate_angle</span><span class="p">(</span><span class="n">pitch</span><span class="p">,</span> <span class="s2">&quot;pitch&quot;</span><span class="p">,</span> <span class="n">radians</span><span class="p">)</span>
+    <span class="n">yaw</span> <span class="o">=</span> <span class="n">validate_angle</span><span class="p">(</span><span class="n">yaw</span><span class="p">,</span> <span class="s2">&quot;yaw&quot;</span><span class="p">,</span> <span class="n">radians</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="n">roll</span><span class="p">,</span> <span class="n">pitch</span><span class="p">,</span> <span class="n">yaw</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="validate_quaternion">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_quaternion">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_quaternion</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">z</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">w</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a quaternion.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        x, y, z, w: Quaternion components</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated (x, y, z, w) tuple</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidParameterError: If quaternion is not normalized</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; q = validate_quaternion(0.0, 0.0, 0.0, 1.0)  # Identity quaternion</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Validate each component:</span>
+    <span class="k">for</span> <span class="n">val</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[(</span><span class="n">x</span><span class="p">,</span> <span class="s2">&quot;qx&quot;</span><span class="p">),</span> <span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="s2">&quot;qy&quot;</span><span class="p">),</span> <span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="s2">&quot;qz&quot;</span><span class="p">),</span> <span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="s2">&quot;qw&quot;</span><span class="p">)]:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="s2">&quot;numeric value&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">val</span><span class="p">)</span> <span class="ow">or</span> <span class="n">math</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">val</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">val</span><span class="p">,</span> <span class="s2">&quot;finite numeric value&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Check if normalized (within tolerance):</span>
+    <span class="n">magnitude</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">x</span><span class="o">*</span><span class="n">x</span> <span class="o">+</span> <span class="n">y</span><span class="o">*</span><span class="n">y</span> <span class="o">+</span> <span class="n">z</span><span class="o">*</span><span class="n">z</span> <span class="o">+</span> <span class="n">w</span><span class="o">*</span><span class="n">w</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">magnitude</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">rel_tol</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="s2">&quot;quaternion&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;(x=</span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s2">, y=</span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2">, z=</span><span class="si">{</span><span class="n">z</span><span class="si">}</span><span class="s2">, w=</span><span class="si">{</span><span class="n">w</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;normalized quaternion (magnitude should be 1.0, got </span><span class="si">{</span><span class="n">magnitude</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">y</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">z</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">w</span><span class="p">))</span></div>
+
+
+
+<span class="c1"># Name validation:</span>
+
+<div class="viewcode-block" id="validate_model_name">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_model_name">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_model_name</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a model name.</span>
+
+<span class="sd">    Model names must:</span>
+<span class="sd">    - Be non-empty</span>
+<span class="sd">    - Start with a letter</span>
+<span class="sd">    - Contain only alphanumeric, underscore, dash</span>
+<span class="sd">    - Be &lt;= 64 characters</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        name: Model name to validate</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated model name</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidParameterError: If validation fails</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; name = validate_model_name(&quot;turtlebot3_burger&quot;)  # Valid</span>
+<span class="sd">        &gt;&gt;&gt; name = validate_model_name(&quot;123_invalid&quot;)  # Invalid - starts with number</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">MissingParameterError</span><span class="p">(</span><span class="s2">&quot;model_name&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="s2">&quot;model_name&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s2">&quot;string&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Check length:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">64</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="s2">&quot;model_name&quot;</span><span class="p">,</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;string with &lt;= 64 characters&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Check format:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;^[a-zA-Z][a-zA-Z0-9_-]*$&#39;</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="s2">&quot;model_name&quot;</span><span class="p">,</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;string starting with letter, containing only alphanumeric, underscore, dash&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">name</span></div>
+
+
+
+<div class="viewcode-block" id="validate_entity_name">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_entity_name">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_entity_name</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">entity_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;entity&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a generic entity name (model, sensor, world, etc.).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        name: Entity name to validate</span>
+<span class="sd">        entity_type: Type of entity (for error messages)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated entity name</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; name = validate_entity_name(&quot;my_sensor&quot;, &quot;sensor&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">name</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">MissingParameterError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entity_type</span><span class="si">}</span><span class="s2">_name&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entity_type</span><span class="si">}</span><span class="s2">_name&quot;</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s2">&quot;string&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">64</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entity_type</span><span class="si">}</span><span class="s2">_name&quot;</span><span class="p">,</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;string with &lt;= 64 characters&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;^[a-zA-Z][a-zA-Z0-9_-]*$&#39;</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">entity_type</span><span class="si">}</span><span class="s2">_name&quot;</span><span class="p">,</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;string starting with letter, containing only alphanumeric, underscore, dash&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">name</span></div>
+
+
+
+<span class="c1"># Sensor type validation:</span>
+
+<span class="n">VALID_SENSOR_TYPES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;camera&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;depth_camera&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;rgbd_camera&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;lidar&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;laser&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;imu&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;gps&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;magnetometer&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;altimeter&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;sonar&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;contact&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;force_torque&quot;</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="validate_sensor_type">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_sensor_type">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_sensor_type</span><span class="p">(</span><span class="n">sensor_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate sensor type.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        sensor_type: Sensor type to validate</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated sensor type (lowercase)</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidParameterError: If sensor type is invalid</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; stype = validate_sensor_type(&quot;lidar&quot;)  # Valid</span>
+<span class="sd">        &gt;&gt;&gt; stype = validate_sensor_type(&quot;CAMERA&quot;)  # Valid (normalized to lowercase)</span>
+<span class="sd">        &gt;&gt;&gt; stype = validate_sensor_type(&quot;invalid&quot;)  # Invalid</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">sensor_type</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">MissingParameterError</span><span class="p">(</span><span class="s2">&quot;sensor_type&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sensor_type</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="s2">&quot;sensor_type&quot;</span><span class="p">,</span> <span class="n">sensor_type</span><span class="p">,</span> <span class="s2">&quot;string&quot;</span><span class="p">)</span>
+
+    <span class="n">sensor_type_lower</span> <span class="o">=</span> <span class="n">sensor_type</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">sensor_type_lower</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">VALID_SENSOR_TYPES</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="s2">&quot;sensor_type&quot;</span><span class="p">,</span>
+            <span class="n">sensor_type</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;one of: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">VALID_SENSOR_TYPES</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">sensor_type_lower</span></div>
+
+
+
+<span class="c1"># Numeric range validation:</span>
+
+<div class="viewcode-block" id="validate_timeout">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_timeout">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_timeout</span><span class="p">(</span><span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">min_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span> <span class="n">max_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">300.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a timeout value.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        timeout: Timeout in seconds</span>
+<span class="sd">        min_timeout: Minimum allowed timeout</span>
+<span class="sd">        max_timeout: Maximum allowed timeout</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated timeout</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; timeout = validate_timeout(5.0)  # 5 seconds</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">timeout</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="s2">&quot;timeout&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="s2">&quot;numeric value (seconds)&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">timeout</span> <span class="o">&lt;</span> <span class="n">min_timeout</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="s2">&quot;timeout&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;&gt;= </span><span class="si">{</span><span class="n">min_timeout</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">timeout</span> <span class="o">&gt;</span> <span class="n">max_timeout</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="s2">&quot;timeout&quot;</span><span class="p">,</span> <span class="n">timeout</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;&lt;= </span><span class="si">{</span><span class="n">max_timeout</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">timeout</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="validate_positive">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_positive">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_positive</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate that a value is positive.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Value to validate</span>
+<span class="sd">        name: Parameter name</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated value</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; count = validate_positive(10, &quot;count&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;numeric value&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;positive value (&gt; 0)&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">value</span></div>
+
+
+
+<div class="viewcode-block" id="validate_non_negative">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_non_negative">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_non_negative</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate that a value is non-negative.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Value to validate</span>
+<span class="sd">        name: Parameter name</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated value</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; index = validate_non_negative(0, &quot;index&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;numeric value&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">value</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;non-negative value (&gt;= 0)&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">value</span></div>
+
+
+
+<span class="c1"># File path validation:</span>
+
+<div class="viewcode-block" id="validate_file_path">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_file_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_file_path</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">must_exist</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a file path.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path: File path to validate</span>
+<span class="sd">        must_exist: If True, file must exist</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated Path object</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        InvalidParameterError: If validation fails</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; world_file = validate_file_path(&quot;worlds/my_world.sdf&quot;, must_exist=True)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">MissingParameterError</span><span class="p">(</span><span class="s2">&quot;file_path&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="s2">&quot;file_path&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="s2">&quot;string&quot;</span><span class="p">)</span>
+
+    <span class="n">path_obj</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">must_exist</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">path_obj</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="s2">&quot;file_path&quot;</span><span class="p">,</span>
+            <span class="n">path</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;existing file (file not found: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">path_obj</span></div>
+
+
+
+<div class="viewcode-block" id="validate_directory_path">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_directory_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_directory_path</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">must_exist</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">create</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate a directory path.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path: Directory path to validate</span>
+<span class="sd">        must_exist: If True, directory must exist</span>
+<span class="sd">        create: If True, create directory if it doesn&#39;t exist</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated Path object</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; log_dir = validate_directory_path(&quot;/var/log/gazebo_mcp&quot;, create=True)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">MissingParameterError</span><span class="p">(</span><span class="s2">&quot;directory_path&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="s2">&quot;directory_path&quot;</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="s2">&quot;string&quot;</span><span class="p">)</span>
+
+    <span class="n">path_obj</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">must_exist</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">path_obj</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="s2">&quot;directory_path&quot;</span><span class="p">,</span>
+            <span class="n">path</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;existing directory (not found: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">create</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">path_obj</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="n">path_obj</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">path_obj</span></div>
+
+
+
+<span class="c1"># Response format validation:</span>
+
+<span class="n">VALID_RESPONSE_FORMATS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;summary&quot;</span><span class="p">,</span> <span class="s2">&quot;concise&quot;</span><span class="p">,</span> <span class="s2">&quot;filtered&quot;</span><span class="p">,</span> <span class="s2">&quot;detailed&quot;</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="validate_response_format">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_response_format">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_response_format</span><span class="p">(</span><span class="nb">format</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate response_format parameter.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        format: Response format to validate</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated format (lowercase)</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; fmt = validate_response_format(&quot;filtered&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">format</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">MissingParameterError</span><span class="p">(</span><span class="s2">&quot;response_format&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="nb">format</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span><span class="s2">&quot;response_format&quot;</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="s2">&quot;string&quot;</span><span class="p">)</span>
+
+    <span class="n">format_lower</span> <span class="o">=</span> <span class="nb">format</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">format_lower</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">VALID_RESPONSE_FORMATS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">InvalidParameterError</span><span class="p">(</span>
+            <span class="s2">&quot;response_format&quot;</span><span class="p">,</span>
+            <span class="nb">format</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;one of: </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">VALID_RESPONSE_FORMATS</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">format_lower</span></div>
+
+
+
+<span class="c1"># Batch validation:</span>
+
+<div class="viewcode-block" id="validate_parameters">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.validators.validate_parameters">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_parameters</span><span class="p">(</span>
+    <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="n">schema</span><span class="p">:</span> <span class="nb">dict</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validate multiple parameters against a schema.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        params: Parameters to validate</span>
+<span class="sd">        schema: Validation schema</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated parameters</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; schema = {</span>
+<span class="sd">        ...     &quot;x&quot;: {&quot;type&quot;: &quot;coordinate&quot;, &quot;min&quot;: -10, &quot;max&quot;: 10},</span>
+<span class="sd">        ...     &quot;y&quot;: {&quot;type&quot;: &quot;coordinate&quot;, &quot;min&quot;: -10, &quot;max&quot;: 10},</span>
+<span class="sd">        ...     &quot;model_name&quot;: {&quot;type&quot;: &quot;model_name&quot;},</span>
+<span class="sd">        ...     &quot;timeout&quot;: {&quot;type&quot;: &quot;timeout&quot;, &quot;optional&quot;: True}</span>
+<span class="sd">        ... }</span>
+<span class="sd">        &gt;&gt;&gt; validated = validate_parameters(</span>
+<span class="sd">        ...     {&quot;x&quot;: 1.0, &quot;y&quot;: 2.0, &quot;model_name&quot;: &quot;turtlebot3&quot;},</span>
+<span class="sd">        ...     schema</span>
+<span class="sd">        ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">validated</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">param_schema</span> <span class="ow">in</span> <span class="n">schema</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="c1"># Check if parameter is required:</span>
+        <span class="k">if</span> <span class="n">param_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">params</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">param_schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;optional&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">MissingParameterError</span><span class="p">(</span><span class="n">param_name</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="n">value</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span>
+        <span class="n">param_type</span> <span class="o">=</span> <span class="n">param_schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Validate based on type:</span>
+        <span class="k">if</span> <span class="n">param_type</span> <span class="o">==</span> <span class="s2">&quot;coordinate&quot;</span><span class="p">:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">validate_coordinate</span><span class="p">(</span>
+                <span class="n">value</span><span class="p">,</span>
+                <span class="n">param_name</span><span class="p">,</span>
+                <span class="n">param_schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;min&quot;</span><span class="p">),</span>
+                <span class="n">param_schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;max&quot;</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="s2">&quot;model_name&quot;</span><span class="p">:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">validate_model_name</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="s2">&quot;sensor_type&quot;</span><span class="p">:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">validate_sensor_type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="s2">&quot;timeout&quot;</span><span class="p">:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">validate_timeout</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="s2">&quot;positive&quot;</span><span class="p">:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">validate_positive</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">param_name</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="s2">&quot;non_negative&quot;</span><span class="p">:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">validate_non_negative</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">param_name</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="s2">&quot;file_path&quot;</span><span class="p">:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">validate_file_path</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">param_schema</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;must_exist&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">param_type</span> <span class="o">==</span> <span class="s2">&quot;response_format&quot;</span><span class="p">:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">validate_response_format</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># No validation - pass through:</span>
+            <span class="n">validated</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">return</span> <span class="n">validated</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Development Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

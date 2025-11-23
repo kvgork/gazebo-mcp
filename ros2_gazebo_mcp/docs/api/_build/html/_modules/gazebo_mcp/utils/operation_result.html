@@ -1,0 +1,391 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gazebo_mcp.utils.operation_result &mdash; ROS2 Gazebo MCP Server 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ROS2 Gazebo MCP Server
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API Modules:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">gazebo_mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../gazebo_mcp.html">gazebo_mcp package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ROS2 Gazebo MCP Server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gazebo_mcp.utils.operation_result</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gazebo_mcp.utils.operation_result</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Operation Result Pattern for Agent-Friendly Responses.</span>
+
+<span class="sd">Provides standardized response format with helpful error messages,</span>
+<span class="sd">suggestions, and example fixes - making it easy for AI agents to</span>
+<span class="sd">understand and recover from errors.</span>
+
+<span class="sd">Based on: claude/skills/*/operations.py pattern</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">asdict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+
+
+<div class="viewcode-block" id="OperationResult">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.OperationResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Standardized operation result for agent-friendly responses.</span>
+
+<span class="sd">    This pattern ensures consistent error handling and provides</span>
+<span class="sd">    agents with actionable suggestions when operations fail.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        success: Whether the operation succeeded</span>
+<span class="sd">        data: Operation result data (if successful)</span>
+<span class="sd">        error: Human-readable error message (if failed)</span>
+<span class="sd">        error_code: Machine-readable error code (if failed)</span>
+<span class="sd">        suggestions: List of suggested actions to fix the error</span>
+<span class="sd">        example_fix: Example code showing how to fix the issue</span>
+<span class="sd">        metadata: Additional operation metadata</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; # Success case:</span>
+<span class="sd">        &gt;&gt;&gt; result = OperationResult(</span>
+<span class="sd">        ...     success=True,</span>
+<span class="sd">        ...     data={&quot;model_name&quot;: &quot;turtlebot3_burger&quot;, &quot;position&quot;: {&quot;x&quot;: 0, &quot;y&quot;: 0}}</span>
+<span class="sd">        ... )</span>
+
+<span class="sd">        &gt;&gt;&gt; # Error case with helpful suggestions:</span>
+<span class="sd">        &gt;&gt;&gt; result = OperationResult(</span>
+<span class="sd">        ...     success=False,</span>
+<span class="sd">        ...     error=&quot;Model &#39;my_robot&#39; not found in Gazebo model path&quot;,</span>
+<span class="sd">        ...     error_code=&quot;MODEL_NOT_FOUND&quot;,</span>
+<span class="sd">        ...     suggestions=[</span>
+<span class="sd">        ...         &quot;Check model name spelling&quot;,</span>
+<span class="sd">        ...         &quot;List available models: list_models()&quot;,</span>
+<span class="sd">        ...         &quot;Check GAZEBO_MODEL_PATH environment variable&quot;</span>
+<span class="sd">        ...     ],</span>
+<span class="sd">        ...     example_fix=&#39;spawn_model(&quot;turtlebot3_burger&quot;, x=0, y=0)&#39;</span>
+<span class="sd">        ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">success</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">error</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">error_code</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">suggestions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">example_fix</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="OperationResult.to_dict">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.OperationResult.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert to dictionary.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OperationResult.to_json">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.OperationResult.to_json">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_json</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">indent</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert to JSON string.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span> <span class="n">indent</span><span class="o">=</span><span class="n">indent</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OperationResult.from_dict">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.OperationResult.from_dict">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="s1">&#39;OperationResult&#39;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create from dictionary.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="o">**</span><span class="n">data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OperationResult.from_json">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.OperationResult.from_json">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_json</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">json_str</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;OperationResult&#39;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create from JSON string.&quot;&quot;&quot;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">json_str</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span><span class="n">data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="OperationResult.__str__">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.OperationResult.__str__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;String representation.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;OperationResult(success=True, data=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;OperationResult(success=False, error=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">error</span><span class="si">}</span><span class="s2">&#39;, code=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">error_code</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+</div>
+
+
+
+<span class="c1"># Common error codes for Gazebo operations:</span>
+<div class="viewcode-block" id="ErrorCodes">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.ErrorCodes">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ErrorCodes</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Standard error codes for Gazebo MCP operations.&quot;&quot;&quot;</span>
+
+    <span class="c1"># ROS2 connection errors:</span>
+    <span class="n">ROS2_NOT_CONNECTED</span> <span class="o">=</span> <span class="s2">&quot;ROS2_NOT_CONNECTED&quot;</span>
+    <span class="n">ROS2_CONNECTION_LOST</span> <span class="o">=</span> <span class="s2">&quot;ROS2_CONNECTION_LOST&quot;</span>
+    <span class="n">ROS2_NODE_ERROR</span> <span class="o">=</span> <span class="s2">&quot;ROS2_NODE_ERROR&quot;</span>
+
+    <span class="c1"># Gazebo errors:</span>
+    <span class="n">GAZEBO_NOT_RUNNING</span> <span class="o">=</span> <span class="s2">&quot;GAZEBO_NOT_RUNNING&quot;</span>
+    <span class="n">GAZEBO_TIMEOUT</span> <span class="o">=</span> <span class="s2">&quot;GAZEBO_TIMEOUT&quot;</span>
+    <span class="n">SIMULATION_ERROR</span> <span class="o">=</span> <span class="s2">&quot;SIMULATION_ERROR&quot;</span>
+
+    <span class="c1"># Model errors:</span>
+    <span class="n">MODEL_NOT_FOUND</span> <span class="o">=</span> <span class="s2">&quot;MODEL_NOT_FOUND&quot;</span>
+    <span class="n">MODEL_SPAWN_FAILED</span> <span class="o">=</span> <span class="s2">&quot;MODEL_SPAWN_FAILED&quot;</span>
+    <span class="n">MODEL_DELETE_FAILED</span> <span class="o">=</span> <span class="s2">&quot;MODEL_DELETE_FAILED&quot;</span>
+    <span class="n">MODEL_ALREADY_EXISTS</span> <span class="o">=</span> <span class="s2">&quot;MODEL_ALREADY_EXISTS&quot;</span>
+
+    <span class="c1"># Sensor errors:</span>
+    <span class="n">SENSOR_NOT_FOUND</span> <span class="o">=</span> <span class="s2">&quot;SENSOR_NOT_FOUND&quot;</span>
+    <span class="n">SENSOR_DATA_UNAVAILABLE</span> <span class="o">=</span> <span class="s2">&quot;SENSOR_DATA_UNAVAILABLE&quot;</span>
+    <span class="n">SENSOR_TYPE_INVALID</span> <span class="o">=</span> <span class="s2">&quot;SENSOR_TYPE_INVALID&quot;</span>
+
+    <span class="c1"># World errors:</span>
+    <span class="n">WORLD_LOAD_FAILED</span> <span class="o">=</span> <span class="s2">&quot;WORLD_LOAD_FAILED&quot;</span>
+    <span class="n">WORLD_SAVE_FAILED</span> <span class="o">=</span> <span class="s2">&quot;WORLD_SAVE_FAILED&quot;</span>
+    <span class="n">WORLD_INVALID</span> <span class="o">=</span> <span class="s2">&quot;WORLD_INVALID&quot;</span>
+
+    <span class="c1"># Parameter errors:</span>
+    <span class="n">INVALID_PARAMETER</span> <span class="o">=</span> <span class="s2">&quot;INVALID_PARAMETER&quot;</span>
+    <span class="n">MISSING_PARAMETER</span> <span class="o">=</span> <span class="s2">&quot;MISSING_PARAMETER&quot;</span>
+
+    <span class="c1"># General errors:</span>
+    <span class="n">OPERATION_TIMEOUT</span> <span class="o">=</span> <span class="s2">&quot;OPERATION_TIMEOUT&quot;</span>
+    <span class="n">UNKNOWN_ERROR</span> <span class="o">=</span> <span class="s2">&quot;UNKNOWN_ERROR&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="success_result">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.success_result">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">success_result</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create a success result.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        data: Operation result data</span>
+<span class="sd">        metadata: Optional metadata</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        OperationResult with success=True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">OperationResult</span><span class="p">(</span>
+        <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="error_result">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.error_result">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">error_result</span><span class="p">(</span>
+    <span class="n">error</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">error_code</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">suggestions</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">example_fix</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create an error result with helpful suggestions.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        error: Human-readable error message</span>
+<span class="sd">        error_code: Machine-readable error code</span>
+<span class="sd">        suggestions: List of suggested fixes</span>
+<span class="sd">        example_fix: Example code to fix the issue</span>
+<span class="sd">        metadata: Optional metadata</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        OperationResult with success=False</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">OperationResult</span><span class="p">(</span>
+        <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">error</span><span class="o">=</span><span class="n">error</span><span class="p">,</span>
+        <span class="n">error_code</span><span class="o">=</span><span class="n">error_code</span><span class="p">,</span>
+        <span class="n">suggestions</span><span class="o">=</span><span class="n">suggestions</span> <span class="ow">or</span> <span class="p">[],</span>
+        <span class="n">example_fix</span><span class="o">=</span><span class="n">example_fix</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># Helper functions for common error scenarios:</span>
+
+<div class="viewcode-block" id="model_not_found_error">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.model_not_found_error">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">model_not_found_error</span><span class="p">(</span><span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create error result for model not found.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span>
+        <span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Model &#39;</span><span class="si">{</span><span class="n">model_name</span><span class="si">}</span><span class="s2">&#39; not found in Gazebo model path&quot;</span><span class="p">,</span>
+        <span class="n">error_code</span><span class="o">=</span><span class="n">ErrorCodes</span><span class="o">.</span><span class="n">MODEL_NOT_FOUND</span><span class="p">,</span>
+        <span class="n">suggestions</span><span class="o">=</span><span class="p">[</span>
+            <span class="s2">&quot;Check model name spelling&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;List available models: list_models()&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Check GAZEBO_MODEL_PATH environment variable&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Download model from gazebosim.org&quot;</span>
+        <span class="p">],</span>
+        <span class="n">example_fix</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;# Use a standard model:</span><span class="se">\n</span><span class="s1">spawn_model(&quot;turtlebot3_burger&quot;, x=0, y=0)&#39;</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ros2_not_connected_error">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.ros2_not_connected_error">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">ros2_not_connected_error</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create error result for ROS2 not connected.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span>
+        <span class="n">error</span><span class="o">=</span><span class="s2">&quot;ROS2 connection not established&quot;</span><span class="p">,</span>
+        <span class="n">error_code</span><span class="o">=</span><span class="n">ErrorCodes</span><span class="o">.</span><span class="n">ROS2_NOT_CONNECTED</span><span class="p">,</span>
+        <span class="n">suggestions</span><span class="o">=</span><span class="p">[</span>
+            <span class="s2">&quot;Check ROS2 daemon: ros2 daemon status&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Restart daemon: ros2 daemon stop &amp;&amp; ros2 daemon start&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Source ROS2: source /opt/ros/humble/setup.bash&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Check network: ping localhost&quot;</span>
+        <span class="p">],</span>
+        <span class="n">example_fix</span><span class="o">=</span><span class="s2">&quot;# Ensure ROS2 is sourced before running&quot;</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="gazebo_not_running_error">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.gazebo_not_running_error">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">gazebo_not_running_error</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create error result for Gazebo not running.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span>
+        <span class="n">error</span><span class="o">=</span><span class="s2">&quot;Gazebo simulation is not running&quot;</span><span class="p">,</span>
+        <span class="n">error_code</span><span class="o">=</span><span class="n">ErrorCodes</span><span class="o">.</span><span class="n">GAZEBO_NOT_RUNNING</span><span class="p">,</span>
+        <span class="n">suggestions</span><span class="o">=</span><span class="p">[</span>
+            <span class="s2">&quot;Start Gazebo: ros2 launch gazebo_ros gazebo.launch.py&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Check Gazebo status: ros2 topic list | grep gazebo&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Check for Gazebo processes: ps aux | grep gazebo&quot;</span>
+        <span class="p">],</span>
+        <span class="n">example_fix</span><span class="o">=</span><span class="s2">&quot;# Start Gazebo first:</span><span class="se">\n</span><span class="s2"># ros2 launch gazebo_ros gazebo.launch.py&quot;</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="invalid_parameter_error">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.invalid_parameter_error">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">invalid_parameter_error</span><span class="p">(</span><span class="n">param_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">param_value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">expected</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create error result for invalid parameter.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span>
+        <span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Invalid parameter &#39;</span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">&#39;: got </span><span class="si">{</span><span class="n">param_value</span><span class="si">}</span><span class="s2">, expected </span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">error_code</span><span class="o">=</span><span class="n">ErrorCodes</span><span class="o">.</span><span class="n">INVALID_PARAMETER</span><span class="p">,</span>
+        <span class="n">suggestions</span><span class="o">=</span><span class="p">[</span>
+            <span class="sa">f</span><span class="s2">&quot;Check </span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2"> value&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;Expected: </span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;See function documentation for valid values&quot;</span>
+        <span class="p">],</span>
+        <span class="n">example_fix</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;# Correct usage:</span><span class="se">\n</span><span class="s2"># </span><span class="si">{</span><span class="n">param_name</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="operation_timeout_error">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.operation_result.operation_timeout_error">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">operation_timeout_error</span><span class="p">(</span><span class="n">operation</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create error result for operation timeout.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span>
+        <span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Operation &#39;</span><span class="si">{</span><span class="n">operation</span><span class="si">}</span><span class="s2">&#39; timed out after </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">,</span>
+        <span class="n">error_code</span><span class="o">=</span><span class="n">ErrorCodes</span><span class="o">.</span><span class="n">OPERATION_TIMEOUT</span><span class="p">,</span>
+        <span class="n">suggestions</span><span class="o">=</span><span class="p">[</span>
+            <span class="sa">f</span><span class="s2">&quot;Increase timeout (current: </span><span class="si">{</span><span class="n">timeout</span><span class="si">}</span><span class="s2">s)&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Check Gazebo/ROS2 are responsive&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Check system resources (CPU, memory)&quot;</span>
+        <span class="p">],</span>
+        <span class="n">example_fix</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;# Increase timeout:</span><span class="se">\n</span><span class="s2"># </span><span class="si">{</span><span class="n">operation</span><span class="si">}</span><span class="s2">(timeout=</span><span class="si">{</span><span class="n">timeout</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="si">}</span><span class="s2">)&quot;</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Development Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

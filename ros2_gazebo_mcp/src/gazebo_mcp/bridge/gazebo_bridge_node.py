@@ -8,11 +8,18 @@ ROS2 node that interfaces with Gazebo simulation:
 - Action clients for complex operations
 
 This is a CRITICAL component - it provides the actual Gazebo integration.
+
+REFACTORED (Phase 1B): Now uses adapter pattern for dual Gazebo support.
 """
 
 import time
+import asyncio
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
+
+from .config import GazeboConfig
+from .factory import GazeboAdapterFactory
+from .gazebo_interface import GazeboInterface, EntityPose, EntityTwist
 
 from ..utils.exceptions import (
     GazeboNotRunningError,
@@ -47,24 +54,73 @@ class GazeboBridgeNode:
 
     Provides high-level interface to Gazebo services and topics.
 
+    REFACTORED (Phase 1B): Uses adapter pattern for dual Gazebo backend support.
+    - Supports both Classic Gazebo and Modern Gazebo (Fortress/Harmonic)
+    - Backend selection via environment variables (GAZEBO_BACKEND)
+    - Dependency injection for testing
+
     Example:
+        >>> # Auto-detect backend (default)
         >>> node = GazeboBridgeNode(ros2_node)
+        >>>
+        >>> # Explicit backend selection
+        >>> config = GazeboConfig(backend=GazeboBackend.CLASSIC)
+        >>> node = GazeboBridgeNode(ros2_node, config=config)
+        >>>
+        >>> # Dependency injection for testing
+        >>> mock_adapter = MockGazeboAdapter()
+        >>> node = GazeboBridgeNode(ros2_node, adapter=mock_adapter)
+        >>>
+        >>> # Use as before
         >>> models = node.get_model_list()
         >>> node.spawn_entity("turtlebot3", sdf_content, pose)
-        >>> node.delete_entity("turtlebot3")
     """
 
-    def __init__(self, ros2_node):
+    def __init__(
+        self,
+        ros2_node,
+        config: Optional[GazeboConfig] = None,
+        adapter: Optional[GazeboInterface] = None,
+        world: str = "default"
+    ):
         """
         Initialize Gazebo bridge node.
 
         Args:
             ros2_node: ROS2 node instance from ConnectionManager
+            config: Gazebo configuration (default: from environment variables)
+            adapter: Gazebo adapter (default: auto-created from config via factory)
+            world: Default world name for multi-world Modern Gazebo (default: "default")
+
+        Notes:
+            - If adapter is provided, config is ignored (for testing)
+            - If neither adapter nor config provided, uses environment variables
+            - Backend auto-detection happens if GAZEBO_BACKEND=auto
         """
         self.node = ros2_node
         self.logger = get_logger("gazebo_bridge")
+        self.world = world  # Default world for operations
 
-        # Service clients (lazy initialization):
+        # Adapter pattern (Phase 1B refactor):
+        if adapter is not None:
+            # Dependency injection (for testing)
+            self.adapter = adapter
+            self.logger.info(f"Using injected adapter: {adapter.get_backend_name()}")
+        else:
+            # Production: Create adapter via factory
+            if config is None:
+                config = GazeboConfig.from_environment()
+
+            factory = GazeboAdapterFactory(ros2_node, config)
+            self.adapter = factory.create_adapter()
+
+            self.logger.info(
+                f"Initialized Gazebo bridge with {self.adapter.get_backend_name()} backend",
+                world=self.world
+            )
+
+        # Legacy service clients (DEPRECATED - kept for gradual migration):
+        # These will be removed in Phase 3
         self._spawn_entity_client = None
         self._delete_entity_client = None
         self._get_model_list_client = None
@@ -75,17 +131,86 @@ class GazeboBridgeNode:
         self._reset_simulation_client = None
         self._reset_world_client = None
 
-        # Subscribers (lazy initialization):
+        # Subscribers (still used for compatibility):
         self._model_states_subscriber = None
         self._model_states_data = None
 
-        # TF listener (lazy initialization):
+        # TF listener (unchanged):
         self._tf_buffer = None
         self._tf_listener = None
 
-        self.logger.info("Initialized Gazebo bridge node")
+    # Helper methods:
 
-    # Service client creation (lazy initialization):
+    def _run_async(self, coro):
+        """
+        Run async adapter method synchronously.
+
+        Args:
+            coro: Coroutine to run
+
+        Returns:
+            Coroutine result
+        """
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+    def _dict_to_entity_pose(self, pose_dict: Dict[str, Any]) -> EntityPose:
+        """
+        Convert pose dictionary to EntityPose.
+
+        Args:
+            pose_dict: Pose as dictionary {position: {x,y,z}, orientation: {x,y,z,w}}
+
+        Returns:
+            EntityPose object
+        """
+        pos = pose_dict.get("position", {})
+        orient = pose_dict.get("orientation", {})
+
+        return EntityPose(
+            position=(
+                pos.get("x", 0.0),
+                pos.get("y", 0.0),
+                pos.get("z", 0.0)
+            ),
+            orientation=(
+                orient.get("x", 0.0),
+                orient.get("y", 0.0),
+                orient.get("z", 0.0),
+                orient.get("w", 1.0)
+            )
+        )
+
+    def _dict_to_entity_twist(self, twist_dict: Dict[str, Any]) -> EntityTwist:
+        """
+        Convert twist dictionary to EntityTwist.
+
+        Args:
+            twist_dict: Twist as dictionary {linear: {x,y,z}, angular: {x,y,z}}
+
+        Returns:
+            EntityTwist object
+        """
+        lin = twist_dict.get("linear", {})
+        ang = twist_dict.get("angular", {})
+
+        return EntityTwist(
+            linear=(
+                lin.get("x", 0.0),
+                lin.get("y", 0.0),
+                lin.get("z", 0.0)
+            ),
+            angular=(
+                ang.get("x", 0.0),
+                ang.get("y", 0.0),
+                ang.get("z", 0.0)
+            )
+        )
+
+    # Service client creation (lazy initialization - DEPRECATED):
 
     def _get_spawn_entity_client(self):
         """Get or create spawn_entity service client."""
@@ -169,17 +294,21 @@ class GazeboBridgeNode:
         xml_content: str,
         pose: Optional[Dict[str, Any]] = None,
         reference_frame: str = "world",
-        timeout: float = 10.0
+        timeout: float = 10.0,
+        world: Optional[str] = None
     ) -> bool:
         """
         Spawn an entity in Gazebo.
+
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
 
         Args:
             name: Entity name (must be unique)
             xml_content: SDF or URDF XML content
             pose: Spawn pose (position and orientation)
-            reference_frame: Reference frame for pose
-            timeout: Service call timeout
+            reference_frame: Reference frame for pose (Classic only, ignored by Modern)
+            timeout: Service call timeout (currently ignored, adapter handles timeout)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             True if spawn successful
@@ -195,69 +324,64 @@ class GazeboBridgeNode:
             ...     "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
             ... }
             >>> node.spawn_entity("my_robot", urdf_content, pose)
+            >>>
+            >>> # Modern Gazebo with specific world
+            >>> node.spawn_entity("my_robot", sdf_content, pose, world="world2")
         """
         with self.logger.operation("spawn_entity", name=name):
             # Validate parameters:
             name = validate_model_name(name)
             timeout = validate_timeout(timeout)
 
-            # Get service client:
-            client = self._get_spawn_entity_client()
+            # Use default world if not specified:
+            if world is None:
+                world = self.world
 
-            # Wait for service:
-            if not client.wait_for_service(timeout_sec=5.0):
-                raise GazeboNotRunningError()
+            # Convert pose to EntityPose:
+            entity_pose = EntityPose(
+                position=(0.0, 0.0, 0.0),
+                orientation=(0.0, 0.0, 0.0, 1.0)
+            )
+            if pose:
+                entity_pose = self._dict_to_entity_pose(pose)
 
-            # Create request:
+            # Delegate to adapter:
             try:
-                from gazebo_msgs.srv import SpawnEntity
-                request = SpawnEntity.Request()
-                request.name = name
-                request.xml = xml_content
-                request.reference_frame = reference_frame
+                success = self._run_async(
+                    self.adapter.spawn_entity(
+                        name=name,
+                        sdf=xml_content,
+                        pose=entity_pose,
+                        world=world
+                    )
+                )
 
-                # Set pose:
-                if pose:
-                    request.initial_pose = dict_to_pose(pose)
+                if success:
+                    self.logger.log_model_event("spawned", name, world=world)
+                    return True
+                else:
+                    raise ModelSpawnError(name, "Adapter returned False")
 
             except Exception as e:
-                raise ModelSpawnError(name, f"Failed to create request: {e}") from e
-
-            # Call service:
-            try:
-                future = client.call_async(request)
-
-                # Wait for response:
-                start_time = time.time()
-                while not future.done():
-                    if time.time() - start_time > timeout:
-                        raise GazeboTimeoutError("spawn_entity", timeout)
-                    time.sleep(0.01)
-
-                response = future.result()
-
-                if not response.success:
-                    raise ModelSpawnError(name, response.status_message)
-
-                self.logger.log_model_event("spawned", name, reference_frame=reference_frame)
-                return True
-
-            except Exception as e:
-                if isinstance(e, (ModelSpawnError, GazeboTimeoutError)):
+                if isinstance(e, (ModelSpawnError, GazeboTimeoutError, GazeboNotRunningError)):
                     raise
-                raise ModelSpawnError(name, f"Service call failed: {e}") from e
+                raise ModelSpawnError(name, f"Adapter call failed: {e}") from e
 
     def delete_entity(
         self,
         name: str,
-        timeout: float = 10.0
+        timeout: float = 10.0,
+        world: Optional[str] = None
     ) -> bool:
         """
         Delete an entity from Gazebo.
 
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
+
         Args:
             name: Entity name
-            timeout: Service call timeout
+            timeout: Service call timeout (currently ignored, adapter handles timeout)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             True if deletion successful
@@ -269,50 +393,37 @@ class GazeboBridgeNode:
 
         Example:
             >>> node.delete_entity("my_robot")
+            >>> # Modern Gazebo with specific world
+            >>> node.delete_entity("my_robot", world="world2")
         """
         with self.logger.operation("delete_entity", name=name):
             # Validate parameters:
             name = validate_model_name(name)
             timeout = validate_timeout(timeout)
 
-            # Get service client:
-            client = self._get_delete_entity_client()
+            # Use default world if not specified:
+            if world is None:
+                world = self.world
 
-            # Wait for service:
-            if not client.wait_for_service(timeout_sec=5.0):
-                raise GazeboNotRunningError()
-
-            # Create request:
+            # Delegate to adapter:
             try:
-                from gazebo_msgs.srv import DeleteEntity
-                request = DeleteEntity.Request()
-                request.name = name
-            except Exception as e:
-                raise ModelDeleteError(name, f"Failed to create request: {e}") from e
+                success = self._run_async(
+                    self.adapter.delete_entity(
+                        name=name,
+                        world=world
+                    )
+                )
 
-            # Call service:
-            try:
-                future = client.call_async(request)
-
-                # Wait for response:
-                start_time = time.time()
-                while not future.done():
-                    if time.time() - start_time > timeout:
-                        raise GazeboTimeoutError("delete_entity", timeout)
-                    time.sleep(0.01)
-
-                response = future.result()
-
-                if not response.success:
-                    raise ModelDeleteError(name, response.status_message)
-
-                self.logger.log_model_event("deleted", name)
-                return True
+                if success:
+                    self.logger.log_model_event("deleted", name, world=world)
+                    return True
+                else:
+                    raise ModelDeleteError(name, "Adapter returned False")
 
             except Exception as e:
-                if isinstance(e, (ModelDeleteError, GazeboTimeoutError)):
+                if isinstance(e, (ModelDeleteError, GazeboTimeoutError, GazeboNotRunningError)):
                     raise
-                raise ModelDeleteError(name, f"Service call failed: {e}") from e
+                raise ModelDeleteError(name, f"Adapter call failed: {e}") from e
 
     def set_entity_state(
         self,
@@ -320,17 +431,21 @@ class GazeboBridgeNode:
         pose: Optional[Dict[str, Any]] = None,
         twist: Optional[Dict[str, Any]] = None,
         reference_frame: str = "world",
-        timeout: float = 10.0
+        timeout: float = 10.0,
+        world: Optional[str] = None
     ) -> bool:
         """
         Set entity state (pose and/or twist) in Gazebo.
+
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
 
         Args:
             name: Entity name
             pose: Target pose {position: {x,y,z}, orientation: {x,y,z,w}} or {roll,pitch,yaw}
             twist: Target velocity {linear: {x,y,z}, angular: {x,y,z}}
-            reference_frame: Reference frame for pose (default: "world")
-            timeout: Service call timeout
+            reference_frame: Reference frame for pose (Classic only, ignored by Modern)
+            timeout: Service call timeout (currently ignored, adapter handles timeout)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             True if state set successfully
@@ -363,82 +478,61 @@ class GazeboBridgeNode:
                     "Must provide either pose or twist (or both)"
                 )
 
-            # Get service client:
-            client = self._get_set_model_state_client()
+            # Use default world if not specified:
+            if world is None:
+                world = self.world
 
-            # Wait for service:
-            if not client.wait_for_service(timeout_sec=5.0):
-                raise GazeboNotRunningError()
+            # Convert to EntityPose/EntityTwist:
+            entity_pose = None
+            entity_twist = None
 
-            # Create request:
+            if pose:
+                entity_pose = self._dict_to_entity_pose(pose)
+
+            if twist:
+                entity_twist = self._dict_to_entity_twist(twist)
+
+            # Delegate to adapter:
             try:
-                from gazebo_msgs.srv import SetEntityState
-                from gazebo_msgs.msg import EntityState
+                success = self._run_async(
+                    self.adapter.set_entity_state(
+                        name=name,
+                        pose=entity_pose,
+                        twist=entity_twist,
+                        world=world
+                    )
+                )
 
-                request = SetEntityState.Request()
-                state = EntityState()
-                state.name = name
-                state.reference_frame = reference_frame
-
-                # Set pose if provided:
-                if pose:
-                    from ..utils.converters import dict_to_pose
-                    state.pose = dict_to_pose(pose)
-
-                # Set twist if provided:
-                if twist:
-                    from ..utils.converters import dict_to_twist
-                    state.twist = dict_to_twist(twist)
-
-                request.state = state
-
-            except Exception as e:
-                raise ROS2ServiceError(
-                    "/gazebo/set_entity_state",
-                    f"Failed to create request: {e}"
-                ) from e
-
-            # Call service:
-            try:
-                future = client.call_async(request)
-
-                # Wait for response:
-                start_time = time.time()
-                while not future.done():
-                    if time.time() - start_time > timeout:
-                        raise GazeboTimeoutError("set_entity_state", timeout)
-                    time.sleep(0.01)
-
-                response = future.result()
-
-                if not response.success:
-                    # Check if model not found:
-                    if "does not exist" in response.status_message.lower():
-                        raise ModelNotFoundError(name)
+                if success:
+                    self.logger.log_model_event("state_updated", name, world=world)
+                    return True
+                else:
                     raise ROS2ServiceError(
                         "/gazebo/set_entity_state",
-                        response.status_message
+                        "Adapter returned False"
                     )
 
-                self.logger.log_model_event("state_updated", name, reference_frame=reference_frame)
-                return True
-
             except Exception as e:
-                if isinstance(e, (ModelNotFoundError, GazeboTimeoutError, ROS2ServiceError)):
+                if isinstance(e, (ModelNotFoundError, GazeboTimeoutError, ROS2ServiceError, GazeboNotRunningError)):
                     raise
                 raise ROS2ServiceError(
                     "/gazebo/set_entity_state",
-                    f"Service call failed: {e}"
+                    f"Adapter call failed: {e}"
                 ) from e
 
-    def get_model_list(self, timeout: float = 5.0) -> List[ModelState]:
+    def get_model_list(
+        self,
+        timeout: float = 5.0,
+        world: Optional[str] = None
+    ) -> List[ModelState]:
         """
         Get list of models in Gazebo.
 
-        Subscribes to /gazebo/model_states topic to get current models.
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
 
         Args:
-            timeout: Timeout for receiving model states
+            timeout: Timeout for receiving model states (currently ignored)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             List of ModelState objects
@@ -456,54 +550,73 @@ class GazeboBridgeNode:
             # Validate timeout:
             timeout = validate_timeout(timeout)
 
-            # Ensure subscriber is created:
-            self._get_model_states_subscriber()
+            # Use default world if not specified:
+            if world is None:
+                world = self.world
 
-            # Wait for model states data:
-            start_time = time.time()
-            while self._model_states_data is None:
-                if time.time() - start_time > timeout:
-                    raise GazeboTimeoutError("get_model_list", timeout)
-                time.sleep(0.01)
-
-            # Convert to ModelState objects:
-            models = []
-            msg = self._model_states_data
-
-            for i, name in enumerate(msg.name):
-                # Skip ground_plane and other static models if needed:
-                if name == "ground_plane":
-                    continue
-
-                model = ModelState(
-                    name=name,
-                    pose=pose_to_dict(msg.pose[i]),
-                    twist={
-                        "linear": {
-                            "x": msg.twist[i].linear.x,
-                            "y": msg.twist[i].linear.y,
-                            "z": msg.twist[i].linear.z
-                        },
-                        "angular": {
-                            "x": msg.twist[i].angular.x,
-                            "y": msg.twist[i].angular.y,
-                            "z": msg.twist[i].angular.z
-                        }
-                    },
-                    state="active"
+            # Delegate to adapter (gets entity names only):
+            try:
+                entity_names = self._run_async(
+                    self.adapter.list_entities(world=world)
                 )
-                models.append(model)
 
-            self.logger.info(f"Retrieved model list", count=len(models))
-            return models
+                # Create ModelState objects with minimal info
+                # (full state retrieval would require get_entity_state per model)
+                models = []
+                for name in entity_names:
+                    # Skip ground_plane and other static models:
+                    if name == "ground_plane":
+                        continue
 
-    def get_model_state(self, name: str, timeout: float = 5.0) -> Optional[ModelState]:
+                    # Get full state for this entity:
+                    try:
+                        state_dict = self._run_async(
+                            self.adapter.get_entity_state(name=name, world=world)
+                        )
+
+                        model = ModelState(
+                            name=state_dict["name"],
+                            pose=state_dict.get("pose", {}),
+                            twist=state_dict.get("twist", {}),
+                            state="active"
+                        )
+                        models.append(model)
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Failed to get state for entity '{name}'",
+                            error=str(e)
+                        )
+                        # Add minimal ModelState
+                        models.append(ModelState(
+                            name=name,
+                            pose={},
+                            twist={},
+                            state="unknown"
+                        ))
+
+                self.logger.info(f"Retrieved model list", count=len(models), world=world)
+                return models
+
+            except Exception as e:
+                if isinstance(e, (GazeboNotRunningError, GazeboTimeoutError)):
+                    raise
+                raise GazeboTimeoutError("get_model_list", timeout) from e
+
+    def get_model_state(
+        self,
+        name: str,
+        timeout: float = 5.0,
+        world: Optional[str] = None
+    ) -> Optional[ModelState]:
         """
         Get state of a specific model.
 
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
+
         Args:
             name: Model name
-            timeout: Timeout for receiving data
+            timeout: Timeout for receiving data (currently ignored)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             ModelState object or None if not found
@@ -515,24 +628,48 @@ class GazeboBridgeNode:
         # Validate parameters:
         name = validate_model_name(name)
 
-        # Get all models:
-        models = self.get_model_list(timeout=timeout)
+        # Use default world if not specified:
+        if world is None:
+            world = self.world
 
-        # Find the requested model:
-        for model in models:
-            if model.name == name:
-                return model
+        # Delegate to adapter:
+        try:
+            state_dict = self._run_async(
+                self.adapter.get_entity_state(name=name, world=world)
+            )
 
-        return None
+            return ModelState(
+                name=state_dict["name"],
+                pose=state_dict.get("pose", {}),
+                twist=state_dict.get("twist", {}),
+                state="active"
+            )
+
+        except ModelNotFoundError:
+            return None
+        except Exception as e:
+            self.logger.warning(
+                f"Failed to get model state",
+                model=name,
+                error=str(e)
+            )
+            return None
 
     # Physics control:
 
-    def pause_physics(self, timeout: float = 5.0) -> bool:
+    def pause_physics(
+        self,
+        timeout: float = 5.0,
+        world: Optional[str] = None
+    ) -> bool:
         """
         Pause Gazebo physics simulation.
 
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
+
         Args:
-            timeout: Service call timeout
+            timeout: Service call timeout (currently ignored)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             True if successful
@@ -540,17 +677,33 @@ class GazeboBridgeNode:
         Example:
             >>> node.pause_physics()
         """
-        # TODO: Implement when needed
-        # Uses /pause_physics service
-        self.logger.warning("pause_physics not yet implemented")
-        return False
+        if world is None:
+            world = self.world
 
-    def unpause_physics(self, timeout: float = 5.0) -> bool:
+        try:
+            success = self._run_async(
+                self.adapter.pause_simulation(world=world)
+            )
+            if success:
+                self.logger.info("Paused physics", world=world)
+            return success
+        except Exception as e:
+            self.logger.error(f"Failed to pause physics", error=str(e))
+            return False
+
+    def unpause_physics(
+        self,
+        timeout: float = 5.0,
+        world: Optional[str] = None
+    ) -> bool:
         """
         Unpause Gazebo physics simulation.
 
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
+
         Args:
-            timeout: Service call timeout
+            timeout: Service call timeout (currently ignored)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             True if successful
@@ -558,19 +711,35 @@ class GazeboBridgeNode:
         Example:
             >>> node.unpause_physics()
         """
-        # TODO: Implement when needed
-        # Uses /unpause_physics service
-        self.logger.warning("unpause_physics not yet implemented")
-        return False
+        if world is None:
+            world = self.world
+
+        try:
+            success = self._run_async(
+                self.adapter.unpause_simulation(world=world)
+            )
+            if success:
+                self.logger.info("Unpaused physics", world=world)
+            return success
+        except Exception as e:
+            self.logger.error(f"Failed to unpause physics", error=str(e))
+            return False
 
     # Simulation control:
 
-    def reset_simulation(self, timeout: float = 10.0) -> bool:
+    def reset_simulation(
+        self,
+        timeout: float = 10.0,
+        world: Optional[str] = None
+    ) -> bool:
         """
         Reset Gazebo simulation to initial state.
 
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
+
         Args:
-            timeout: Service call timeout
+            timeout: Service call timeout (currently ignored)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             True if successful
@@ -578,17 +747,33 @@ class GazeboBridgeNode:
         Example:
             >>> node.reset_simulation()
         """
-        # TODO: Implement when needed
-        # Uses /reset_simulation service
-        self.logger.warning("reset_simulation not yet implemented")
-        return False
+        if world is None:
+            world = self.world
 
-    def reset_world(self, timeout: float = 10.0) -> bool:
+        try:
+            success = self._run_async(
+                self.adapter.reset_simulation(world=world)
+            )
+            if success:
+                self.logger.info("Reset simulation", world=world)
+            return success
+        except Exception as e:
+            self.logger.error(f"Failed to reset simulation", error=str(e))
+            return False
+
+    def reset_world(
+        self,
+        timeout: float = 10.0,
+        world: Optional[str] = None
+    ) -> bool:
         """
         Reset world to initial state (models + physics).
 
+        REFACTORED (Phase 1B): Uses adapter pattern, supports multi-world.
+
         Args:
-            timeout: Service call timeout
+            timeout: Service call timeout (currently ignored)
+            world: Target world name (Modern Gazebo only, default: self.world)
 
         Returns:
             True if successful
@@ -596,10 +781,19 @@ class GazeboBridgeNode:
         Example:
             >>> node.reset_world()
         """
-        # TODO: Implement when needed
-        # Uses /reset_world service
-        self.logger.warning("reset_world not yet implemented")
-        return False
+        if world is None:
+            world = self.world
+
+        try:
+            success = self._run_async(
+                self.adapter.reset_world(world=world)
+            )
+            if success:
+                self.logger.info("Reset world", world=world)
+            return success
+        except Exception as e:
+            self.logger.error(f"Failed to reset world", error=str(e))
+            return False
 
     # TF (Transform) operations:
 

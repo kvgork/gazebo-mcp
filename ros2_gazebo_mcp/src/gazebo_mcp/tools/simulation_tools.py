@@ -68,12 +68,18 @@ def _use_real_gazebo() -> bool:
         return False
 
 
-def pause_simulation(timeout: float = 5.0) -> OperationResult:
+def pause_simulation(
+    timeout: float = 5.0,
+    world: str = "default"
+) -> OperationResult:
     """
     Pause Gazebo physics simulation.
 
+    UPDATED (Phase 1B): Added world parameter for multi-world Modern Gazebo support.
+
     Args:
         timeout: Service call timeout (seconds)
+        world: Target world name (Modern Gazebo only, default: "default")
 
     Returns:
         OperationResult with pause status
@@ -92,7 +98,7 @@ def pause_simulation(timeout: float = 5.0) -> OperationResult:
             bridge = _get_bridge()
 
             # Call pause service:
-            success = bridge.pause_physics(timeout=timeout)
+            success = bridge.pause_physics(timeout=timeout, world=world)
 
             if success:
                 _simulation_paused = True
@@ -121,12 +127,18 @@ def pause_simulation(timeout: float = 5.0) -> OperationResult:
         return error_result(error=f"Failed to pause simulation: {e}", error_code="PAUSE_ERROR")
 
 
-def unpause_simulation(timeout: float = 5.0) -> OperationResult:
+def unpause_simulation(
+    timeout: float = 5.0,
+    world: str = "default"
+) -> OperationResult:
     """
     Unpause Gazebo physics simulation.
 
+    UPDATED (Phase 1B): Added world parameter for multi-world Modern Gazebo support.
+
     Args:
         timeout: Service call timeout (seconds)
+        world: Target world name (Modern Gazebo only, default: "default")
 
     Returns:
         OperationResult with unpause status
@@ -145,7 +157,7 @@ def unpause_simulation(timeout: float = 5.0) -> OperationResult:
             bridge = _get_bridge()
 
             # Call unpause service:
-            success = bridge.unpause_physics(timeout=timeout)
+            success = bridge.unpause_physics(timeout=timeout, world=world)
 
             if success:
                 _simulation_paused = False
@@ -176,7 +188,10 @@ def unpause_simulation(timeout: float = 5.0) -> OperationResult:
         return error_result(error=f"Failed to unpause simulation: {e}", error_code="UNPAUSE_ERROR")
 
 
-def reset_simulation(timeout: float = 10.0) -> OperationResult:
+def reset_simulation(
+    timeout: float = 10.0,
+    world: str = "default"
+) -> OperationResult:
     """
     Reset Gazebo simulation to initial state.
 
@@ -185,8 +200,11 @@ def reset_simulation(timeout: float = 10.0) -> OperationResult:
     - Simulation time to 0
     - Physics state
 
+    UPDATED (Phase 1B): Added world parameter for multi-world Modern Gazebo support.
+
     Args:
         timeout: Service call timeout (seconds)
+        world: Target world name (Modern Gazebo only, default: "default")
 
     Returns:
         OperationResult with reset status
@@ -203,7 +221,7 @@ def reset_simulation(timeout: float = 10.0) -> OperationResult:
             bridge = _get_bridge()
 
             # Call reset service:
-            success = bridge.reset_simulation(timeout=timeout)
+            success = bridge.reset_simulation(timeout=timeout, world=world)
 
             if success:
                 _logger.info("Reset simulation")

@@ -52,7 +52,8 @@ Enable AI assistants like Claude to control Gazebo simulations, spawn robots (Tu
 ### Prerequisites
 
 - **ROS2**: Humble or Jazzy (LTS recommended)
-- **Gazebo**: Harmonic (tested)
+- **Gazebo**: Modern Gazebo (Fortress, Garden, or Harmonic) - **Primary Support**
+  - ⚠️ Classic Gazebo 11 is deprecated and will be removed in v2.0.0
 - **Python**: 3.10 or higher
 - **OS**: Ubuntu 22.04 or 24.04 (recommended)
 
@@ -65,11 +66,18 @@ Enable AI assistants like Claude to control Gazebo simulations, spawn robots (Tu
 sudo apt update
 sudo apt install ros-humble-desktop
 
-# Install Gazebo Harmonic
-sudo apt install gz-harmonic
+# Install Modern Gazebo (Recommended)
+# For ROS2 Humble - Gazebo Fortress or Garden:
+sudo apt install ros-humble-ros-gz
 
-# Install Gazebo ROS2 packages
-sudo apt install ros-humble-gazebo-ros-pkgs
+# Or for specific Gazebo version:
+sudo apt install gz-harmonic  # Gazebo Harmonic
+sudo apt install gz-garden    # Gazebo Garden
+sudo apt install gz-fortress  # Gazebo Fortress
+
+# Note: Classic Gazebo (gazebo-ros-pkgs) is deprecated
+# Only install if you need legacy support:
+# sudo apt install ros-humble-gazebo-ros-pkgs
 ```
 
 #### 2. Clone and Setup
@@ -101,6 +109,33 @@ source install/setup.bash  # If using colcon build
 python -m mcp.server.server
 ```
 
+#### 4. Configuration (Optional)
+
+Control Gazebo backend selection via environment variables:
+
+```bash
+# Use Modern Gazebo (Default - Recommended)
+export GAZEBO_BACKEND=modern
+
+# Use Classic Gazebo (Deprecated)
+export GAZEBO_BACKEND=classic
+
+# Auto-detect based on running services
+export GAZEBO_BACKEND=auto
+
+# Set default world name for multi-world support (Modern only)
+export GAZEBO_WORLD_NAME=default
+
+# Set service call timeout (seconds)
+export GAZEBO_TIMEOUT=5.0
+```
+
+**Configuration Priority:**
+1. Environment variables (highest)
+2. Default values in code (lowest)
+
+**Note:** Modern Gazebo is now the default backend. Classic Gazebo support is deprecated and will be removed in v2.0.0.
+
 **For Claude Desktop Integration**, add to your `claude_desktop_config.json`:
 
 ```json
@@ -112,7 +147,10 @@ python -m mcp.server.server
       "cwd": "/path/to/ros2_gazebo_mcp",
       "env": {
         "PYTHONPATH": "/path/to/ros2_gazebo_mcp/src",
-        "ROS_DOMAIN_ID": "0"
+        "ROS_DOMAIN_ID": "0",
+        "GAZEBO_BACKEND": "modern",
+        "GAZEBO_WORLD_NAME": "default",
+        "GAZEBO_TIMEOUT": "5.0"
       }
     }
   }
@@ -307,6 +345,7 @@ ros2_gazebo_mcp/
 
 ## Documentation
 
+- **[API Reference](docs/api/_build/html/index.html)** - Complete API documentation (Sphinx)
 - **[MCP Server Guide](mcp/README.md)** - Complete MCP server documentation
 - **[Usage Examples](examples/README.md)** - 5 practical examples with detailed documentation
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment, Docker, systemd, monitoring

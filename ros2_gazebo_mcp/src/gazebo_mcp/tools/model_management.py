@@ -85,12 +85,17 @@ def _use_real_gazebo() -> bool:
         return False
 
 
-def list_models(response_format: str = "filtered") -> OperationResult:
+def list_models(
+    response_format: str = "filtered",
+    world: str = "default"
+) -> OperationResult:
     """
     List all models in Gazebo simulation.
 
     This demonstrates the MCP token efficiency pattern - provide full data
     for local filtering instead of sending everything through the model.
+
+    UPDATED (Phase 1B): Added world parameter for multi-world Modern Gazebo support.
 
     Args:
         response_format:
@@ -98,6 +103,7 @@ def list_models(response_format: str = "filtered") -> OperationResult:
             - "concise": Names and states only (~200 tokens/model)
             - "filtered": Full data for local filtering (~1000 tokens base + full data)
             - "detailed": Everything including meshes (~500+ tokens/model)
+        world: Target world name (Modern Gazebo only, default: "default")
 
     Returns:
         OperationResult with models data in requested format
@@ -136,7 +142,7 @@ def list_models(response_format: str = "filtered") -> OperationResult:
         if _use_real_gazebo():
             # Get real models from Gazebo:
             bridge = _get_bridge()
-            model_states = bridge.get_model_list(timeout=5.0)
+            model_states = bridge.get_model_list(timeout=5.0, world=world)
 
             # Convert ModelState objects to dicts:
             all_models = []
@@ -257,15 +263,19 @@ def spawn_model(
     pitch: float = 0.0,
     yaw: float = 0.0,
     namespace: Optional[str] = None,
+    world: str = "default",
 ) -> OperationResult:
     """
     Spawn a model in Gazebo simulation.
+
+    UPDATED (Phase 1B): Added world parameter for multi-world Modern Gazebo support.
 
     Args:
         model_name: Name of the model to spawn (e.g., "turtlebot3_burger")
         x, y, z: Position coordinates
         roll, pitch, yaw: Orientation (radians)
         namespace: Optional ROS2 namespace for the model
+        world: Target world name (Modern Gazebo only, default: "default")
 
     Returns:
         OperationResult with spawn status and model info
@@ -315,6 +325,7 @@ def spawn_model(
                 pose=pose,
                 reference_frame="world",
                 timeout=10.0,
+                world=world,
             )
 
             if success:
@@ -356,12 +367,18 @@ def spawn_model(
         return error_result(error=f"Failed to spawn model: {e}", error_code="SPAWN_ERROR")
 
 
-def delete_model(model_name: str) -> OperationResult:
+def delete_model(
+    model_name: str,
+    world: str = "default"
+) -> OperationResult:
     """
     Delete a model from Gazebo simulation.
 
+    UPDATED (Phase 1B): Added world parameter for multi-world Modern Gazebo support.
+
     Args:
         model_name: Name of the model to delete
+        world: Target world name (Modern Gazebo only, default: "default")
 
     Returns:
         OperationResult with deletion status
@@ -378,7 +395,7 @@ def delete_model(model_name: str) -> OperationResult:
         # Attempt to delete in real Gazebo:
         if _use_real_gazebo():
             bridge = _get_bridge()
-            success = bridge.delete_entity(name=model_name, timeout=10.0)
+            success = bridge.delete_entity(name=model_name, timeout=10.0, world=world)
 
             if success:
                 _logger.log_model_event("deleted", model_name)
@@ -414,13 +431,20 @@ def delete_model(model_name: str) -> OperationResult:
         return error_result(error=f"Failed to delete model: {e}", error_code="DELETE_ERROR")
 
 
-def get_model_state(model_name: str, response_format: str = "concise") -> OperationResult:
+def get_model_state(
+    model_name: str,
+    response_format: str = "concise",
+    world: str = "default"
+) -> OperationResult:
     """
     Get the current state of a model.
+
+    UPDATED (Phase 1B): Added world parameter for multi-world Modern Gazebo support.
 
     Args:
         model_name: Name of the model
         response_format: "concise" | "detailed"
+        world: Target world name (Modern Gazebo only, default: "default")
 
     Returns:
         OperationResult with model state
@@ -438,7 +462,7 @@ def get_model_state(model_name: str, response_format: str = "concise") -> Operat
         # Attempt to get state from real Gazebo:
         if _use_real_gazebo():
             bridge = _get_bridge()
-            model_state = bridge.get_model_state(name=model_name, timeout=5.0)
+            model_state = bridge.get_model_state(name=model_name, timeout=5.0, world=world)
 
             if model_state is None:
                 return model_not_found_error(model_name)
@@ -525,6 +549,7 @@ def set_model_state(
     pose: Optional[Dict] = None,
     twist: Optional[Dict] = None,
     reference_frame: str = "world",
+    world: str = "default",
 ) -> OperationResult:
     """
     Set model pose and/or velocity.
@@ -532,6 +557,8 @@ def set_model_state(
     Teleports the model to a new position/orientation and/or sets its velocity.
     Useful for resetting robot positions, creating test scenarios, or applying
     initial conditions.
+
+    UPDATED (Phase 1B): Added world parameter for multi-world Modern Gazebo support.
 
     Args:
         model_name: Name of model to update
@@ -546,7 +573,8 @@ def set_model_state(
                 "linear": {"x": float, "y": float, "z": float},
                 "angular": {"x": float, "y": float, "z": float}
             }
-        reference_frame: Reference frame for pose (default: "world")
+        reference_frame: Reference frame for pose (Classic only, ignored by Modern)
+        world: Target world name (Modern Gazebo only, default: "default")
 
     Returns:
         OperationResult with update status
@@ -602,6 +630,7 @@ def set_model_state(
                 twist=twist,
                 reference_frame=reference_frame,
                 timeout=10.0,
+                world=world,
             )
 
             if success:

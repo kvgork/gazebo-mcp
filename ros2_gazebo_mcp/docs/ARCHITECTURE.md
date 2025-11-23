@@ -72,6 +72,138 @@ The Gazebo MCP Server provides a Model Context Protocol (MCP) interface for cont
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+### Enhanced System Architecture (Mermaid)
+
+```mermaid
+graph TB
+    subgraph "AI Assistant Layer"
+        Claude[Claude AI Assistant]
+    end
+
+    subgraph "MCP Server Layer"
+        Server[MCP Server<br/>server.py]
+        Registry[Tool Registry<br/>& Dispatcher]
+        Tools[Tool Modules]
+
+        Server --> Registry
+        Registry --> Tools
+    end
+
+    subgraph "Bridge Layer"
+        ConnMgr[Connection Manager<br/>connection_manager.py]
+        BridgeNode[ROS2 Bridge Node<br/>gazebo_bridge_node.py]
+
+        ConnMgr --> BridgeNode
+    end
+
+    subgraph "ROS2 Layer"
+        Topics[Topic Bridge]
+        Services[Service Bridge]
+        Actions[Action Bridge]
+        DDS[ROS2 Middleware<br/>DDS]
+
+        BridgeNode --> Topics
+        BridgeNode --> Services
+        BridgeNode --> Actions
+        Topics --> DDS
+        Services --> DDS
+        Actions --> DDS
+    end
+
+    subgraph "Simulation Layer"
+        Gazebo[Gazebo Simulation]
+        Physics[Physics Engine]
+        Models[Robot Models]
+        Sensors[Sensors]
+        World[World/Terrain]
+        Lighting[Lighting System]
+
+        Gazebo --> Physics
+        Gazebo --> Models
+        Gazebo --> Sensors
+        Gazebo --> World
+        Gazebo --> Lighting
+    end
+
+    Claude -->|MCP Protocol<br/>stdio/HTTP| Server
+    Tools -->|Function Calls| ConnMgr
+    DDS -->|ROS2 Topics<br/>ROS2 Services| Gazebo
+
+    style Claude fill:#e1f5ff
+    style Server fill:#fff3cd
+    style ConnMgr fill:#d4edda
+    style Gazebo fill:#f8d7da
+```
+
+### Component Interaction Diagram
+
+```mermaid
+graph LR
+    subgraph "Tool Categories"
+        SimTools[Simulation Tools<br/>simulation_tools.py]
+        ModelTools[Model Management<br/>model_management.py]
+        SensorTools[Sensor Tools<br/>sensor_tools.py]
+        WorldTools[World Generation<br/>world_generation.py]
+    end
+
+    subgraph "Utilities"
+        Validators[validators.py]
+        Converters[converters.py]
+        Geometry[geometry.py]
+        Exceptions[exceptions.py]
+    end
+
+    subgraph "Bridge Components"
+        Bridge[ROS2 Bridge Node]
+    end
+
+    SimTools --> Validators
+    ModelTools --> Validators
+    SensorTools --> Converters
+    WorldTools --> Geometry
+
+    SimTools --> Bridge
+    ModelTools --> Bridge
+    SensorTools --> Bridge
+    WorldTools --> Bridge
+
+    Bridge -.->|Error Handling| Exceptions
+
+    style SimTools fill:#e3f2fd
+    style ModelTools fill:#e8f5e9
+    style SensorTools fill:#fff3e0
+    style WorldTools fill:#f3e5f5
+```
+
+### Tool Category Breakdown
+
+```mermaid
+mindmap
+  root((MCP Tools<br/>18 Total))
+    Model Management
+      gazebo_list_models
+      gazebo_spawn_model
+      gazebo_delete_model
+      gazebo_get_model_state
+      gazebo_set_model_state
+    Simulation Control
+      gazebo_start_simulation
+      gazebo_pause_simulation
+      gazebo_unpause_simulation
+      gazebo_reset_simulation
+      gazebo_get_simulation_status
+    Sensor Access
+      gazebo_list_sensors
+      gazebo_get_sensor_data
+      gazebo_configure_sensor
+    World Generation
+      gazebo_create_world
+      gazebo_add_obstacle_course
+      gazebo_set_lighting
+      gazebo_modify_terrain
+      gazebo_save_world
+```
+
 ## Component Descriptions
 
 ### 1. MCP Server (`src/gazebo_mcp/server.py`)
@@ -135,6 +267,66 @@ class ConnectionState(Enum):
 - **Action Clients**: Long-running operations (future use)
   - Navigation goals
   - Complex world generation tasks
+
+#### Adapter Pattern Architecture
+
+**Problem**: Support both Classic Gazebo 11 (deprecated) and Modern Gazebo (Fortress/Garden/Harmonic) with different ROS2 APIs.
+
+**Solution**: Adapter pattern with abstract interface and backend-specific implementations.
+
+**Architecture**:
+```
+GazeboInterface (Abstract)
+├── EntityPose, EntityTwist, WorldInfo (Common data structures)
+├── 10 core methods (spawn_entity, delete_entity, etc.)
+│
+├── ClassicGazeboAdapter (Deprecated)
+│   └── Wraps gazebo_msgs package
+│       - Service paths: /gazebo/* and /spawn_entity
+│       - Field names: .xml, .initial_pose
+│       - Single world only
+│
+└── ModernGazeboAdapter (Primary)
+    └── Wraps ros_gz_interfaces package
+        - Service paths: /world/{world_name}/*
+        - Field names: .sdf, .pose
+        - Multi-world support
+```
+
+**Backend Selection**:
+- Environment variable: `GAZEBO_BACKEND` (modern, classic, auto)
+- Default: **modern** (Classic deprecated, removed in v2.0.0)
+- Auto-detection: Service-based discovery + process fallback
+
+**Key Differences**:
+
+| Aspect | Classic (Deprecated) | Modern (Primary) |
+|--------|---------------------|------------------|
+| Package | gazebo_msgs | ros_gz_interfaces |
+| Service Path | /gazebo/* | /world/{world}/* |
+| SDF Field | .xml | .sdf |
+| Pose Field | .initial_pose | .pose |
+| Multi-World | ❌ Single only | ✅ Full support |
+| Entity Type | String | Entity message (name/id/type) |
+| Control | Separate services | ControlWorld unified |
+
+**Dependency Injection**:
+```python
+# GazeboBridgeNode supports adapter injection for testing
+bridge = GazeboBridgeNode(
+    ros2_node,
+    adapter=mock_adapter,  # Inject mock for tests
+    world="test_world"
+)
+```
+
+**Files**:
+- `bridge/gazebo_interface.py` - Abstract interface
+- `bridge/config.py` - Configuration and env vars
+- `bridge/detection.py` - Auto-detection logic
+- `bridge/factory.py` - Adapter factory
+- `bridge/adapters/classic_adapter.py` - Classic implementation (deprecated)
+- `bridge/adapters/modern_adapter.py` - Modern implementation (primary)
 
 ### 4. Tools Module (`src/gazebo_mcp/tools/`)
 
@@ -219,6 +411,153 @@ async def spawn_model(
      "model_name": "robot_1",
      "position": {"x": 2.0, "y": 1.0, "z": 0.0}
    }
+```
+
+### Sequence Diagrams
+
+#### Model Spawning Workflow
+
+```mermaid
+sequenceDiagram
+    participant Claude as Claude AI
+    participant MCP as MCP Server
+    participant Tool as Model Tool
+    participant Bridge as ROS2 Bridge
+    participant Gazebo as Gazebo Sim
+
+    Claude->>MCP: spawn_model(robot_1, turtlebot3)
+    MCP->>MCP: Validate parameters
+    MCP->>Tool: spawn_model()
+    Tool->>Tool: Generate SDF/URDF
+    Tool->>Bridge: spawn_entity()
+    Bridge->>Gazebo: /gazebo/spawn_entity service
+    Gazebo->>Gazebo: Load model
+    Gazebo->>Gazebo: Apply physics
+    Gazebo-->>Bridge: Success response
+    Bridge-->>Tool: Entity spawned
+    Tool-->>MCP: Success + metadata
+    MCP-->>Claude: {success: true, model_name, position}
+```
+
+#### Sensor Data Reading Workflow
+
+```mermaid
+sequenceDiagram
+    participant Claude as Claude AI
+    participant MCP as MCP Server
+    participant Sensor as Sensor Tool
+    participant Bridge as ROS2 Bridge
+    participant ROS2 as ROS2 Topic
+    participant Gazebo as Gazebo Sim
+
+    Claude->>MCP: get_sensor_data(camera)
+    MCP->>Sensor: get_sensor_data()
+    Sensor->>Bridge: subscribe_to_topic(/camera/image)
+
+    loop Data Stream
+        Gazebo->>ROS2: Publish sensor data
+        ROS2->>Bridge: Receive message
+        Bridge->>Bridge: Convert to Python dict
+    end
+
+    Bridge-->>Sensor: Latest sensor data
+    Sensor->>Sensor: Apply ResultFilter
+    Sensor-->>MCP: Filtered data (95% smaller)
+    MCP-->>Claude: {success: true, sensor_data}
+```
+
+#### World Generation Workflow
+
+```mermaid
+sequenceDiagram
+    participant Claude as Claude AI
+    participant MCP as MCP Server
+    participant World as World Tool
+    participant Bridge as ROS2 Bridge
+    participant Gazebo as Gazebo Sim
+
+    Claude->>MCP: create_world(navigation_course)
+    MCP->>World: create_world()
+
+    World->>World: Generate world SDF
+    World->>World: Add ground plane
+    World->>World: Add obstacles (maze pattern)
+    World->>World: Configure lighting
+    World->>World: Set physics properties
+
+    World->>Bridge: load_world(sdf_content)
+    Bridge->>Gazebo: /gazebo/load_world service
+    Gazebo->>Gazebo: Parse SDF
+    Gazebo->>Gazebo: Initialize world
+    Gazebo-->>Bridge: World loaded
+
+    Bridge-->>World: Success
+    World-->>MCP: {success: true, world_info}
+    MCP-->>Claude: World created successfully
+```
+
+#### Connection Management Workflow
+
+```mermaid
+sequenceDiagram
+    participant MCP as MCP Server
+    participant ConnMgr as Connection Manager
+    participant Bridge as ROS2 Bridge
+    participant ROS2 as ROS2 Network
+    participant Gazebo as Gazebo Sim
+
+    MCP->>ConnMgr: initialize()
+    ConnMgr->>ConnMgr: State: CONNECTING
+    ConnMgr->>Bridge: create_node()
+    Bridge->>ROS2: Initialize ROS2 context
+
+    alt Gazebo Running
+        ROS2->>Gazebo: Discover services
+        Gazebo-->>ROS2: Service list
+        ROS2-->>Bridge: Connection OK
+        Bridge-->>ConnMgr: Node ready
+        ConnMgr->>ConnMgr: State: CONNECTED
+    else Gazebo Not Running
+        ROS2-->>Bridge: Connection timeout
+        Bridge-->>ConnMgr: Connection failed
+        ConnMgr->>ConnMgr: State: DISCONNECTED
+        ConnMgr->>ConnMgr: Schedule retry (backoff)
+    end
+
+    loop Health Check (every 5s)
+        ConnMgr->>Bridge: ping()
+        alt Healthy
+            Bridge-->>ConnMgr: OK
+        else Failed
+            ConnMgr->>ConnMgr: Attempt reconnect
+        end
+    end
+```
+
+#### Error Handling Flow
+
+```mermaid
+sequenceDiagram
+    participant Claude as Claude AI
+    participant MCP as MCP Server
+    participant Tool as Tool Module
+    participant Bridge as ROS2 Bridge
+    participant Gazebo as Gazebo Sim
+
+    Claude->>MCP: spawn_model(invalid_model)
+    MCP->>Tool: spawn_model()
+    Tool->>Bridge: spawn_entity()
+    Bridge->>Gazebo: /gazebo/spawn_entity
+    Gazebo-->>Bridge: ERROR: Model not found
+
+    Bridge->>Bridge: Catch ROS2ServiceError
+    Bridge-->>Tool: Raise ModelSpawnError
+    Tool->>Tool: Catch ModelSpawnError
+    Tool->>Tool: Add suggestions
+    Tool-->>MCP: {success: false, error, suggestions}
+    MCP-->>Claude: Error + helpful guidance
+
+    Note over Claude,MCP: Error includes:<br/>- Clear error message<br/>- Suggestions for fixes<br/>- Example corrections
 ```
 
 ## Concurrency Model

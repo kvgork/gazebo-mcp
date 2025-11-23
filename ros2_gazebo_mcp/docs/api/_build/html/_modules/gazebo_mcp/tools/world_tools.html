@@ -1,0 +1,438 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gazebo_mcp.tools.world_tools &mdash; ROS2 Gazebo MCP Server 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ROS2 Gazebo MCP Server
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API Modules:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">gazebo_mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../gazebo_mcp.html">gazebo_mcp package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ROS2 Gazebo MCP Server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gazebo_mcp.tools.world_tools</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gazebo_mcp.tools.world_tools</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Gazebo World Management Tools.</span>
+
+<span class="sd">Provides functions for loading, saving, and managing Gazebo world files and properties.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="c1"># Add claude project to path for ResultFilter:</span>
+<span class="n">CLAUDE_ROOT</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/home/koen/workspaces/hackathon-git/claude&quot;</span><span class="p">)</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">CLAUDE_ROOT</span><span class="p">))</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">gazebo_mcp.utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">OperationResult</span><span class="p">,</span>
+    <span class="n">success_result</span><span class="p">,</span>
+    <span class="n">error_result</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gazebo_mcp.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">GazeboMCPError</span><span class="p">,</span>
+    <span class="n">ROS2NotConnectedError</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gazebo_mcp.utils.validators</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">validate_file_path</span><span class="p">,</span>
+    <span class="n">validate_positive</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gazebo_mcp.utils.logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gazebo_mcp.bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConnectionManager</span><span class="p">,</span> <span class="n">GazeboBridgeNode</span>
+
+<span class="c1"># Module-level connection manager (singleton pattern):</span>
+<span class="n">_connection_manager</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ConnectionManager</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">_bridge_node</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">GazeboBridgeNode</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="n">_logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;world_tools&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_bridge</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">GazeboBridgeNode</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get or create Gazebo bridge node.&quot;&quot;&quot;</span>
+    <span class="k">global</span> <span class="n">_connection_manager</span><span class="p">,</span> <span class="n">_bridge_node</span>
+
+    <span class="k">if</span> <span class="n">_bridge_node</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_bridge_node</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_connection_manager</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">_connection_manager</span> <span class="o">=</span> <span class="n">ConnectionManager</span><span class="p">()</span>
+            <span class="n">_connection_manager</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>
+            <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Connected to ROS2 for world tools&quot;</span><span class="p">)</span>
+
+        <span class="n">_bridge_node</span> <span class="o">=</span> <span class="n">GazeboBridgeNode</span><span class="p">(</span><span class="n">_connection_manager</span><span class="o">.</span><span class="n">get_node</span><span class="p">())</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Created Gazebo bridge node for world tools&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">_bridge_node</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to create bridge&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+        <span class="k">raise</span> <span class="n">ROS2NotConnectedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to connect to ROS2/Gazebo: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_use_real_gazebo</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Check if we should use real Gazebo or mock data.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_get_bridge</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+
+<div class="viewcode-block" id="load_world">
+<a class="viewcode-back" href="../../../gazebo_mcp.tools.html#gazebo_mcp.tools.world_tools.load_world">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_world</span><span class="p">(</span><span class="n">world_file_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Load a Gazebo world from SDF file.</span>
+
+<span class="sd">    Note: This requires restarting Gazebo with the world file.</span>
+<span class="sd">    This function provides guidance on how to do that.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        world_file_path: Path to SDF world file</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        OperationResult with load instructions</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; result = load_world(&quot;/path/to/my_world.sdf&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; if result.success:</span>
+<span class="sd">        ...     print(result.data[&quot;instructions&quot;])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Validate file path:</span>
+        <span class="n">world_path</span> <span class="o">=</span> <span class="n">validate_file_path</span><span class="p">(</span><span class="n">world_file_path</span><span class="p">,</span> <span class="n">must_exist</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Check if it&#39;s an SDF file:</span>
+        <span class="k">if</span> <span class="n">world_path</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="s2">&quot;.sdf&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span>
+                <span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;File must be .sdf format, got: </span><span class="si">{</span><span class="n">world_path</span><span class="o">.</span><span class="n">suffix</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">error_code</span><span class="o">=</span><span class="s2">&quot;INVALID_FILE_FORMAT&quot;</span><span class="p">,</span>
+                <span class="n">suggestions</span><span class="o">=</span><span class="p">[</span>
+                    <span class="s2">&quot;Provide an SDF world file (.sdf extension)&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;Convert URDF to SDF if needed&quot;</span><span class="p">,</span>
+                <span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Validated world file&quot;</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">world_path</span><span class="p">))</span>
+
+        <span class="c1"># Return instructions for loading:</span>
+        <span class="k">return</span> <span class="n">success_result</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;world_file&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">world_path</span><span class="p">),</span>
+                <span class="s2">&quot;loaded&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                <span class="s2">&quot;instructions&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">To load this world in Gazebo:</span>
+
+<span class="s2">1. Stop current Gazebo instance (if running)</span>
+
+<span class="s2">2. Launch Gazebo with the world file:</span>
+<span class="s2">   ros2 launch gazebo_ros gazebo.launch.py world:=</span><span class="si">{</span><span class="n">world_path</span><span class="si">}</span>
+
+<span class="s2">3. Or use gz sim directly:</span>
+<span class="s2">   gz sim </span><span class="si">{</span><span class="n">world_path</span><span class="si">}</span>
+
+<span class="s2">Note: Gazebo must be restarted to load a different world file.</span>
+<span class="s2">The MCP server will automatically reconnect when Gazebo is ready.</span>
+<span class="s2">            &quot;&quot;&quot;</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
+                <span class="s2">&quot;alternative&quot;</span><span class="p">:</span> <span class="s2">&quot;You can also load models individually using spawn_model() instead of loading a whole new world&quot;</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+
+    <span class="k">except</span> <span class="n">GazeboMCPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">error_code</span><span class="p">,</span> <span class="n">suggestions</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">suggestions</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Unexpected error loading world&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to load world: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="s2">&quot;WORLD_LOAD_ERROR&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="save_world">
+<a class="viewcode-back" href="../../../gazebo_mcp.tools.html#gazebo_mcp.tools.world_tools.save_world">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">save_world</span><span class="p">(</span><span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Save current Gazebo world state to SDF file.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        output_path: Path where to save the world file</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        OperationResult with save status</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; result = save_world(&quot;/path/to/saved_world.sdf&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Validate output path:</span>
+        <span class="n">output_path_obj</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">output_path</span><span class="p">)</span>
+
+        <span class="c1"># Ensure parent directory exists:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">output_path_obj</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span>
+                <span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Parent directory does not exist: </span><span class="si">{</span><span class="n">output_path_obj</span><span class="o">.</span><span class="n">parent</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">error_code</span><span class="o">=</span><span class="s2">&quot;DIRECTORY_NOT_FOUND&quot;</span><span class="p">,</span>
+                <span class="n">suggestions</span><span class="o">=</span><span class="p">[</span>
+                    <span class="sa">f</span><span class="s2">&quot;Create directory: mkdir -p </span><span class="si">{</span><span class="n">output_path_obj</span><span class="o">.</span><span class="n">parent</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;Use an existing directory&quot;</span><span class="p">,</span>
+                <span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">_use_real_gazebo</span><span class="p">():</span>
+            <span class="c1"># TODO: Implement real world saving via Gazebo services</span>
+            <span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Real world saving not yet implemented - returning instructions&quot;</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">success_result</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;output_path&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">output_path</span><span class="p">),</span>
+                    <span class="s2">&quot;saved&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;instructions&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">To save the current world state:</span>
+
+<span class="s2">1. Using Gazebo GUI:</span>
+<span class="s2">   - File → Save World As...</span>
+<span class="s2">   - Choose location: </span><span class="si">{</span><span class="n">output_path</span><span class="si">}</span>
+
+<span class="s2">2. Using gz command:</span>
+<span class="s2">   gz sdf -p &gt; </span><span class="si">{</span><span class="n">output_path</span><span class="si">}</span>
+
+<span class="s2">3. Using ROS2 service (if available):</span>
+<span class="s2">   ros2 service call /gazebo/save_world std_srvs/srv/Empty</span>
+
+<span class="s2">Note: World saving via MCP will be implemented in a future update.</span>
+<span class="s2">                &quot;&quot;&quot;</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
+                    <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="s2">&quot;Mock mode - save instructions provided&quot;</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">success_result</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;output_path&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">output_path</span><span class="p">),</span>
+                    <span class="s2">&quot;saved&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="s2">&quot;Gazebo not running - cannot save world&quot;</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+
+    <span class="k">except</span> <span class="n">GazeboMCPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">error_code</span><span class="p">,</span> <span class="n">suggestions</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">suggestions</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Unexpected error saving world&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to save world: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="s2">&quot;WORLD_SAVE_ERROR&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="get_world_properties">
+<a class="viewcode-back" href="../../../gazebo_mcp.tools.html#gazebo_mcp.tools.world_tools.get_world_properties">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_world_properties</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get Gazebo world properties (physics settings, gravity, etc.).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        OperationResult with world properties</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; result = get_world_properties()</span>
+<span class="sd">        &gt;&gt;&gt; if result.success:</span>
+<span class="sd">        ...     gravity = result.data[&quot;gravity&quot;]</span>
+<span class="sd">        ...     print(f&quot;Gravity: {gravity}&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_use_real_gazebo</span><span class="p">():</span>
+            <span class="c1"># TODO: Implement real world properties query</span>
+            <span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Using mock world properties - real query not yet implemented&quot;</span><span class="p">)</span>
+            <span class="n">properties</span> <span class="o">=</span> <span class="n">_get_mock_world_properties</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">properties</span> <span class="o">=</span> <span class="n">_get_mock_world_properties</span><span class="p">()</span>
+            <span class="n">properties</span><span class="p">[</span><span class="s2">&quot;note&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Mock data - Gazebo not available&quot;</span>
+
+        <span class="k">return</span> <span class="n">success_result</span><span class="p">(</span><span class="n">properties</span><span class="p">)</span>
+
+    <span class="k">except</span> <span class="n">GazeboMCPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">error_code</span><span class="p">,</span> <span class="n">suggestions</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">suggestions</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Unexpected error getting world properties&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span>
+            <span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to get world properties: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="s2">&quot;GET_PROPERTIES_ERROR&quot;</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="set_world_property">
+<a class="viewcode-back" href="../../../gazebo_mcp.tools.html#gazebo_mcp.tools.world_tools.set_world_property">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">set_world_property</span><span class="p">(</span><span class="n">property_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OperationResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Set a Gazebo world property.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        property_name: Name of property to set (gravity, physics_update_rate, etc.)</span>
+<span class="sd">        value: New value for the property</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        OperationResult with update status</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; # Set gravity:</span>
+<span class="sd">        &gt;&gt;&gt; result = set_world_property(&quot;gravity&quot;, {&quot;x&quot;: 0, &quot;y&quot;: 0, &quot;z&quot;: -9.81})</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Set physics update rate:</span>
+<span class="sd">        &gt;&gt;&gt; result = set_world_property(&quot;physics_update_rate&quot;, 1000.0)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Validate common properties:</span>
+        <span class="k">if</span> <span class="n">property_name</span> <span class="o">==</span> <span class="s2">&quot;physics_update_rate&quot;</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">validate_positive</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;physics_update_rate&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">property_name</span> <span class="o">==</span> <span class="s2">&quot;max_step_size&quot;</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">validate_positive</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="s2">&quot;max_step_size&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">_use_real_gazebo</span><span class="p">():</span>
+            <span class="c1"># TODO: Implement real property setting</span>
+            <span class="n">_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Real property setting not yet implemented for </span><span class="si">{</span><span class="n">property_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="k">return</span> <span class="n">success_result</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;property&quot;</span><span class="p">:</span> <span class="n">property_name</span><span class="p">,</span>
+                    <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span>
+                    <span class="s2">&quot;set&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="s2">&quot;Property setting via MCP will be implemented in a future update&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;instructions&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">To set </span><span class="si">{</span><span class="n">property_name</span><span class="si">}</span><span class="s2"> manually:</span>
+
+<span class="s2">1. Edit world SDF file before launching Gazebo</span>
+<span class="s2">2. Or use Gazebo services (if available):</span>
+<span class="s2">   ros2 service call /gazebo/set_physics_properties ...</span>
+
+<span class="s2">Note: Some properties can only be set before Gazebo starts.</span>
+<span class="s2">                &quot;&quot;&quot;</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">success_result</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">&quot;property&quot;</span><span class="p">:</span> <span class="n">property_name</span><span class="p">,</span>
+                    <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span>
+                    <span class="s2">&quot;set&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+                    <span class="s2">&quot;note&quot;</span><span class="p">:</span> <span class="s2">&quot;Gazebo not running - cannot set property&quot;</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+
+    <span class="k">except</span> <span class="n">GazeboMCPError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">error_code</span><span class="p">,</span> <span class="n">suggestions</span><span class="o">=</span><span class="n">e</span><span class="o">.</span><span class="n">suggestions</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">_logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Unexpected error setting world property&quot;</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">error_result</span><span class="p">(</span><span class="n">error</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to set property: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">error_code</span><span class="o">=</span><span class="s2">&quot;SET_PROPERTY_ERROR&quot;</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># Helper functions:</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_mock_world_properties</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get mock world properties for fallback.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;world_name&quot;</span><span class="p">:</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;gravity&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mf">9.81</span><span class="p">},</span>
+        <span class="s2">&quot;physics&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;engine&quot;</span><span class="p">:</span> <span class="s2">&quot;ode&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;update_rate&quot;</span><span class="p">:</span> <span class="mf">1000.0</span><span class="p">,</span>
+            <span class="s2">&quot;max_step_size&quot;</span><span class="p">:</span> <span class="mf">0.001</span><span class="p">,</span>
+            <span class="s2">&quot;real_time_factor&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
+            <span class="s2">&quot;real_time_update_rate&quot;</span><span class="p">:</span> <span class="mf">1000.0</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;scene&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;ambient&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;r&quot;</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span> <span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span>
+            <span class="s2">&quot;background&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;r&quot;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">,</span> <span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">},</span>
+            <span class="s2">&quot;shadows&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;grid&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;simulation_time&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="s2">&quot;real_time&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="s2">&quot;iterations&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="p">}</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Development Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

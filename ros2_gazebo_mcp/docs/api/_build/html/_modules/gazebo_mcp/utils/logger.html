@@ -1,0 +1,500 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gazebo_mcp.utils.logger &mdash; ROS2 Gazebo MCP Server 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            ROS2 Gazebo MCP Server
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API Modules:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">gazebo_mcp</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../gazebo_mcp.html">gazebo_mcp package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ROS2 Gazebo MCP Server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gazebo_mcp.utils.logger</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gazebo_mcp.utils.logger</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Structured Logging for Gazebo MCP.</span>
+
+<span class="sd">Provides consistent logging across the MCP server with context-aware</span>
+<span class="sd">formatting, different log levels, and integration with ROS2 logging.</span>
+
+<span class="sd">Features:</span>
+<span class="sd">- Structured logging with context (operation, model, sensor, etc.)</span>
+<span class="sd">- Multiple log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)</span>
+<span class="sd">- JSON formatting for machine parsing</span>
+<span class="sd">- Integration with ROS2 logging when available</span>
+<span class="sd">- Performance tracking (timing operations)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">contextlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">contextmanager</span>
+
+
+<span class="c1"># Configure root logger:</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span>
+    <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%(asctime)s</span><span class="s1"> - </span><span class="si">%(name)s</span><span class="s1"> - </span><span class="si">%(levelname)s</span><span class="s1"> - </span><span class="si">%(message)s</span><span class="s1">&#39;</span><span class="p">,</span>
+    <span class="n">handlers</span><span class="o">=</span><span class="p">[</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">StreamHandler</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>  <span class="c1"># Log to stderr (stdout reserved for MCP protocol)</span>
+    <span class="p">]</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GazeboMCPLogger</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Structured logger for Gazebo MCP operations.</span>
+
+<span class="sd">    Provides context-aware logging with optional JSON formatting</span>
+<span class="sd">    and ROS2 integration.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; logger = get_logger(&quot;model_management&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; logger.info(&quot;Spawning model&quot;, model_name=&quot;turtlebot3&quot;, position={&quot;x&quot;: 1, &quot;y&quot;: 2})</span>
+<span class="sd">        &gt;&gt;&gt; # Output: 2024-11-16 12:00:00 - model_management - INFO - Spawning model [model_name=turtlebot3]</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; with logger.operation(&quot;spawn_model&quot;):</span>
+<span class="sd">        ...     # Do work</span>
+<span class="sd">        ...     pass</span>
+<span class="sd">        &gt;&gt;&gt; # Output: Operation &#39;spawn_model&#39; completed in 0.123s</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="GazeboMCPLogger.__init__">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">log_level</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span>
+        <span class="n">json_format</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">log_file</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize logger.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name: Logger name (e.g., &quot;model_management&quot;, &quot;sensor_tools&quot;)</span>
+<span class="sd">            log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)</span>
+<span class="sd">            json_format: Use JSON formatting for structured logs</span>
+<span class="sd">            log_file: Optional file path for log output</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;gazebo_mcp.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">log_level</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">json_format</span> <span class="o">=</span> <span class="n">json_format</span>
+
+        <span class="c1"># Add file handler if specified:</span>
+        <span class="k">if</span> <span class="n">log_file</span><span class="p">:</span>
+            <span class="n">file_handler</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">FileHandler</span><span class="p">(</span><span class="n">log_file</span><span class="p">)</span>
+            <span class="n">file_handler</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">log_level</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">json_format</span><span class="p">:</span>
+                <span class="n">file_handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">JSONFormatter</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">file_handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span>
+                    <span class="s1">&#39;</span><span class="si">%(asctime)s</span><span class="s1"> - </span><span class="si">%(name)s</span><span class="s1"> - </span><span class="si">%(levelname)s</span><span class="s1"> - </span><span class="si">%(message)s</span><span class="s1">&#39;</span>
+                <span class="p">))</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">file_handler</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_format_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Format context dictionary for logging.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">context</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">json_format</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">items</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">context</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot; [</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">items</span><span class="p">)</span><span class="si">}</span><span class="s2">]&quot;</span>
+
+<div class="viewcode-block" id="GazeboMCPLogger.debug">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.debug">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">debug</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log debug message with context.&quot;&quot;&quot;</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">message</span><span class="si">}{</span><span class="n">ctx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.info">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.info">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log info message with context.&quot;&quot;&quot;</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">message</span><span class="si">}{</span><span class="n">ctx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.warning">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.warning">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">warning</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log warning message with context.&quot;&quot;&quot;</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">message</span><span class="si">}{</span><span class="n">ctx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.error">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.error">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log error message with context.&quot;&quot;&quot;</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">message</span><span class="si">}{</span><span class="n">ctx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.critical">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.critical">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">critical</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log critical message with context.&quot;&quot;&quot;</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">message</span><span class="si">}{</span><span class="n">ctx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.exception">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.exception">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exception</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log exception with stack trace and context.&quot;&quot;&quot;</span>
+        <span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">message</span><span class="si">}{</span><span class="n">ctx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="n">exc_info</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.operation">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.operation">[docs]</a>
+    <span class="nd">@contextmanager</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">operation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">operation_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Context manager for timing operations.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; with logger.operation(&quot;spawn_model&quot;, model=&quot;turtlebot3&quot;):</span>
+<span class="sd">            ...     # Do work</span>
+<span class="sd">            ...     pass</span>
+<span class="sd">            &gt;&gt;&gt; # Logs: &quot;Operation &#39;spawn_model&#39; completed in 0.123s [model=turtlebot3]&quot;</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Starting operation &#39;</span><span class="si">{</span><span class="n">operation_name</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">yield</span>
+            <span class="n">duration</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Operation &#39;</span><span class="si">{</span><span class="n">operation_name</span><span class="si">}</span><span class="s2">&#39; completed&quot;</span><span class="p">,</span>
+                <span class="n">duration_sec</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">duration</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">context</span>
+            <span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">duration</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start_time</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Operation &#39;</span><span class="si">{</span><span class="n">operation_name</span><span class="si">}</span><span class="s2">&#39; failed&quot;</span><span class="p">,</span>
+                <span class="n">error</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span>
+                <span class="n">duration_sec</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">duration</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">context</span>
+            <span class="p">)</span>
+            <span class="k">raise</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.log_ros2_connection">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.log_ros2_connection">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_ros2_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log ROS2 connection event.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="s2">&quot;connected&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;ROS2 connection established&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">status</span> <span class="o">==</span> <span class="s2">&quot;disconnected&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;ROS2 connection lost&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">status</span> <span class="o">==</span> <span class="s2">&quot;reconnecting&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Attempting ROS2 reconnection&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ROS2 status: </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.log_model_event">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.log_model_event">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_model_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log model-related event.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Model </span><span class="si">{</span><span class="n">event</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">model_name</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.log_sensor_event">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.log_sensor_event">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_sensor_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">sensor_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log sensor-related event.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sensor </span><span class="si">{</span><span class="n">event</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">sensor_name</span><span class="o">=</span><span class="n">sensor_name</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GazeboMCPLogger.log_world_event">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.GazeboMCPLogger.log_world_event">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">log_world_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">world_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Log world-related event.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;World </span><span class="si">{</span><span class="n">event</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">world_name</span><span class="o">=</span><span class="n">world_name</span><span class="p">,</span> <span class="o">**</span><span class="n">details</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="JSONFormatter">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.JSONFormatter">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">JSONFormatter</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    JSON formatter for structured logging.</span>
+
+<span class="sd">    Outputs log records as JSON for easy parsing by log aggregation systems.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="JSONFormatter.format">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.JSONFormatter.format">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">record</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">LogRecord</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Format log record as JSON.&quot;&quot;&quot;</span>
+        <span class="n">log_data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="n">datetime</span><span class="o">.</span><span class="n">utcnow</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+            <span class="s2">&quot;level&quot;</span><span class="p">:</span> <span class="n">record</span><span class="o">.</span><span class="n">levelname</span><span class="p">,</span>
+            <span class="s2">&quot;logger&quot;</span><span class="p">:</span> <span class="n">record</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="n">record</span><span class="o">.</span><span class="n">getMessage</span><span class="p">(),</span>
+            <span class="s2">&quot;module&quot;</span><span class="p">:</span> <span class="n">record</span><span class="o">.</span><span class="n">module</span><span class="p">,</span>
+            <span class="s2">&quot;function&quot;</span><span class="p">:</span> <span class="n">record</span><span class="o">.</span><span class="n">funcName</span><span class="p">,</span>
+            <span class="s2">&quot;line&quot;</span><span class="p">:</span> <span class="n">record</span><span class="o">.</span><span class="n">lineno</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Add exception info if present:</span>
+        <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">exc_info</span><span class="p">:</span>
+            <span class="n">log_data</span><span class="p">[</span><span class="s2">&quot;exception&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">formatException</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">exc_info</span><span class="p">)</span>
+
+        <span class="c1"># Add extra context if present:</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="s2">&quot;context&quot;</span><span class="p">):</span>
+            <span class="n">log_data</span><span class="p">[</span><span class="s2">&quot;context&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">context</span>
+
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">log_data</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="c1"># Global logger registry:</span>
+<span class="n">_loggers</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">GazeboMCPLogger</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<div class="viewcode-block" id="get_logger">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.get_logger">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_logger</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">log_level</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">json_format</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">log_file</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">GazeboMCPLogger</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get or create a logger instance.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        name: Logger name</span>
+<span class="sd">        log_level: Optional log level (defaults to INFO)</span>
+<span class="sd">        json_format: Use JSON formatting</span>
+<span class="sd">        log_file: Optional log file path</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        GazeboMCPLogger instance</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; logger = get_logger(&quot;model_management&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; logger.info(&quot;Model spawned&quot;, model_name=&quot;turtlebot3&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_loggers</span><span class="p">:</span>
+        <span class="n">_loggers</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">GazeboMCPLogger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">log_level</span><span class="o">=</span><span class="n">log_level</span> <span class="ow">or</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span>
+            <span class="n">json_format</span><span class="o">=</span><span class="n">json_format</span><span class="p">,</span>
+            <span class="n">log_file</span><span class="o">=</span><span class="n">log_file</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">_loggers</span><span class="p">[</span><span class="n">name</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="set_global_log_level">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.set_global_log_level">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">set_global_log_level</span><span class="p">(</span><span class="n">level</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Set log level for all existing loggers.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        level: Logging level (logging.DEBUG, logging.INFO, etc.)</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; set_global_log_level(logging.DEBUG)  # Enable debug logging</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">logger</span> <span class="ow">in</span> <span class="n">_loggers</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">level</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="configure_file_logging">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.configure_file_logging">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">configure_file_logging</span><span class="p">(</span><span class="n">log_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">json_format</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Configure file logging for all loggers.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        log_dir: Directory for log files</span>
+<span class="sd">        json_format: Use JSON formatting</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; configure_file_logging(&quot;/var/log/gazebo_mcp&quot;, json_format=True)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">log_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">log_dir</span><span class="p">)</span>
+    <span class="n">log_path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Create log file with timestamp:</span>
+    <span class="n">timestamp</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%Y%m</span><span class="si">%d</span><span class="s2">_%H%M%S&quot;</span><span class="p">)</span>
+    <span class="n">log_file</span> <span class="o">=</span> <span class="n">log_path</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">&quot;gazebo_mcp_</span><span class="si">{</span><span class="n">timestamp</span><span class="si">}</span><span class="s2">.log&quot;</span>
+
+    <span class="c1"># Update all existing loggers:</span>
+    <span class="k">for</span> <span class="n">logger</span> <span class="ow">in</span> <span class="n">_loggers</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">file_handler</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">FileHandler</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">log_file</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">json_format</span><span class="p">:</span>
+            <span class="n">file_handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">JSONFormatter</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">file_handler</span><span class="o">.</span><span class="n">setFormatter</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">Formatter</span><span class="p">(</span>
+                <span class="s1">&#39;</span><span class="si">%(asctime)s</span><span class="s1"> - </span><span class="si">%(name)s</span><span class="s1"> - </span><span class="si">%(levelname)s</span><span class="s1"> - </span><span class="si">%(message)s</span><span class="s1">&#39;</span>
+            <span class="p">))</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">addHandler</span><span class="p">(</span><span class="n">file_handler</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># Convenience function for timing code blocks:</span>
+<div class="viewcode-block" id="timed_operation">
+<a class="viewcode-back" href="../../../gazebo_mcp.utils.html#gazebo_mcp.utils.logger.timed_operation">[docs]</a>
+<span class="nd">@contextmanager</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">timed_operation</span><span class="p">(</span><span class="n">logger</span><span class="p">:</span> <span class="n">GazeboMCPLogger</span><span class="p">,</span> <span class="n">operation_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Convenience context manager for timing operations.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        logger: Logger instance</span>
+<span class="sd">        operation_name: Name of the operation</span>
+<span class="sd">        **context: Additional context to log</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; logger = get_logger(&quot;model_management&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; with timed_operation(logger, &quot;spawn_model&quot;, model=&quot;turtlebot3&quot;):</span>
+<span class="sd">        ...     # Do work</span>
+<span class="sd">        ...     pass</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">logger</span><span class="o">.</span><span class="n">operation</span><span class="p">(</span><span class="n">operation_name</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">):</span>
+        <span class="k">yield</span></div>
+
+
+
+<span class="c1"># Example usage:</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="c1"># Basic logging:</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;example&quot;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Server starting&quot;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="mi">8080</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;stdio&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Operation timing:</span>
+    <span class="k">with</span> <span class="n">logger</span><span class="o">.</span><span class="n">operation</span><span class="p">(</span><span class="s2">&quot;test_operation&quot;</span><span class="p">,</span> <span class="n">test_param</span><span class="o">=</span><span class="s2">&quot;value&quot;</span><span class="p">):</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.1</span><span class="p">)</span>
+
+    <span class="c1"># Model events:</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">log_model_event</span><span class="p">(</span><span class="s2">&quot;spawned&quot;</span><span class="p">,</span> <span class="s2">&quot;turtlebot3&quot;</span><span class="p">,</span> <span class="n">position</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">})</span>
+
+    <span class="c1"># Error logging:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Test error&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">&quot;Operation failed&quot;</span><span class="p">,</span> <span class="n">operation</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">)</span>
+
+    <span class="c1"># JSON formatting:</span>
+    <span class="n">json_logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;json_example&quot;</span><span class="p">,</span> <span class="n">json_format</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">json_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Structured log&quot;</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="s2">&quot;value&quot;</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="mi">42</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Development Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
