@@ -141,9 +141,9 @@ class GazeboError(GazeboMCPError):
 class GazeboNotRunningError(GazeboError):
     """Gazebo simulation is not running."""
 
-    def __init__(self):
+    def __init__(self, message: str = "Gazebo simulation is not running"):
         super().__init__(
-            message="Gazebo simulation is not running",
+            message=message,
             error_code="GAZEBO_NOT_RUNNING",
             suggestions=[
                 "Start Gazebo: ros2 launch gazebo_ros gazebo.launch.py",
@@ -166,6 +166,22 @@ class GazeboTimeoutError(GazeboError):
                 "Check Gazebo is responsive",
                 "Check system resources (CPU, memory)",
                 "Reduce simulation complexity"
+            ]
+        )
+
+
+class GazeboServiceError(GazeboError):
+    """Gazebo service call failed."""
+
+    def __init__(self, service_name: str, details: str):
+        super().__init__(
+            message=f"Gazebo service '{service_name}' failed: {details}",
+            error_code="GAZEBO_SERVICE_ERROR",
+            suggestions=[
+                "Check Gazebo is running",
+                "Verify service is available",
+                "Check service parameters are correct",
+                "Review Gazebo logs for details"
             ]
         )
 
