@@ -193,12 +193,24 @@ class ModernGazeboAdapter(GazeboInterface):
         # Call service
         future = client.call_async(request)
 
-        # Wait for response with timeout
-        start_time = time.time()
-        while not future.done():
-            if time.time() - start_time > self.timeout:
-                raise GazeboTimeoutError(operation_name, self.timeout)
-            await asyncio.sleep(0.01)
+        # Wait for response with timeout using rclpy spin
+        import rclpy
+        from rclpy.task import Future
+
+        # Use rclpy's spin_until_future_complete for proper ROS2 callback processing
+        rclpy.spin_until_future_complete(
+            self.node,
+            future,
+            timeout_sec=self.timeout
+        )
+
+        if not future.done():
+            raise GazeboTimeoutError(operation_name, self.timeout)
+
+        # Check if the future has an exception
+        exception = future.exception()
+        if exception is not None:
+            raise GazeboServiceError(operation_name, str(exception)) from exception
 
         return future.result()
 
@@ -598,3 +610,49 @@ class ModernGazeboAdapter(GazeboInterface):
             if isinstance(e, (GazeboNotRunningError, GazeboTimeoutError)):
                 raise
             raise GazeboServiceError("reset_world", str(e)) from e
+
+    def shutdown(self) -> None:
+        """
+        Shutdown adapter and cleanup resources.
+
+        Explicitly destroys all service clients before node destruction
+        to prevent resource leaks.
+        """
+        self.logger.info("Shutting down Modern Gazebo adapter...")
+
+        # Destroy all service clients explicitly
+        for world, client in list(self._spawn_clients.items()):
+            try:
+                self.node.destroy_client(client)
+                self.logger.debug(f"Destroyed spawn client for world '{world}'")
+            except Exception as e:
+                self.logger.warning(f"Error destroying spawn client for '{world}': {e}")
+
+        for world, client in list(self._delete_clients.items()):
+            try:
+                self.node.destroy_client(client)
+                self.logger.debug(f"Destroyed delete client for world '{world}'")
+            except Exception as e:
+                self.logger.warning(f"Error destroying delete client for '{world}': {e}")
+
+        for world, client in list(self._set_pose_clients.items()):
+            try:
+                self.node.destroy_client(client)
+                self.logger.debug(f"Destroyed set_pose client for world '{world}'")
+            except Exception as e:
+                self.logger.warning(f"Error destroying set_pose client for '{world}': {e}")
+
+        for world, client in list(self._control_clients.items()):
+            try:
+                self.node.destroy_client(client)
+                self.logger.debug(f"Destroyed control client for world '{world}'")
+            except Exception as e:
+                self.logger.warning(f"Error destroying control client for '{world}': {e}")
+
+        # Clear dictionaries
+        self._spawn_clients.clear()
+        self._delete_clients.clear()
+        self._set_pose_clients.clear()
+        self._control_clients.clear()
+
+        self.logger.info("Modern Gazebo adapter shutdown complete")

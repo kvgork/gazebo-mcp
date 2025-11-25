@@ -42,8 +42,10 @@ class ModernAdapterTester:
         """Initialize test suite."""
         rclpy.init()
         self.node = Node('modern_adapter_test_node')
-        world_name = os.environ.get('GAZEBO_WORLD_NAME', 'default')
-        self.adapter = ModernGazeboAdapter(self.node, default_world=world_name, timeout=10.0)
+        self.world_name = os.environ.get('GAZEBO_WORLD_NAME', 'default')
+        # Get timeout from environment, default to 20.0 seconds
+        timeout = float(os.environ.get('GAZEBO_TIMEOUT', '20.0'))
+        self.adapter = ModernGazeboAdapter(self.node, default_world=self.world_name, timeout=timeout)
         self.test_results: Dict[str, Dict[str, Any]] = {}
 
     def log(self, message: str, level: str = "INFO"):
@@ -107,7 +109,7 @@ class ModernAdapterTester:
                 name="test_box",
                 sdf=sdf_content,
                 pose=pose,
-                world="default"
+                world=self.world_name
             )
 
             assert success, "Spawn returned False"
@@ -139,7 +141,7 @@ class ModernAdapterTester:
         try:
             state = await self.adapter.get_entity_state(
                 name="test_box",
-                world="default"
+                world=self.world_name
             )
 
             assert isinstance(state, dict), "Expected dict state"
@@ -166,7 +168,7 @@ class ModernAdapterTester:
                 name="test_box",
                 pose=new_pose,
                 twist=None,  # Modern doesn't support twist in set_entity_state
-                world="default"
+                world=self.world_name
             )
 
             assert success, "Set entity state returned False"
@@ -179,9 +181,9 @@ class ModernAdapterTester:
     async def test_get_world_properties(self):
         """Test 5: Get world properties."""
         try:
-            world_info = await self.adapter.get_world_properties(world="default")
+            world_info = await self.adapter.get_world_properties(world=self.world_name)
 
-            assert world_info.name == "default", f"Expected world 'default', got '{world_info.name}'"
+            assert world_info.name == self.world_name, f"Expected world '{self.world_name}', got '{world_info.name}'"
             assert isinstance(world_info.models, list), "Expected list of models"
 
             self.record_test("test_get_world_properties", True,
@@ -194,7 +196,7 @@ class ModernAdapterTester:
     async def test_pause_simulation(self):
         """Test 6: Pause simulation."""
         try:
-            success = await self.adapter.pause_simulation(world="default")
+            success = await self.adapter.pause_simulation(world=self.world_name)
             assert success, "Pause returned False"
 
             # Give it a moment
@@ -209,7 +211,7 @@ class ModernAdapterTester:
     async def test_unpause_simulation(self):
         """Test 7: Unpause simulation."""
         try:
-            success = await self.adapter.unpause_simulation(world="default")
+            success = await self.adapter.unpause_simulation(world=self.world_name)
             assert success, "Unpause returned False"
 
             # Give it a moment
@@ -224,7 +226,7 @@ class ModernAdapterTester:
     async def test_reset_world(self):
         """Test 8: Reset world (model states only)."""
         try:
-            success = await self.adapter.reset_world(world="default")
+            success = await self.adapter.reset_world(world=self.world_name)
             assert success, "Reset world returned False"
 
             self.record_test("test_reset_world", True, "Successfully reset world")
@@ -238,7 +240,7 @@ class ModernAdapterTester:
         try:
             success = await self.adapter.delete_entity(
                 name="test_box",
-                world="default"
+                world=self.world_name
             )
 
             assert success, "Delete returned False"
@@ -251,7 +253,7 @@ class ModernAdapterTester:
     async def test_reset_simulation(self):
         """Test 10: Reset simulation (full reset)."""
         try:
-            success = await self.adapter.reset_simulation(world="default")
+            success = await self.adapter.reset_simulation(world=self.world_name)
             assert success, "Reset simulation returned False"
 
             self.record_test("test_reset_simulation", True, "Successfully reset simulation")
