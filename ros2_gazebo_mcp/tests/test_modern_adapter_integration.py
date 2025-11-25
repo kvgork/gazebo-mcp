@@ -42,7 +42,8 @@ class ModernAdapterTester:
         """Initialize test suite."""
         rclpy.init()
         self.node = Node('modern_adapter_test_node')
-        self.adapter = ModernGazeboAdapter(self.node, default_world="default", timeout=10.0)
+        world_name = os.environ.get('GAZEBO_WORLD_NAME', 'default')
+        self.adapter = ModernGazeboAdapter(self.node, default_world=world_name, timeout=10.0)
         self.test_results: Dict[str, Dict[str, Any]] = {}
 
     def log(self, message: str, level: str = "INFO"):

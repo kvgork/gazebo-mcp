@@ -37,7 +37,7 @@ ign gazebo --version | head -1
 
 # Set environment variables
 export GAZEBO_BACKEND=modern
-export GAZEBO_WORLD_NAME=default
+export GAZEBO_WORLD_NAME=empty
 export GAZEBO_TIMEOUT=10.0
 
 echo ""
@@ -47,19 +47,20 @@ echo "  GAZEBO_WORLD_NAME=$GAZEBO_WORLD_NAME"
 echo "  GAZEBO_TIMEOUT=$GAZEBO_TIMEOUT"
 echo ""
 
-# Start Gazebo in background
-echo "Starting Modern Gazebo (headless)..."
-ign gazebo -s empty.sdf > /tmp/gazebo_test.log 2>&1 &
+# Start Gazebo with ROS2 integration using ros2 launch
+echo "Starting Modern Gazebo with ROS2 integration..."
+source /opt/ros/humble/setup.bash
+ros2 launch ros_gz_sim gz_sim.launch.py gz_args:="-s -r /usr/share/ignition/ignition-gazebo6/worlds/empty.sdf" > /tmp/gazebo_test.log 2>&1 &
 GAZEBO_PID=$!
 
 echo -e "${YELLOW}⏳${NC} Waiting for Gazebo to initialize (PID: $GAZEBO_PID)..."
 
-# Wait for Gazebo to be ready (check for service availability)
+# Wait for Gazebo to be ready and ROS2 services to appear
 MAX_WAIT=30
 ELAPSED=0
 while [ $ELAPSED -lt $MAX_WAIT ]; do
     if source /opt/ros/humble/setup.bash && ros2 service list 2>/dev/null | grep -q "/world/"; then
-        echo -e "${GREEN}✓${NC} Gazebo is ready!"
+        echo -e "${GREEN}✓${NC} Gazebo is ready and ROS2 services are available!"
         break
     fi
     sleep 1
@@ -69,14 +70,15 @@ done
 echo ""
 
 if [ $ELAPSED -ge $MAX_WAIT ]; then
-    echo -e "${RED}ERROR: Gazebo failed to start within ${MAX_WAIT}s${NC}"
+    echo -e "${RED}ERROR: Gazebo/ROS2 services failed to start within ${MAX_WAIT}s${NC}"
     echo "Check logs: /tmp/gazebo_test.log"
     kill $GAZEBO_PID 2>/dev/null || true
     exit 1
 fi
 
-# Give it an extra second for stability
-sleep 2
+# List available services for verification
+echo "Available ROS2 services:"
+ros2 service list | grep "/world/" | head -10
 
 # Run tests
 echo ""
@@ -86,7 +88,7 @@ echo "════════════════════════�
 echo ""
 
 source /opt/ros/humble/setup.bash
-python3 tests/test_modern_adapter_integration.py
+/usr/bin/python3 tests/test_modern_adapter_integration.py
 TEST_EXIT_CODE=$?
 
 # Cleanup
@@ -96,7 +98,7 @@ echo "  Cleanup"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
 
-echo "Stopping Gazebo (PID: $GAZEBO_PID)..."
+echo "Stopping Gazebo and ROS2 nodes (PID: $GAZEBO_PID)..."
 kill $GAZEBO_PID 2>/dev/null || true
 sleep 2
 
@@ -105,6 +107,10 @@ if ps -p $GAZEBO_PID > /dev/null 2>&1; then
     echo "Force killing Gazebo..."
     kill -9 $GAZEBO_PID 2>/dev/null || true
 fi
+
+# Clean up any remaining gz/ruby processes
+pkill -9 -f "ign.*gazebo" 2>/dev/null || true
+pkill -9 ruby 2>/dev/null || true
 
 echo -e "${GREEN}✓${NC} Cleanup complete"
 echo ""
