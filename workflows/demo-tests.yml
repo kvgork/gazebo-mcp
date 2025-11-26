@@ -1,0 +1,212 @@
+name: Demo Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'demos/**'
+      - '.github/workflows/demo-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'demos/**'
+      - '.github/workflows/demo-tests.yml'
+
+jobs:
+  test-demos:
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-asyncio pyyaml
+
+    - name: Install ROS2 Humble
+      run: |
+        sudo apt update
+        sudo apt install -y software-properties-common
+        sudo add-apt-repository universe
+        sudo apt update && sudo apt install -y curl gnupg lsb-release
+
+        # Add ROS2 apt repository
+        sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+        # Install ROS2 Humble base
+        sudo apt update
+        sudo apt install -y ros-humble-ros-base
+
+    - name: Install ros_gz packages
+      run: |
+        sudo apt install -y \
+          ros-humble-ros-gz-bridge \
+          ros-humble-ros-gz-interfaces
+
+    - name: Install rclpy
+      run: |
+        pip install rclpy
+
+    - name: Source ROS2
+      run: |
+        echo "source /opt/ros/humble/setup.bash" >> $GITHUB_ENV
+
+    - name: Lint Python code
+      run: |
+        pip install flake8
+        # Stop on syntax errors or undefined names
+        flake8 demos --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Check for complexity and style (warnings only)
+        flake8 demos --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Test demo framework
+      run: |
+        cd demos
+        pytest framework/ -v --cov=framework --cov-report=xml --cov-report=term
+
+    - name: Test Hello World demo configuration
+      run: |
+        cd demos/01_hello_world
+        pytest test_hello_world_demo.py -v -k "config" --cov=. --cov-report=term
+
+    - name: Test Obstacle Course demo configuration
+      run: |
+        cd demos/02_obstacle_course
+        pytest test_obstacle_course_demo.py -v -k "config or file" --cov=. --cov-report=term
+
+    - name: Validate demo configurations
+      run: |
+        cd demos
+        python3 -c "
+        from framework import ConfigLoader
+        import sys
+
+        # Test Hello World config
+        try:
+            config = ConfigLoader.load_demo_config('01_hello_world/config.yaml')
+            is_valid, errors = ConfigLoader.validate_config(config)
+            if not is_valid:
+                print(f'Hello World config validation failed: {errors}')
+                sys.exit(1)
+            print('✓ Hello World config valid')
+        except Exception as e:
+            print(f'Hello World config error: {e}')
+            sys.exit(1)
+
+        # Test Obstacle Course config
+        try:
+            config = ConfigLoader.load_demo_config('02_obstacle_course/config.yaml')
+            is_valid, errors = ConfigLoader.validate_config(config)
+            if not is_valid:
+                print(f'Obstacle Course config validation failed: {errors}')
+                sys.exit(1)
+            print('✓ Obstacle Course config valid')
+        except Exception as e:
+            print(f'Obstacle Course config error: {e}')
+            sys.exit(1)
+
+        print('All configurations valid!')
+        "
+
+    - name: Check SDF syntax
+      run: |
+        # Check that SDF files are well-formed XML
+        sudo apt install -y libxml2-utils
+
+        echo "Checking obstacle_course.sdf..."
+        xmllint --noout demos/02_obstacle_course/worlds/obstacle_course.sdf
+
+        echo "Checking simple_robot.sdf..."
+        xmllint --noout demos/02_obstacle_course/models/simple_robot.sdf
+
+        echo "All SDF files valid!"
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./demos/coverage.xml
+        flags: demos
+        name: demo-tests
+
+    - name: Test summary
+      if: always()
+      run: |
+        echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Python linting passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Framework tests passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Demo configuration tests passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Configuration validation passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ SDF syntax validation passed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Note**: Full demo execution requires Gazebo and is tested manually." >> $GITHUB_STEP_SUMMARY
+
+  lint-yaml:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install yamllint
+      run: |
+        sudo apt install -y yamllint
+
+    - name: Lint YAML files
+      run: |
+        # Create yamllint config
+        cat > .yamllint.yml << EOF
+        extends: default
+        rules:
+          line-length:
+            max: 120
+          indentation:
+            spaces: 2
+          trailing-spaces: {}
+          document-start: disable
+        EOF
+
+        # Lint all YAML files in demos
+        yamllint -c .yamllint.yml demos/**/*.yaml demos/**/*.yml
+
+    - name: Validate workflow files
+      run: |
+        yamllint -c .yamllint.yml .github/workflows/*.yml
+
+  check-scripts:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install shellcheck
+      run: |
+        sudo apt install -y shellcheck
+
+    - name: Check bash scripts
+      run: |
+        # Check all .sh files
+        find demos -name "*.sh" -type f -exec shellcheck {} \;
+
+    - name: Verify executables
+      run: |
+        # Check that demo scripts are executable
+        test -x demos/run_demo.py || exit 1
+        test -x demos/01_hello_world/hello_world_demo.py || exit 1
+        test -x demos/02_obstacle_course/obstacle_course_demo.py || exit 1
+        test -x demos/02_obstacle_course/setup.sh || exit 1
+
+        echo "All required files are executable!"

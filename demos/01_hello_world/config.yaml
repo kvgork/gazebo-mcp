@@ -1,0 +1,18 @@
+# Hello World Demo Configuration
+
+demo_name: "Hello World"
+description: "Simple demonstration of basic Gazebo MCP operations"
+gazebo_world: "empty"
+timeout: 30.0
+
+models:
+  hello_box:
+    sdf_file: "inline"  # SDF is generated inline
+    pose:
+      position: [2.0, 0.0, 0.5]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    new_position: [3.0, 1.0, 0.5]
+    properties:
+      color: "green"
+      size: [1.0, 1.0, 1.0]
+      static: true
