@@ -1,23 +1,52 @@
 # Obstacle Course Demo Configuration
+# Version 2.0 - Nav2 Autonomous Navigation with TurtleBot3
 
-demo_name: "Obstacle Course Challenge"
-description: "Advanced demo with multiple models, physics, and robot navigation"
+demo_name: "Obstacle Course Challenge - Nav2 Autonomous"
+description: "Autonomous robot navigation with Nav2, TurtleBot3, and MCP conversational interface"
+version: "2.0"
+mode: "conversational"  # Use natural language via MCP, not scripts
 gazebo_world: "obstacle_course"
-timeout: 45.0
+timeout: 180.0  # Increased for real navigation (3 minutes)
 
 models:
-  # Mobile robot
+  # Mobile robot - TurtleBot3
   robot:
-    sdf_file: "models/simple_robot.sdf"
+    type: "turtlebot3"  # NEW: Use real TurtleBot3 instead of simple_robot
+    variant: "burger"   # Options: burger, waffle, waffle_pi
+    sdf_file: "models/simple_robot.sdf"  # Fallback for testing only
     pose:
-      position: [0.0, 0.0, 0.1]
+      position: [0.0, 0.0, 0.01]  # Lower height for TurtleBot3
       orientation: [0.0, 0.0, 0.0, 1.0]
+
+    # Waypoints for Nav2 autonomous navigation
     waypoints:
-      - [2.0, 0.0]
-      - [4.0, 0.0]
-      - [4.0, 2.0]
-      - [6.0, 2.0]
-    max_velocity: 0.5
+      - position: [2.0, 0.0]
+        name: "waypoint_1"
+        tolerance: 0.25  # meters
+      - position: [4.0, 0.0]
+        name: "waypoint_2"
+        tolerance: 0.25
+      - position: [4.0, 2.0]
+        name: "waypoint_3"
+        tolerance: 0.25
+      - position: [6.0, 2.0]
+        name: "final_target"
+        tolerance: 0.30
+
+    max_velocity: 0.22  # TurtleBot3 Burger limit (m/s)
+
+    # Nav2 integration settings
+    nav2:
+      enabled: true
+      params_file: "nav2_params.yaml"
+      goal_timeout: 120.0  # seconds per waypoint
+      planner: "NavFn"
+      controller: "DWB"
+      initial_pose_required: true
+      sensors:
+        - lidar
+        - imu
+        - odom
 
   # Obstacle 1: Wall
   wall_1:

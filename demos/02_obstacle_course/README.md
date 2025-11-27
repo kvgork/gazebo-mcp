@@ -1,15 +1,32 @@
 # Obstacle Course Challenge Demo
 
-Advanced demonstration of robot navigation through a challenging obstacle course with multiple waypoints.
+**Version 2.0 - Autonomous Navigation with Nav2 + Conversational Control**
+
+Advanced demonstration of **real autonomous robot navigation** through an obstacle course using TurtleBot3 and Nav2, controlled via natural language through the MCP server.
+
+## 🎯 What's New in v2.0
+
+### Before (v1.0):
+- ❌ Robot teleports between waypoints
+- ❌ Script-based execution only
+- ❌ No obstacle avoidance
+- ❌ No real sensors
+
+### After (v2.0):
+- ✅ **Real autonomous navigation** with Nav2
+- ✅ **Conversational control** via MCP tools - just talk to Claude!
+- ✅ **TurtleBot3** with LiDAR sensor
+- ✅ **Obstacle avoidance** with dynamic path planning
+- ✅ **Physics-based movement** (no teleportation)
 
 ## Overview
 
-This demo showcases advanced Gazebo MCP capabilities:
-1. Complex world setup with custom SDF
-2. Multi-model spawning (robot, obstacles, target)
-3. Physics simulation
-4. Waypoint-based navigation
-5. State verification and error handling
+This demo showcases:
+1. **Nav2 Integration** - ROS2 navigation stack with real path planning
+2. **MCP Conversational Control** - Control robot with natural language
+3. **TurtleBot3 Simulation** - Realistic differential drive robot
+4. **Autonomous Navigation** - Robot drives itself around obstacles
+5. **Modern Architecture** - MCP server → Nav2 → Gazebo
 
 ## Prerequisites
 
@@ -17,23 +34,73 @@ This demo showcases advanced Gazebo MCP capabilities:
 - Modern Gazebo (Fortress/Garden/Harmonic)
 - ros_gz_bridge package
 - Python 3.10+
+- **Nav2 navigation stack**
+- **TurtleBot3 packages**
+
+## 🚀 Quick Start
+
+### Option 1: Conversational Mode (Recommended ⭐)
+
+Control the demo with natural language - no Python coding required!
+
+**See [CONVERSATIONAL_DEMO.md](CONVERSATIONAL_DEMO.md) for full guide.**
+
+Quick steps:
+1. Install dependencies: `./install_turtlebot3.sh`
+2. Start MCP server: `python3 -m mcp.server.server`
+3. Start Gazebo: `gz sim -r worlds/obstacle_course_nav2.sdf`
+4. Start bridge: `./setup.sh`
+5. Start Nav2: `./launch_nav2.sh`
+6. **Talk to Claude**: "Spawn a TurtleBot3 burger and navigate to (4, 2)"
+
+### Option 2: Script Mode (Legacy)
+
+Run the automated Python script:
+```bash
+./obstacle_course_demo.py
+```
 
 ## Setup
 
-### Automated Setup (Recommended)
+### Step 1: Install TurtleBot3 and Nav2
 
-Run the setup script to start Gazebo and ros_gz_bridge automatically:
+**One-time installation:**
+```bash
+cd demos/02_obstacle_course
+./install_turtlebot3.sh
+```
 
+This installs:
+- TurtleBot3 packages (burger/waffle/waffle_pi)
+- Nav2 navigation stack
+- SLAM Toolbox
+- ros_gz_bridge
+
+### Step 2: Start Services
+
+**Terminal 1 - Gazebo:**
+```bash
+cd demos/02_obstacle_course
+gz sim -r worlds/obstacle_course_nav2.sdf
+```
+
+**Terminal 2 - ros_gz_bridge:**
 ```bash
 cd demos/02_obstacle_course
 ./setup.sh
 ```
 
-This will:
-- Verify all dependencies
-- Start Gazebo with obstacle course world
-- Start ros_gz_bridge with required services
-- Validate bridge connectivity
+**Terminal 3 - Nav2 (for conversational mode only):**
+```bash
+cd demos/02_obstacle_course
+./launch_nav2.sh
+```
+
+**Terminal 4 - MCP Server (for conversational mode only):**
+```bash
+cd /home/koen/Documents/Personal/code/gazebo-mcp
+python3 -m mcp.server.server
+```
 
 ### Manual Setup
 

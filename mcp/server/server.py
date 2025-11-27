@@ -40,6 +40,7 @@ from mcp.server.adapters import (
     sensor_tools_adapter,
     world_tools_adapter,
     simulation_tools_adapter,
+    navigation_tools_adapter,
 )
 
 _logger = get_logger("mcp_server")
@@ -91,6 +92,7 @@ class GazeboMCPServer:
             sensor_tools_adapter,
             world_tools_adapter,
             simulation_tools_adapter,
+            navigation_tools_adapter,
         ]
 
         for adapter in adapters:
