@@ -12,7 +12,7 @@ After comprehensive analysis using the Plan agent and existing infrastructure re
 
 - **Reduce implementation time by 40-60%** (3-4 weeks → 1.5-2 weeks)
 - **Achieve 98.7% token savings** through ResultFilter integration (CRITICAL - currently missing)
-- **Leverage existing MCP infrastructure** from `/home/koen/workspaces/hackathon-git/claude/mcp/`
+- **Leverage existing MCP infrastructure** from `<path-to-claude>/mcp/`
 - **Apply proven patterns** from Phase 1-2 implementations
 
 ---
@@ -135,12 +135,12 @@ Copy and adapt the existing MCP server:
 
 ```bash
 # Copy existing MCP server as starting point:
-cp /home/koen/workspaces/hackathon-git/claude/mcp/servers/skills-mcp/server.py \
-   /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/src/gazebo_mcp/server.py
+cp <path-to-claude>/mcp/servers/skills-mcp/server.py \
+   <path-to-ros2_gazebo_mcp>/src/gazebo_mcp/server.py
 
 # Also copy supporting files:
-cp /home/koen/workspaces/hackathon-git/claude/skills/execution/sandboxed_executor.py \
-   /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/src/gazebo_mcp/execution/
+cp <path-to-claude>/skills/execution/sandboxed_executor.py \
+   <path-to-ros2_gazebo_mcp>/src/gazebo_mcp/execution/
 ```
 
 **Adapt for ROS2/Gazebo:**
@@ -227,7 +227,7 @@ Create automation script:
 # File: scripts/generate_mcp_assets.py
 
 import sys
-sys.path.insert(0, "/home/koen/workspaces/hackathon-git/claude")
+sys.path.insert(0, "<path-to-claude>")
 
 from skills.mcp_adapter_creator import create_adapter
 from skills.mcp_schema_generator import generate_schema, validate_schema
@@ -398,12 +398,12 @@ def spawn_model(model_name: str, x: float, y: float) -> OperationResult:
 
 ```bash
 # Check if these skills exist in the claude codebase:
-ls -la /home/koen/workspaces/hackathon-git/claude/skills/gazebo_world_manager/
-ls -la /home/koen/workspaces/hackathon-git/claude/skills/gazebo_simulation_controller/
-ls -la /home/koen/workspaces/hackathon-git/claude/skills/nav2_configurator/
+ls -la <path-to-claude>/skills/gazebo_world_manager/
+ls -la <path-to-claude>/skills/gazebo_simulation_controller/
+ls -la <path-to-claude>/skills/nav2_configurator/
 
 # If they exist, review their SKILL.md files:
-cat /home/koen/workspaces/hackathon-git/claude/skills/gazebo_*/SKILL.md
+cat <path-to-claude>/skills/gazebo_*/SKILL.md
 ```
 
 **If they exist, integrate instead of reimplementing:**
@@ -643,16 +643,16 @@ generate_docs(
 
 ### Existing Infrastructure
 
-- **MCP Server:** `/home/koen/workspaces/hackathon-git/claude/mcp/servers/skills-mcp/server.py`
-- **Sandboxed Executor:** `/home/koen/workspaces/hackathon-git/claude/skills/execution/sandboxed_executor.py`
-- **ResultFilter:** `/home/koen/workspaces/hackathon-git/claude/skills/common/filters.py`
-- **MCP Skills:** `/home/koen/workspaces/hackathon-git/claude/skills/mcp_*/`
+- **MCP Server:** `<path-to-claude>/mcp/servers/skills-mcp/server.py`
+- **Sandboxed Executor:** `<path-to-claude>/skills/execution/sandboxed_executor.py`
+- **ResultFilter:** `<path-to-claude>/skills/common/filters.py`
+- **MCP Skills:** `<path-to-claude>/skills/mcp_*/`
 
 ### Documentation
 
-- **MCP Implementation Plan:** `/home/koen/workspaces/hackathon-git/claude/docs/MCP_IMPLEMENTATION_PLAN.md`
-- **Best Practices:** `/home/koen/workspaces/hackathon-git/claude/docs/CODEBASE_IMPROVEMENT_PLAN.md`
-- **CLAUDE.md:** `/home/koen/workspaces/hackathon-git/claude/CLAUDE.md`
+- **MCP Implementation Plan:** `<path-to-claude>/docs/MCP_IMPLEMENTATION_PLAN.md`
+- **Best Practices:** `<path-to-claude>/docs/CODEBASE_IMPROVEMENT_PLAN.md`
+- **CLAUDE.md:** `<path-to-claude>/CLAUDE.md`
 
 ### Skills to Use
 

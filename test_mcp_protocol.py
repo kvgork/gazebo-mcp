@@ -3,10 +3,21 @@
 import subprocess
 import json
 import sys
+import os
+from pathlib import Path
+
+# Find the MCP server wrapper script
+# Check standard locations: ~/.local/bin or project bin/
+server_script = os.environ.get("GAZEBO_MCP_SERVER",
+                               os.path.expanduser("~/.local/bin/gazebo-mcp-server"))
+if not Path(server_script).exists():
+    print(f"Error: gazebo-mcp-server not found at {server_script}")
+    print("Set GAZEBO_MCP_SERVER environment variable or install with install_mcp_global.sh")
+    sys.exit(1)
 
 # Start the MCP server
 proc = subprocess.Popen(
-    ['/home/koen/.local/bin/gazebo-mcp-server'],
+    [server_script],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
     stderr=subprocess.PIPE,

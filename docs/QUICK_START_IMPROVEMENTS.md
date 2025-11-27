@@ -14,7 +14,7 @@ Let's start with `model_management.py` as a test case:
 # File: src/gazebo_mcp/tools/model_management.py
 
 import sys
-sys.path.insert(0, "/home/koen/workspaces/hackathon-git/claude")
+sys.path.insert(0, "<path-to-claude>")
 
 from skills.common.filters import ResultFilter
 from typing import Optional, Dict, Any, List
@@ -180,12 +180,12 @@ if result['count'] > 0:
 
 ```bash
 # Copy existing infrastructure:
-cp /home/koen/workspaces/hackathon-git/claude/mcp/servers/skills-mcp/server.py \
-   /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/src/gazebo_mcp/server_base.py
+cp <path-to-claude>/mcp/servers/skills-mcp/server.py \
+   <path-to-ros2_gazebo_mcp>/src/gazebo_mcp/server_base.py
 
 # Also copy sandbox config:
-cp /home/koen/workspaces/hackathon-git/claude/skills/execution/sandboxed_executor.py \
-   /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/src/gazebo_mcp/execution/
+cp <path-to-claude>/skills/execution/sandboxed_executor.py \
+   <path-to-ros2_gazebo_mcp>/src/gazebo_mcp/execution/
 ```
 
 **Minimal adaptation:**
@@ -194,7 +194,7 @@ cp /home/koen/workspaces/hackathon-git/claude/skills/execution/sandboxed_executo
 # File: src/gazebo_mcp/server.py
 
 import sys
-sys.path.insert(0, "/home/koen/workspaces/hackathon-git/claude")
+sys.path.insert(0, "<path-to-claude>")
 
 from gazebo_mcp.server_base import MCPServer, MCPRequest, MCPResponse
 from gazebo_mcp.bridge.connection_manager import ConnectionManager  # Your Phase 2 code
@@ -367,7 +367,7 @@ Now that you have the pattern from Step 1, apply it to:
 # Template for any tool operation:
 
 import sys
-sys.path.insert(0, "/home/koen/workspaces/hackathon-git/claude")
+sys.path.insert(0, "<path-to-claude>")
 from skills.common.filters import ResultFilter
 
 def your_operation(response_format: str = "filtered", **kwargs):
@@ -443,7 +443,7 @@ def your_operation(response_format: str = "filtered", **kwargs):
 
 import sys
 import os
-sys.path.insert(0, "/home/koen/workspaces/hackathon-git/claude")
+sys.path.insert(0, "<path-to-claude>")
 
 from skills.mcp_adapter_creator import create_adapter
 from skills.mcp_schema_generator import generate_schema, validate_schema
@@ -553,7 +553,7 @@ After completing these steps:
 # Test script: test_mcp_integration.py
 
 import sys
-sys.path.insert(0, "/home/koen/workspaces/hackathon-git/claude")
+sys.path.insert(0, "<path-to-claude>")
 
 from gazebo_mcp.server import GazeboMCPServer, MCPRequest
 from skills.common.filters import ResultFilter

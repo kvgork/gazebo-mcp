@@ -10,13 +10,13 @@ Instead of running bash commands, you interact with the Gazebo MCP server by ask
 
 1. **Start the MCP Server** (one time setup):
 ```bash
-cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/demos
+cd <path-to-ros2_gazebo_mcp>/demos
 ./start_mcp_server.sh
 ```
 
 Or manually:
 ```bash
-cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp
+cd <path-to-ros2_gazebo_mcp>
 source /opt/ros/humble/setup.bash
 /usr/bin/python3 -m gazebo_mcp.server
 ```
@@ -270,7 +270,7 @@ ps aux | grep "mcp.server.server"
 
 **Restart if needed:**
 ```bash
-cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/demos
+cd <path-to-ros2_gazebo_mcp>/demos
 ./start_mcp_server.sh
 ```
 

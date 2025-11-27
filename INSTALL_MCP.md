@@ -7,7 +7,7 @@ Complete guide for installing and configuring the Gazebo MCP server to work with
 ### One-Command Installation
 
 ```bash
-cd /home/koen/Documents/Personal/code/gazebo-mcp/ros2_gazebo_mcp
+cd <path-to-ros2_gazebo_mcp>
 ./install_mcp_global.sh --with-ros2
 ```
 

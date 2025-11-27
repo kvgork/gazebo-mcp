@@ -976,7 +976,7 @@ All demo steps use the Modern adapter methods:
 **Begin**: Create feature branch and start Phase 1, Task 1.1
 
 ```bash
-cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp
+cd <path-to-ros2_gazebo_mcp>
 git checkout -b feature/demo-implementation
 mkdir -p demos/framework
 ```

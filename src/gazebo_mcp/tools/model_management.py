@@ -8,13 +8,16 @@ Based on MCP code execution efficiency pattern from Anthropic.
 """
 
 import sys
+import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 # Add claude project to path for ResultFilter:
-CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
-sys.path.insert(0, str(CLAUDE_ROOT))
+# Use environment variable or relative path from project root
+CLAUDE_ROOT = Path(os.environ.get("CLAUDE_ROOT", Path(__file__).parents[3] / "claude"))
+if CLAUDE_ROOT.exists():
+    sys.path.insert(0, str(CLAUDE_ROOT))
 
 from gazebo_mcp.utils import (
     OperationResult,
@@ -506,33 +509,69 @@ def get_model_state(
             # Convert orientation quaternion to Euler angles:
             from gazebo_mcp.utils.converters import quaternion_to_euler
 
-            orient = model_state.pose["orientation"]
-            roll, pitch, yaw = quaternion_to_euler(
-                orient["x"], orient["y"], orient["z"], orient["w"]
-            )
+            # Handle case where pose might not be a dict
+            pose = model_state.pose
+            if not isinstance(pose, dict):
+                _logger.error(f"Invalid pose type: {type(pose)}, value: {pose}")
+                return error_result(
+                    f"Invalid model state format: pose is {type(pose).__name__}, expected dict",
+                    "INVALID_STATE_FORMAT"
+                )
+
+            orient = pose.get("orientation")
+            # Handle both tuple (x, y, z, w) and dict {"x": ..., "y": ..., "z": ..., "w": ...}
+            if isinstance(orient, (tuple, list)):
+                x, y, z, w = orient
+            else:
+                x, y, z, w = orient["x"], orient["y"], orient["z"], orient["w"]
+
+            roll, pitch, yaw = quaternion_to_euler(x, y, z, w)
+
+            # Handle position - convert tuple to dict if needed
+            pos = pose.get("position")
+            if isinstance(pos, (tuple, list)):
+                position = {"x": pos[0], "y": pos[1], "z": pos[2]}
+            else:
+                position = pos
+
+            # Handle velocity - convert tuple to dict if needed
+            twist = model_state.twist
+            if isinstance(twist, dict) and "linear" in twist:
+                lin = twist["linear"]
+                ang = twist["angular"]
+                if isinstance(lin, (tuple, list)):
+                    velocity = {
+                        "linear": {"x": lin[0], "y": lin[1], "z": lin[2]},
+                        "angular": {"x": ang[0], "y": ang[1], "z": ang[2]}
+                    }
+                else:
+                    velocity = twist
+            else:
+                velocity = twist
 
             # Return based on format:
             if response_format == "concise":
                 return success_result(
                     {
                         "name": model_state.name,
-                        "position": model_state.pose["position"],
+                        "position": position,
                         "orientation": {"roll": roll, "pitch": pitch, "yaw": yaw},
-                        "velocity": model_state.twist,
+                        "velocity": velocity,
                     }
                 )
             else:  # detailed
+                orient_dict = {"x": x, "y": y, "z": z, "w": w} if isinstance(orient, (tuple, list)) else orient
                 return success_result(
                     {
                         "name": model_state.name,
-                        "position": model_state.pose["position"],
+                        "position": position,
                         "orientation": {
                             "roll": roll,
                             "pitch": pitch,
                             "yaw": yaw,
-                            "quaternion": orient,
+                            "quaternion": orient_dict,
                         },
-                        "velocity": model_state.twist,
+                        "velocity": velocity,
                         "state": model_state.state,
                     }
                 )

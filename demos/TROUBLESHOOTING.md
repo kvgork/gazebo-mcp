@@ -226,7 +226,7 @@ ls 02_obstacle_course/worlds/obstacle_course.sdf
 ```
 
 If missing, the file should be at:
-`/home/koen/workspaces/hackathon-git/demos/02_obstacle_course/worlds/obstacle_course.sdf`
+`<path-to-ros2_gazebo_mcp>/demos/02_obstacle_course/worlds/obstacle_course.sdf`
 
 ### Error: `Robot model not found`
 
@@ -292,7 +292,7 @@ pip install pytest pytest-asyncio
 **Solution:**
 Make sure you're in the demos directory:
 ```bash
-cd /home/koen/workspaces/hackathon-git/demos
+cd <path-to-ros2_gazebo_mcp>/demos
 pytest -v
 ```
 

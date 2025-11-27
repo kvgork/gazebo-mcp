@@ -360,8 +360,17 @@ class ClassicGazeboAdapter(GazeboInterface):
             raise ModelNotFoundError(name)
 
         # Extract pose and twist
-        pose_msg = self._model_states_data.pose[idx]
-        twist_msg = self._model_states_data.twist[idx]
+        try:
+            pose_msg = self._model_states_data.pose[idx]
+            twist_msg = self._model_states_data.twist[idx]
+        except Exception as e:
+            self.logger.error(
+                f"Failed to extract pose/twist at index {idx}",
+                error=str(e),
+                pose_type=type(self._model_states_data.pose),
+                twist_type=type(self._model_states_data.twist)
+            )
+            raise
 
         return {
             "name": name,

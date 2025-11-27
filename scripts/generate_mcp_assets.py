@@ -19,8 +19,10 @@ from pathlib import Path
 from typing import List, Dict
 
 # Add claude project to path:
-CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
-sys.path.insert(0, str(CLAUDE_ROOT))
+# Use environment variable or relative path from project root
+CLAUDE_ROOT = Path(os.environ.get("CLAUDE_ROOT", Path(__file__).parents[1] / "claude"))
+if CLAUDE_ROOT.exists():
+    sys.path.insert(0, str(CLAUDE_ROOT))
 
 try:
     from skills.mcp_adapter_creator import create_adapter
@@ -30,7 +32,8 @@ try:
 except ImportError as e:
     print(f"Error: Could not import MCP skills from claude/")
     print(f"  {e}")
-    print("\nMake sure the claude/ directory is at: /home/koen/workspaces/hackathon-git/claude/")
+    print(f"\nMake sure the claude/ directory exists.")
+    print(f"Set CLAUDE_ROOT environment variable or place claude/ at: {CLAUDE_ROOT}")
     sys.exit(1)
 
 

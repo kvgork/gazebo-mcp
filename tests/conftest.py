@@ -14,8 +14,10 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 # Add claude project to path for ResultFilter:
-CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
-sys.path.insert(0, str(CLAUDE_ROOT))
+# Use environment variable or relative path from project root
+CLAUDE_ROOT = Path(os.environ.get("CLAUDE_ROOT", Path(__file__).parent.parent / "claude"))
+if CLAUDE_ROOT.exists():
+    sys.path.insert(0, str(CLAUDE_ROOT))
 
 
 def pytest_addoption(parser):

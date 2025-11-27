@@ -53,13 +53,13 @@ mcp/
 
 2. **Python 3.10+** with dependencies:
    ```bash
-   cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp
+   cd <path-to-ros2_gazebo_mcp>
    pip install -r requirements.txt
    ```
 
 3. **Gazebo MCP package** (build if needed):
    ```bash
-   cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp
+   cd <path-to-ros2_gazebo_mcp>
    colcon build
    source install/setup.bash
    ```
@@ -92,9 +92,9 @@ Add to your `claude_desktop_config.json`:
         "-m",
         "mcp.server.server"
       ],
-      "cwd": "/home/koen/workspaces/hackathon-git/ros2_gazebo_mcp",
+      "cwd": "<path-to-ros2_gazebo_mcp>",
       "env": {
-        "PYTHONPATH": "/home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/src",
+        "PYTHONPATH": "<path-to-ros2_gazebo_mcp>/src",
         "ROS_DOMAIN_ID": "0"
       }
     }
@@ -107,7 +107,7 @@ Add to your `claude_desktop_config.json`:
 ```bash
 # In ~/.bashrc or launch script:
 source /opt/ros/humble/setup.bash
-source /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/install/setup.bash
+source <path-to-ros2_gazebo_mcp>/install/setup.bash
 
 # Then launch Claude Desktop
 ```

@@ -234,7 +234,7 @@ Some tests may timeout if:
 
 Make sure you're in the project root and the source directory is in PYTHONPATH:
 ```bash
-cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp
+cd <path-to-ros2_gazebo_mcp>
 export PYTHONPATH=$PYTHONPATH:$(pwd)/src
 pytest tests/ -v
 ```

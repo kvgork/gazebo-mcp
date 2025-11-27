@@ -122,7 +122,7 @@ Once the server is running, you'll have access to 18+ tools:
 The MCP server can run in mock mode for testing without a Gazebo simulation:
 
 ```bash
-cd /home/koen/Documents/Personal/code/gazebo-mcp/ros2_gazebo_mcp
+cd <path-to-ros2_gazebo_mcp>
 source /opt/ros/humble/setup.bash
 python3.10 -m mcp.server.server
 ```
@@ -154,7 +154,7 @@ ros2 run ros_gz_bridge parameter_bridge \
 
 **Check 1**: Verify you're in the correct directory
 ```bash
-cd /home/koen/Documents/Personal/code/gazebo-mcp/ros2_gazebo_mcp
+cd <path-to-ros2_gazebo_mcp>
 ls .mcp.json  # Should exist
 ```
 

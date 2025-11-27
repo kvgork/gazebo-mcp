@@ -17,10 +17,12 @@ import json
 from pathlib import Path
 
 # Add project and claude to path:
+import os
 PROJECT_ROOT = Path(__file__).parents[1]
-CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
+CLAUDE_ROOT = Path(os.environ.get("CLAUDE_ROOT", PROJECT_ROOT / "claude"))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
-sys.path.insert(0, str(CLAUDE_ROOT))
+if CLAUDE_ROOT.exists():
+    sys.path.insert(0, str(CLAUDE_ROOT))
 
 try:
     from gazebo_mcp.server import GazeboMCPServer, MCPRequest
@@ -31,7 +33,7 @@ except ImportError as e:
     print(f"✗ Import error: {e}")
     print("\nMake sure:")
     print("  1. You're in the ros2_gazebo_mcp/ directory")
-    print("  2. claude/ directory exists at /home/koen/workspaces/hackathon-git/claude/")
+    print(f"  2. claude/ directory exists (set CLAUDE_ROOT or place at: {CLAUDE_ROOT})")
     sys.exit(1)
 
 

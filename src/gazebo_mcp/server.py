@@ -9,7 +9,7 @@ Implements the Model Context Protocol pattern for 98.7% token reduction:
 - Returns only filtered results to agent
 - Manages ROS2 connection lifecycle
 
-Based on: /home/koen/workspaces/hackathon-git/claude/mcp/servers/skills-mcp/server.py
+Based on: claude/mcp/servers/skills-mcp/server.py
 """
 
 import sys
@@ -20,8 +20,10 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, asdict
 
 # Add claude project to path for importing infrastructure
-CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
-sys.path.insert(0, str(CLAUDE_ROOT))
+# Use environment variable or relative path from project root
+CLAUDE_ROOT = Path(os.environ.get("CLAUDE_ROOT", Path(__file__).parents[2] / "claude"))
+if CLAUDE_ROOT.exists():
+    sys.path.insert(0, str(CLAUDE_ROOT))
 
 # Add current project to path
 PROJECT_ROOT = Path(__file__).parents[2]

@@ -5,12 +5,15 @@ Provides functions for loading, saving, and managing Gazebo world files and prop
 """
 
 import sys
+import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 # Add claude project to path for ResultFilter:
-CLAUDE_ROOT = Path("/home/koen/workspaces/hackathon-git/claude")
-sys.path.insert(0, str(CLAUDE_ROOT))
+# Use environment variable or relative path from project root
+CLAUDE_ROOT = Path(os.environ.get("CLAUDE_ROOT", Path(__file__).parents[3] / "claude"))
+if CLAUDE_ROOT.exists():
+    sys.path.insert(0, str(CLAUDE_ROOT))
 
 from gazebo_mcp.utils import (
     OperationResult,

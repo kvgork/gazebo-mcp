@@ -127,7 +127,7 @@ Open a **new terminal**:
 
 ```bash
 # Navigate to demos
-cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/demos
+cd <path-to-ros2_gazebo_mcp>/demos
 
 # Source ROS2
 source /opt/ros/humble/setup.bash
@@ -194,7 +194,7 @@ Steps Failed:      0/5 ❌
 The Obstacle Course has its own setup script that starts both Gazebo and bridge:
 
 ```bash
-cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/demos/02_obstacle_course
+cd <path-to-ros2_gazebo_mcp>/demos/02_obstacle_course
 ./setup.sh
 ```
 
@@ -220,7 +220,7 @@ This script will:
 Open a **new terminal**:
 
 ```bash
-cd /home/koen/workspaces/hackathon-git/ros2_gazebo_mcp/demos/02_obstacle_course
+cd <path-to-ros2_gazebo_mcp>/demos/02_obstacle_course
 
 # Source ROS2
 source /opt/ros/humble/setup.bash
