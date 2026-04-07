@@ -1,0 +1,67 @@
+# Obstacle Course Demo Configuration
+
+demo_name: "Obstacle Course Challenge"
+description: "Advanced demo with multiple models, physics, and robot navigation"
+gazebo_world: "obstacle_course"
+timeout: 45.0
+
+models:
+  # Mobile robot
+  robot:
+    sdf_file: "models/simple_robot.sdf"
+    pose:
+      position: [0.0, 0.0, 0.1]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    waypoints:
+      - [2.0, 0.0]
+      - [4.0, 0.0]
+      - [4.0, 2.0]
+      - [6.0, 2.0]
+    max_velocity: 0.5
+
+  # Obstacle 1: Wall
+  wall_1:
+    sdf_file: "inline"
+    pose:
+      position: [3.0, -1.0, 0.5]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    geometry:
+      type: "box"
+      size: [0.2, 4.0, 1.0]
+    color: [0.8, 0.2, 0.2, 1.0]  # Red
+    static: true
+
+  # Obstacle 2: Wall
+  wall_2:
+    sdf_file: "inline"
+    pose:
+      position: [5.0, 1.0, 0.5]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    geometry:
+      type: "box"
+      size: [0.2, 2.0, 1.0]
+    color: [0.8, 0.2, 0.2, 1.0]  # Red
+    static: true
+
+  # Target zone
+  target:
+    sdf_file: "inline"
+    pose:
+      position: [6.0, 2.0, 0.05]
+      orientation: [0.0, 0.0, 0.0, 1.0]
+    geometry:
+      type: "cylinder"
+      radius: 0.5
+      length: 0.1
+    color: [0.0, 1.0, 0.0, 1.0]  # Green
+    static: true
+
+navigation:
+  arrival_threshold: 0.3  # meters
+  velocity_step: 0.1  # m/s per update
+  update_rate: 10  # Hz
+
+physics:
+  gravity: [0.0, 0.0, -9.81]
+  max_step_size: 0.001
+  real_time_factor: 1.0
