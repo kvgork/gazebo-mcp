@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+*.so
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local
+.claude/
+plans/
+.env
+log/
+
+# ROS2 build artifacts
+install/
+gazebo_mcp_package/build/
+gazebo_mcp_package/install/
+gazebo_mcp_package/log/
+
+# OS
+.DS_Store
+Thumbs.db
