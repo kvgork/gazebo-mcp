@@ -1,4 +1,47 @@
+---
+title: Gazebo MCP
+emoji: 🐨
+colorFrom: yellow
+colorTo: purple
+sdk: static
+pinned: false
+license: mit
+short_description: A mcp server for Gazebo simulations
+tags:
+  - building-mcp-track-enterprise
+  - building-mcp-track-customer
+  - building-mcp-track-creative
+  # - mcp-in-action-track-enterprise
+  # - mcp-in-action-track-customer
+---
+
 # Gazebo MCP Server
+
+Welcome to my submission for the hackathon!
+
+I am always looking for new ways to work with robotics.
+
+This led me to start experimenting with Claude Code where I have been creating agents and skills that help me move faster and learn new concepts.
+With my own robotics project I am reaching a point where I want to try ideas in simulation and see how they behave before turning the robot on.
+
+That is why I joined the MCP first birthday event on Hugging Face. My focus there is a ROS 2 Ignition Gazebo MCP server that can create simulation environments when needed. Once that is running well I plan to work toward an automation agent that uses the server to manage a full testing cycle.
+
+Here are the goals guiding the project
+
+- Learn Gazebo through real use
+- Understand Claude code at a deeper level and see how it supports and works with agents, skills and mcp.
+- Explore the limits and possibilities of agents, skills, and MCP servers(Most of the code is made using Claude)
+- Study how AI can support automated testing inside simulation work
+
+If you work with simulation or agent systems in robtoics I would love to hear what you learned along the way.
+
+Current status: Spawning of objecets is done, now working on getting the turtlebot3 implementation in! Hopefully get that in before the deadline...
+
+Main development has been done in a github repo, as I had some Claude Code Web token left!
+(messy) Github repo: https://github.com/kvgork/gazebo-mcp
+
+Demo: https://youtu.be/EheuCn7wfEM
+Linkedin post: https://www.linkedin.com/posts/koen-van-gorkom_ros-gazebo-claude-activity-7399850098895101952-dTVb?utm_source=share&utm_medium=member_desktop&rcm=ACoAACTbTigBb1Kzy16TjXiTkuP13M5vyZVAQPc
 
 > **ROS2 Model Context Protocol Server for Gazebo Simulation**
 
@@ -9,20 +52,20 @@ Enable AI assistants like Claude to control Gazebo simulations, spawn robots (Tu
 [![ROS2 Humble](https://img.shields.io/badge/ROS2-Humble-blue.svg)](https://docs.ros.org/en/humble/)
 [![Gazebo Harmonic](https://img.shields.io/badge/Gazebo-Harmonic-orange.svg)](https://gazebosim.org/)
 
-## Features (Most still planned)
+## Features
 
 ### Simulation Control
 - Start, stop, pause, and reset Gazebo simulations
 - Configure physics properties (gravity, timestep, etc.)
 - Monitor simulation state
 
-### Robot Management (TurtleBot3 Focus)
+### [WIP] Robot Management (TurtleBot3 Focus)
 - Spawn TurtleBot3 variants (Burger, Waffle, Waffle Pi)
 - Control robot movement via velocity commands
 - Access joint states and control
 - Load custom robot models from URDF/SDF
 
-### Sensor Integration
+### [WIP] Sensor Integration
 - Access camera images (RGB, depth)
 - Retrieve LiDAR point clouds
 - Read IMU data (acceleration, gyroscope)
@@ -34,11 +77,11 @@ Enable AI assistants like Claude to control Gazebo simulations, spawn robots (Tu
   - Primitive shapes (boxes, spheres, cylinders)
   - Custom mesh models
   - Physics properties (mass, friction, collision)
-- **Terrain Modification**: Create diverse environments
+- **[WIP] Terrain Modification**: Create diverse environments
   - Heightmap-based terrain
   - Surface types (grass, concrete, sand, gravel)
   - Procedural terrain generation
-- **Lighting Control**: Customize scene lighting
+- **[WIP] Lighting Control**: Customize scene lighting
   - Ambient, directional, point, and spot lights
   - Day/night cycle simulation
   - Real-time lighting updates
@@ -52,8 +95,7 @@ Enable AI assistants like Claude to control Gazebo simulations, spawn robots (Tu
 ### Prerequisites
 
 - **ROS2**: Humble or Jazzy (LTS recommended)
-- **Gazebo**: Modern Gazebo (Fortress, Garden, or Harmonic) - **Primary Support**
-  - ⚠️ Classic Gazebo 11 is deprecated and will be removed in v2.0.0
+- **Gazebo**: Modern Gazebo (Fortress, Garden, or Harmonic)
 - **Python**: 3.10 or higher
 - **OS**: Ubuntu 22.04 or 24.04 (recommended)
 
@@ -74,18 +116,14 @@ sudo apt install ros-humble-ros-gz
 sudo apt install gz-harmonic  # Gazebo Harmonic
 sudo apt install gz-garden    # Gazebo Garden
 sudo apt install gz-fortress  # Gazebo Fortress
-
-# Note: Classic Gazebo (gazebo-ros-pkgs) is deprecated
-# Only install if you need legacy support:
-# sudo apt install ros-humble-gazebo-ros-pkgs
 ```
 
 #### 2. Clone and Setup
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/gazebo-mcp.git
-cd gazebo-mcp
+git clone https://github.com/kvgork/gazebo-mcp.git
+cd gazebo-mcp/gazebo_mcp_package
 
 # Source ROS2
 source /opt/ros/humble/setup.bash
@@ -106,7 +144,7 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash  # If using colcon build
 
 # Run the MCP server:
-python -m mcp.server.server
+python -m gazebo_mcp.server
 ```
 
 #### 4. Configuration (Optional)
@@ -128,36 +166,34 @@ export GAZEBO_WORLD_NAME=default
 
 # Set service call timeout (seconds)
 export GAZEBO_TIMEOUT=5.0
+
+# Set Claude dependency path (if not in default locations)
+export CLAUDE_ROOT=/path/to/claude
 ```
 
-**Configuration Priority:**
-1. Environment variables (highest)
-2. Default values in code (lowest)
-
-**Note:** Modern Gazebo is now the default backend. Classic Gazebo support is deprecated and will be removed in v2.0.0.
-
-**For Claude Desktop Integration**, add to your `claude_desktop_config.json`:
+**For Claude Code Integration**, add to your MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "gazebo": {
       "command": "python",
-      "args": ["-m", "mcp.server.server"],
-      "cwd": "/path/to/ros2_gazebo_mcp",
+      "args": ["-m", "gazebo_mcp.server"],
+      "cwd": "<path_to_gazebo_mcp_package>",
       "env": {
-        "PYTHONPATH": "/path/to/ros2_gazebo_mcp/src",
+        "PYTHONPATH": "<path_to_gazebo_mcp_package>/src",
         "ROS_DOMAIN_ID": "0",
         "GAZEBO_BACKEND": "modern",
         "GAZEBO_WORLD_NAME": "default",
-        "GAZEBO_TIMEOUT": "5.0"
+        "GAZEBO_TIMEOUT": "5.0",
+        "CLAUDE_ROOT": "/path/to/claude"
       }
     }
   }
 }
 ```
 
-See `mcp/README.md` for detailed MCP server documentation.
+See `gazebo_mcp_package/mcp/README.md` for detailed MCP server documentation.
 
 ### Usage Example
 
@@ -186,51 +222,18 @@ state = await use_mcp_tool("gazebo_get_model_state", {
     "model_name": "my_robot"
 })
 
-# 4. List available sensors
-await use_mcp_tool("gazebo_list_sensors", {
-    "model_name": "my_robot"
-})
-
-# 5. Get sensor data
-sensor_data = await use_mcp_tool("gazebo_get_sensor_data", {
-    "sensor_name": "front_camera",
-    "timeout": 5.0
-})
-
-# 6. Control simulation
+# 4. Control simulation
 await use_mcp_tool("gazebo_pause_simulation", {})
 await use_mcp_tool("gazebo_unpause_simulation", {})
-
-# 7. Get simulation status
-status = await use_mcp_tool("gazebo_get_simulation_status", {})
-```
-
-## Practical Examples
-
-The `examples/` directory contains **5 complete working examples** demonstrating real-world usage:
-
-1. **[01_basic_connection.py](examples/01_basic_connection.py)** - MCP server basics, tool discovery, token efficiency
-2. **[02_spawn_and_control.py](examples/02_spawn_and_control.py)** - Model spawning, state queries, lifecycle management
-3. **[03_sensor_streaming.py](examples/03_sensor_streaming.py)** - Sensor discovery, data access, streaming
-4. **[04_simulation_control.py](examples/04_simulation_control.py)** - Pause/resume, reset, time queries, world properties
-5. **[05_complete_workflow.py](examples/05_complete_workflow.py)** - Full robot testing workflow (8 phases)
-
-**All examples work without ROS2/Gazebo** using mock data. See **[examples/README.md](examples/README.md)** for detailed documentation.
-
-```bash
-# Run any example (no Gazebo required)
-cd examples/
-python 01_basic_connection.py
-python 05_complete_workflow.py
 ```
 
 ## Available MCP Tools
 
-**Total Tools**: 18 tools across 4 categories
+**Total Tools**: 27 tools across 5 categories
 
-See `mcp/README.md` for detailed tool documentation and examples.
+See `gazebo_mcp_package/mcp/README.md` for detailed tool documentation and examples.
 
-### Model Management (5 tools)
+### Model Management (6 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -239,8 +242,9 @@ See `mcp/README.md` for detailed tool documentation and examples.
 | `gazebo_delete_model` | Remove model from simulation |
 | `gazebo_get_model_state` | Query model pose and velocity |
 | `gazebo_set_model_state` | Set model pose and/or velocity (teleport or set velocity) |
+| `gazebo_apply_force` | Apply force/torque to a model for physics testing |
 
-### Sensor Tools (3 tools)(UNTESTED YET)
+### Sensor Tools (3 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -250,7 +254,7 @@ See `mcp/README.md` for detailed tool documentation and examples.
 
 **Supported sensor types**: camera, depth_camera, rgbd_camera, imu, lidar, ray, gps, contact, force_torque, magnetometer, altimeter, sonar
 
-### World Tools (4 tools)
+### World Tools (5 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -258,8 +262,9 @@ See `mcp/README.md` for detailed tool documentation and examples.
 | `gazebo_save_world` | Provide instructions for saving current world |
 | `gazebo_get_world_properties` | Query physics settings, gravity, scene properties |
 | `gazebo_set_world_property` | Provide instructions for updating world properties |
+| `gazebo_set_gravity` | Set simulation gravity vector (Earth, Moon, zero-g, custom) |
 
-### Simulation Control (6 tools)
+### Simulation Control (7 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -269,92 +274,18 @@ See `mcp/README.md` for detailed tool documentation and examples.
 | `gazebo_set_simulation_speed` | Provide instructions for setting simulation speed |
 | `gazebo_get_simulation_time` | Query simulation time and performance metrics |
 | `gazebo_get_simulation_status` | Get comprehensive simulation status |
+| `gazebo_list_worlds` | List all active Gazebo worlds |
 
-## Project Structure
+### ROS2 Tools (6 tools)
 
-```
-ros2_gazebo_mcp/
-├── src/gazebo_mcp/
-│   ├── __init__.py
-│   ├── bridge/
-│   │   ├── __init__.py
-│   │   ├── connection_manager.py    # ROS2 lifecycle management
-│   │   └── gazebo_bridge_node.py    # Gazebo service interface
-│   ├── tools/
-│   │   ├── __init__.py
-│   │   ├── model_management.py      # Model spawn/delete/list/state
-│   │   ├── sensor_tools.py          # Sensor data queries
-│   │   ├── world_tools.py           # World loading/properties
-│   │   └── simulation_tools.py      # Simulation control
-│   └── utils/
-│       ├── __init__.py
-│       ├── validators.py            # Input validation
-│       ├── converters.py            # ROS2 ↔ Python conversions
-│       ├── geometry.py              # Quaternion math, transforms
-│       ├── exceptions.py            # Custom exceptions
-│       ├── logger.py                # Structured logging
-│       ├── metrics.py               # Performance metrics collection
-│       └── profiler.py              # Tool profiling decorator
-├── mcp/
-│   ├── server/
-│   │   ├── server.py                # Main MCP server (stdio protocol)
-│   │   └── adapters/
-│   │       ├── __init__.py
-│   │       ├── model_management_adapter.py
-│   │       ├── sensor_tools_adapter.py
-│   │       ├── world_tools_adapter.py
-│   │       └── simulation_tools_adapter.py
-│   └── README.md                    # MCP server documentation
-├── tests/
-│   ├── conftest.py                  # Pytest configuration
-│   ├── test_integration.py          # Integration tests (80+ tests)
-│   ├── test_utils.py                # Unit tests
-│   └── README.md                    # Test documentation
-├── examples/
-│   ├── 01_basic_connection.py       # Basic MCP usage
-│   ├── 02_spawn_and_control.py      # Model management
-│   ├── 03_sensor_streaming.py       # Sensor data access
-│   ├── 04_simulation_control.py     # Simulation control
-│   ├── 05_complete_workflow.py      # Full robot testing workflow
-│   └── README.md                    # Examples documentation
-├── docs/
-│   ├── IMPLEMENTATION_PLAN.md       # Original implementation plan
-│   ├── PHASE3_PROGRESS.md           # Phase 3 progress tracking
-│   ├── PHASE4_PLAN.md               # Phase 4 enhancements plan
-│   ├── DEPLOYMENT.md                # Production deployment guide
-│   ├── METRICS.md                   # Performance monitoring guide
-│   └── ARCHITECTURE.md              # System architecture
-├── deployment/
-│   ├── gazebo-mcp.service           # systemd service file
-│   └── install.sh                   # Production installation script
-├── scripts/
-│   └── show_metrics.py              # Metrics display and export
-├── .github/workflows/
-│   ├── test.yml                     # CI/CD pipeline
-│   └── pre-commit.yml               # Pre-commit checks
-├── Dockerfile                       # Multi-stage Docker build
-├── docker-compose.yml               # Docker Compose configuration
-├── .dockerignore                    # Docker ignore patterns
-├── pyproject.toml                   # Python package configuration
-├── package.xml                      # ROS2 package manifest
-├── requirements.txt                 # Python dependencies
-├── requirements-dev.txt             # Development dependencies
-├── pytest.ini                       # Pytest configuration
-└── README.md                        # This file
-```
-
-## Documentation
-
-- **[API Reference](docs/api/_build/html/index.html)** - Complete API documentation (Sphinx)
-- **[MCP Server Guide](mcp/README.md)** - Complete MCP server documentation
-- **[Usage Examples](examples/README.md)** - 5 practical examples with detailed documentation
-- **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment, Docker, systemd, monitoring
-- **[Performance Metrics](docs/METRICS.md)** - Monitoring, profiling, and metrics collection
-- **[Test Documentation](tests/README.md)** - Test suite and running tests
-- **[Architecture](docs/ARCHITECTURE.md)** - System design and components
-- **[Implementation Plan](docs/IMPLEMENTATION_PLAN.md)** - Original implementation plan
-- **[Phase 3 Progress](docs/PHASE3_PROGRESS.md)** - Phase 3 completion summary
-- **[Phase 4 Plan](docs/PHASE4_PLAN.md)** - Phase 4 enhancements and production features
+| Tool | Description |
+|------|-------------|
+| `gazebo_list_topics` | List all active ROS2 topics with message types |
+| `gazebo_get_topic_info` | Get detailed info about a specific ROS2 topic |
+| `gazebo_publish_twist` | Publish velocity commands to drive a robot |
+| `gazebo_get_transform` | Look up TF transform between two coordinate frames |
+| `gazebo_spawn_sdf` | Spawn a model from complete SDF/URDF XML string |
+| `gazebo_get_joint_states` | Read current joint positions and velocities from a robot |
 
 ## Key Features & Architecture
 
@@ -390,131 +321,40 @@ Tools automatically fall back to mock data when Gazebo is not available:
 - **60+ unit tests** for validators, converters, geometry
 - **20+ integration tests** for ROS2 and Gazebo integration
 - **95%+ code coverage** for core utilities
-- See `tests/README.md` for running tests
+- See `gazebo_mcp_package/tests/README.md` for running tests
 
-## Deployment
+## Documentation
 
-### Docker Deployment (Recommended for Production)
+All documentation is in the `gazebo_mcp_package/` directory:
 
-**Quick Start:**
+- **[Main README](gazebo_mcp_package/README.md)** - Complete package documentation
+- **[Installation Guide](gazebo_mcp_package/INSTALL_MCP.md)** - Detailed installation instructions
+- **[Quick Install](gazebo_mcp_package/QUICK_INSTALL.md)** - Fast installation guide
+- **[MCP Setup Guide](gazebo_mcp_package/MCP_SETUP_GUIDE.md)** - Claude Code integration
+- **[MCP Server Guide](gazebo_mcp_package/mcp/README.md)** - Complete MCP server documentation
+- **[Demo Guide](gazebo_mcp_package/demos/CONVERSATIONAL_DEMO_GUIDE.md)** - Interactive demos
+- **[Manual Setup](gazebo_mcp_package/demos/MANUAL_SETUP_GUIDE.md)** - Step-by-step setup
+- **[Troubleshooting](gazebo_mcp_package/demos/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Test Documentation](gazebo_mcp_package/tests/README.md)** - Test suite documentation
 
-```bash
-# Start all services (Gazebo + MCP Server):
-docker-compose up
+## Project Structure
 
-# Run in background:
-docker-compose up -d
-
-# View logs:
-docker-compose logs -f mcp_server
-
-# Stop services:
-docker-compose down
 ```
-
-**Development Mode:**
-
-```bash
-# Start with development container:
-docker-compose --profile development up dev
-
-# Run examples:
-docker-compose exec mcp_server python3 examples/01_basic_connection.py
-
-# View metrics:
-docker-compose exec mcp_server python3 scripts/show_metrics.py
+gazebo-mcp/
+├── gazebo_mcp_package/          # Main package directory
+│   ├── src/gazebo_mcp/          # Source code
+│   │   ├── bridge/              # ROS2 connection management
+│   │   ├── tools/               # MCP tool implementations
+│   │   └── utils/               # Utilities (validators, converters, etc.)
+│   ├── mcp/                     # MCP server
+│   │   └── server/              # Server implementation and adapters
+│   ├── tests/                   # Test suite (80+ tests)
+│   ├── demos/                   # Demo scripts and guides
+│   ├── docs/                    # Documentation
+│   ├── scripts/                 # Utility scripts
+│   └── README.md                # Package documentation
+└── README.md                    # This file
 ```
-
-**Monitoring Mode:**
-
-```bash
-# Start with metrics exporter:
-docker-compose --profile monitoring up
-
-# Metrics exported to: ./metrics/metrics.prom (Prometheus format)
-```
-
-See **[Deployment Guide](docs/DEPLOYMENT.md)** for comprehensive deployment documentation including:
-- Production deployment with systemd
-- Security best practices
-- High availability setup
-- Monitoring and observability
-- Backup and recovery
-
-### Production Deployment (systemd)
-
-**Installation:**
-
-```bash
-cd deployment
-sudo ./install.sh
-```
-
-**Service Management:**
-
-```bash
-# Start service:
-sudo systemctl start gazebo-mcp
-
-# Check status:
-sudo systemctl status gazebo-mcp
-
-# View logs:
-sudo journalctl -u gazebo-mcp -f
-
-# Stop service:
-sudo systemctl stop gazebo-mcp
-```
-
-See **[Deployment Guide](docs/DEPLOYMENT.md)** for complete installation and configuration instructions.
-
-## Development
-
-### Running Tests
-
-```bash
-# Unit tests (no ROS2 required):
-pytest tests/test_utils.py -v
-
-# Integration tests (ROS2 required):
-source /opt/ros/humble/setup.bash
-pytest tests/test_integration.py -v --with-ros2
-
-# Full integration tests (Gazebo required):
-# Terminal 1:
-ros2 launch gazebo_ros gazebo.launch.py
-
-# Terminal 2:
-pytest tests/test_integration.py -v --with-gazebo
-
-# Run all tests:
-pytest tests/ -v
-```
-
-See `tests/README.md` for detailed test documentation.
-
-### Code Quality
-
-```bash
-# Type checking (recommended):
-mypy src/gazebo_mcp/
-
-# Linting:
-ruff check src/ tests/
-
-# Formatting:
-black src/ tests/
-```
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Write tests for your changes
-4. Ensure all tests pass
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
 
 ## Troubleshooting
 
@@ -544,7 +384,7 @@ pip install -r requirements.txt
 source /opt/ros/humble/setup.bash
 
 # Run server with logging
-python -m mcp.server.server 2>&1 | tee server.log
+python -m gazebo_mcp.server 2>&1 | tee server.log
 ```
 
 ### "No module named rclpy" Error
@@ -564,89 +404,52 @@ python -c "import rclpy; print('rclpy OK')"
 To connect to real Gazebo:
 ```bash
 # Terminal 1 - Start Gazebo:
-ros2 launch gazebo_ros gazebo.launch.py
+gz sim /usr/share/gz/gz-sim8/worlds/empty.sdf
 
-# Terminal 2 - Run MCP server:
-python -m mcp.server.server
+# Terminal 2 - Start bridge:
+source /opt/ros/humble/setup.bash
+ros2 run ros_gz_bridge parameter_bridge \
+  "/world/empty/control@ros_gz_interfaces/srv/ControlWorld" \
+  "/world/empty/create@ros_gz_interfaces/srv/SpawnEntity" \
+  "/world/empty/remove@ros_gz_interfaces/srv/DeleteEntity" \
+  "/world/empty/set_pose@ros_gz_interfaces/srv/SetEntityPose"
+
+# Terminal 3 - Run MCP server:
+python -m gazebo_mcp.server
 ```
-
-## Performance
-
-**Token Efficiency:**
-- Without ResultFilter: 50,000+ tokens (for 1000 models)
-- With `response_format="summary"`: ~500 tokens (95% savings)
-- With local filtering: ~2,000 tokens (95%+ savings)
-
-**Response Times:**
-- Model operations: < 100ms
-- Sensor queries: < 200ms (depends on topic frequency)
-- Simulation control: < 50ms
-- World queries: < 100ms
-
-**System Requirements:**
-- CPU: Minimal overhead (< 5% CPU usage)
-- Memory: ~100-200 MB (ROS2 + Python)
-- Network: ROS2 local communication only
-
-### Performance Monitoring
-
-View real-time metrics:
-
-```bash
-# Show summary:
-python3 scripts/show_metrics.py
-
-# Show detailed metrics:
-python3 scripts/show_metrics.py --detailed
-
-# Export to Prometheus:
-python3 scripts/show_metrics.py --export metrics.prom --format prometheus
-
-# Export to JSON:
-python3 scripts/show_metrics.py --export metrics.json --format json
-```
-
-See **[Performance Metrics Guide](docs/METRICS.md)** for complete documentation on:
-- Automatic metrics collection
-- Token efficiency tracking
-- Prometheus integration
-- Grafana dashboards
-- Performance optimization
-
-## Implementation Status
-
-### ✅ Phase 1: Core Infrastructure (100% Complete)
-- ROS2 Humble/Jazzy integration
-- Gazebo Harmonic integration
-- Connection management with auto-reconnect
-- Utility functions (validators, converters, geometry)
-
-### ✅ Phase 2: Tool Implementation (100% Complete)
-- Model management (5 tools)
-- Sensor tools (3 tools)
-- World tools (4 tools)
-- Simulation control (6 tools)
-
-### ✅ Phase 3: MCP Server & Testing (100% Complete)
-- MCP server with stdio protocol
-- 4 tool adapters with schemas
-- 80+ tests (unit + integration)
-- Comprehensive documentation
-
-### ✅ Phase 4: Production Enhancements (100% Complete)
-- Complete `set_model_state()` implementation for teleporting models
-- 5 working usage examples with detailed documentation
-- Performance metrics and profiling system
-- Docker deployment (Dockerfile + docker-compose)
-- CI/CD pipeline (GitHub Actions)
-- Production deployment guide (systemd service)
-- Comprehensive deployment documentation
 
 ### 🔵 Future Enhancements
 - Real-time sensor streaming improvements
 - Advanced world generation tools
 - Multi-robot coordination helpers
 - Additional sensor types (thermal, radar)
+
+## Development
+
+### Running Tests
+
+```bash
+# Unit tests (no ROS2 required):
+cd gazebo_mcp_package
+pytest tests/test_utils.py -v
+
+# Integration tests (ROS2 required):
+source /opt/ros/humble/setup.bash
+pytest tests/test_integration.py -v --with-ros2
+
+# Run all tests:
+pytest tests/ -v
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Write tests for your changes
+4. Ensure all tests pass
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
 ## License
 
@@ -662,8 +465,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/kvgork/gazebo-mcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/kvgork/gazebo-mcp/discussions)
-- **Documentation**: [Wiki](https://github.com/kvgork/gazebo-mcp/wiki)
+- **Documentation**: See `gazebo_mcp_package/README.md` for complete documentation
 
 ## Citation
 
@@ -680,4 +482,4 @@ If you use this project in your research, please cite:
 
 ---
 
-**Built with ❤️ for the robotics and AI community**
+**Built for the robotics and AI community**
