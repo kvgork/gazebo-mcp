@@ -75,7 +75,7 @@ def spawn_model_wrapper(
         roll=roll,
         pitch=pitch,
         yaw=yaw,
-        world="default",
+        world=None,
         geometry=geometry,
         size=size_tuple,
         color=color_tuple,
@@ -85,7 +85,7 @@ def spawn_model_wrapper(
 
 def delete_model_wrapper(model_name: str) -> OperationResult:
     """Wrapper for delete_model."""
-    return model_management.delete_model(model_name=model_name, world="default")
+    return model_management.delete_model(model_name=model_name, world=None)
 
 
 def get_model_state_wrapper(
@@ -95,7 +95,7 @@ def get_model_state_wrapper(
     return model_management.get_model_state(
         model_name=model_name,
         response_format=response_format,
-        world="default",
+        world=None,
     )
 
 
@@ -111,13 +111,13 @@ def set_model_state_wrapper(
         pose=pose,
         twist=twist,
         reference_frame=reference_frame,
-        world="default",
+        world=None,
     )
 
 
 def list_models_wrapper(response_format: str = "filtered") -> OperationResult:
     """Wrapper for list_models."""
-    return model_management.list_models(response_format=response_format, world="default")
+    return model_management.list_models(response_format=response_format, world=None)
 
 
 def get_tools() -> List[MCPTool]:

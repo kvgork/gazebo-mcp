@@ -11,7 +11,7 @@ from gazebo_mcp.utils import OperationResult
 from gazebo_mcp.utils.exceptions import GazeboMCPError
 from gazebo_mcp.utils.validators import validate_file_path, validate_positive
 from gazebo_mcp.utils.logger import get_logger
-from gazebo_mcp.tools._bridge_helper import get_bridge, use_real_gazebo
+from gazebo_mcp.tools._bridge_helper import get_bridge, use_real_gazebo, _detect_world_name
 
 __all__ = ["load_world", "save_world", "get_world_properties", "set_world_property", "set_gravity"]
 
@@ -266,7 +266,7 @@ def set_gravity(
     x: float = 0.0,
     y: float = 0.0,
     z: float = -9.81,
-    world: str = "default",
+    world: Optional[str] = None,
 ) -> OperationResult:
     """
     Set simulation gravity vector.
@@ -289,6 +289,8 @@ def set_gravity(
         >>> set_gravity(z=0.0)                 # Zero-g
         >>> set_gravity(z=-1.62)               # Moon
     """
+    if world is None:
+        world = _detect_world_name()
     try:
         gravity = {"x": float(x), "y": float(y), "z": float(z)}
         sdf_snippet = f"<gravity>{x} {y} {z}</gravity>"

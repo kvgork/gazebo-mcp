@@ -26,17 +26,17 @@ from mcp.server.mcp_tool import MCPTool
 
 def pause_simulation_wrapper(timeout: float = 5.0) -> OperationResult:
     """Wrapper for pause_simulation."""
-    return simulation_tools.pause_simulation(timeout=timeout, world="default")
+    return simulation_tools.pause_simulation(timeout=timeout, world=None)
 
 
 def unpause_simulation_wrapper(timeout: float = 5.0) -> OperationResult:
     """Wrapper for unpause_simulation."""
-    return simulation_tools.unpause_simulation(timeout=timeout, world="default")
+    return simulation_tools.unpause_simulation(timeout=timeout, world=None)
 
 
 def reset_simulation_wrapper(timeout: float = 10.0) -> OperationResult:
     """Wrapper for reset_simulation."""
-    return simulation_tools.reset_simulation(timeout=timeout, world="default")
+    return simulation_tools.reset_simulation(timeout=timeout, world=None)
 
 
 def get_tools() -> List[MCPTool]:

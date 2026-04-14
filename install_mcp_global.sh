@@ -80,7 +80,7 @@ echo -e "${GREEN}✓ Claude CLI found${NC}"
 # Check if we're in the right directory
 if [ ! -f "$PROJECT_ROOT/src/gazebo_mcp/server.py" ]; then
     echo -e "${RED}✗ Gazebo MCP source files not found${NC}"
-    echo "Please run this script from the ros2_gazebo_mcp directory"
+    echo "Please run this script from the main directory"
     exit 1
 fi
 echo -e "${GREEN}✓ Project structure verified${NC}"
@@ -198,11 +198,30 @@ mkdir -p "$HOME/.local/bin"
 cat > "$WRAPPER_SCRIPT" << 'WRAPPER_EOF'
 #!/bin/bash
 # Gazebo MCP Server Wrapper
-# Automatically sources ROS2 environment if available
+# Automatically sources ROS2 environment and detects Gazebo world name.
 
 # Source ROS2 if available
 if [ -f "/opt/ros/humble/setup.bash" ]; then
     source /opt/ros/humble/setup.bash
+fi
+
+# Source workspace install if present
+if [ -f "WORKSPACE_INSTALL_PLACEHOLDER/setup.bash" ]; then
+    source "WORKSPACE_INSTALL_PLACEHOLDER/setup.bash"
+fi
+
+# Auto-detect active Gazebo world name (Ignition/Modern Gazebo).
+# Tries gz (Harmonic+) then ign (Fortress). Falls back to 'default'.
+if [ -z "$GAZEBO_WORLD_NAME" ]; then
+    for CLI in gz ign; do
+        if command -v "$CLI" &>/dev/null; then
+            DETECTED=$(${CLI} service --list 2>/dev/null | grep -oP '/world/\K[^/]+(?=/control)' | head -1)
+            if [ -n "$DETECTED" ]; then
+                export GAZEBO_WORLD_NAME="$DETECTED"
+                break
+            fi
+        fi
+    done
 fi
 
 # Set Python path

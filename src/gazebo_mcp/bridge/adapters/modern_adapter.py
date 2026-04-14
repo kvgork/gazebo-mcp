@@ -359,12 +359,12 @@ class ModernGazeboAdapter(GazeboInterface):
         return {
             "name": name,
             "pose": {
-                "position": (0.0, 0.0, 0.0),
-                "orientation": (0.0, 0.0, 0.0, 1.0)
+                "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}
             },
             "twist": {
-                "linear": (0.0, 0.0, 0.0),
-                "angular": (0.0, 0.0, 0.0)
+                "linear": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "angular": {"x": 0.0, "y": 0.0, "z": 0.0}
             }
         }
 
@@ -718,8 +718,9 @@ class ModernGazeboAdapter(GazeboInterface):
 
         except ImportError:
             self.logger.warning(
-                "ros_gz_interfaces not available — cannot apply wrench. "
-                "Install: sudo apt install ros-$ROS_DISTRO-ros-gz-interfaces"
+                "ApplyLinkWrench service not available in this ros_gz_interfaces version. "
+                "This service was added in Ignition Gazebo Garden+. "
+                "Fortress does not support apply_wrench via ROS2 services."
             )
             return False
         except Exception as e:
