@@ -1086,33 +1086,3 @@ class GazeboBridgeNode:
             self._async_thread.join(timeout=5.0)
 
 
-# Example usage:
-if __name__ == "__main__":
-    import rclpy
-    from rclpy.executors import SingleThreadedExecutor
-
-    # Initialize ROS2:
-    rclpy.init()
-
-    try:
-        # Create node:
-        node = rclpy.create_node('gazebo_bridge_test')
-
-        # Create bridge:
-        bridge = GazeboBridgeNode(node)
-
-        # Get model list:
-        print("Getting model list...")
-        models = bridge.get_model_list(timeout=5.0)
-        print(f"Found {len(models)} models:")
-        for model in models:
-            print(f"  - {model.name}: {model.pose['position']}")
-
-    except Exception as e:
-        print(f"Error: {e}")
-
-    finally:
-        # Cleanup:
-        bridge.destroy()
-        node.destroy_node()
-        rclpy.shutdown()

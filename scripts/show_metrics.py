@@ -192,7 +192,7 @@ Examples:
     if summary['total_calls'] == 0:
         print("No metrics collected yet.")
         print("\nTo collect metrics:")
-        print("  1. Run the MCP server: python -m mcp.server.server")
+        print("  1. Run the MCP server: python -m gazebo_mcp.mcp_protocol.server.server")
         print("  2. Make some tool calls")
         print("  3. Run this script again")
         return

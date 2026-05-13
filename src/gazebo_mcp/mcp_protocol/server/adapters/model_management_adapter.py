@@ -20,7 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from gazebo_mcp.tools import model_management
 from gazebo_mcp.utils import OperationResult
-from mcp.server.mcp_tool import MCPTool
+from gazebo_mcp.mcp_protocol.server.mcp_tool import MCPTool
 
 
 def spawn_model_wrapper(

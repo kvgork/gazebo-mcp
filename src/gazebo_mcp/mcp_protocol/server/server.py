@@ -31,10 +31,10 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from gazebo_mcp.utils import OperationResult
 from gazebo_mcp.utils.logger import get_logger
 from gazebo_mcp.utils.metrics import get_metrics_collector
-from mcp.server.mcp_tool import MCPTool
+from gazebo_mcp.mcp_protocol.server.mcp_tool import MCPTool
 
 # Import adapters:
-from mcp.server.adapters import (
+from gazebo_mcp.mcp_protocol.server.adapters import (
     model_management_adapter,
     sensor_tools_adapter,
     world_tools_adapter,

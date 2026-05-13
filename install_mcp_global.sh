@@ -180,7 +180,7 @@ claude mcp remove gazebo 2>/dev/null || true
 
 # Build the command
 MCP_COMMAND="$PYTHON_CMD"
-MCP_ARGS="-m mcp.server.server"
+MCP_ARGS="-m gazebo_mcp.mcp_protocol.server.server"
 
 # Determine if ROS2 is available
 if [ -f "/opt/ros/humble/setup.bash" ]; then
@@ -228,7 +228,7 @@ fi
 export PYTHONPATH="PROJECT_ROOT_PLACEHOLDER/src:PROJECT_ROOT_PLACEHOLDER:$PYTHONPATH"
 
 # Execute the MCP server
-exec PYTHON_CMD_PLACEHOLDER -m mcp.server.server "$@"
+exec PYTHON_CMD_PLACEHOLDER -m gazebo_mcp.mcp_protocol.server.server "$@"
 WRAPPER_EOF
 
 # Replace placeholders
@@ -299,6 +299,6 @@ echo "  - Sensor Access (3 tools)"
 echo "  - World Control (4 tools)"
 echo "  - Simulation Control (6 tools)"
 echo ""
-echo "See MCP_SETUP_GUIDE.md for detailed documentation."
+echo "See docs/guides/MCP_INTEGRATION.md for detailed documentation."
 echo ""
 echo -e "${GREEN}Happy robot simulating! 🤖${NC}"
