@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from mcp.server.server import GazeboMCPServer
+from gazebo_mcp.mcp_protocol.server.server import GazeboMCPServer
 
 
 def main():

@@ -28,7 +28,7 @@ def main():
         stream=sys.stderr,
     )
 
-    from mcp.server.server import GazeboMCPServer
+    from gazebo_mcp.mcp_protocol.server.server import GazeboMCPServer
 
     server = GazeboMCPServer()
     server.run()

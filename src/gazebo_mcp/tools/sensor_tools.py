@@ -83,12 +83,15 @@ def list_sensors(
         response_format = validate_response_format(response_format)
 
         # Get sensors from real Gazebo or mock data:
+        source = "mock"
         if use_real_gazebo():
             bridge = get_bridge()
-            # Real sensor discovery via /world/<name>/scene/info not yet implemented
-            # Uses mock data as placeholder:
-            all_sensors = _get_mock_sensors()
-            _logger.warning("Using mock sensor data - real sensor discovery not yet implemented")
+            all_sensors = _discover_sensors_real(bridge)
+            if all_sensors:
+                source = "live"
+            else:
+                all_sensors = _get_mock_sensors()
+                _logger.warning("Real sensor discovery returned no results, falling back to mock data")
         else:
             all_sensors = _get_mock_sensors()
             _logger.warning("Using mock sensor data - Gazebo not available")
@@ -108,7 +111,8 @@ def list_sensors(
 
             return OperationResult(
                 success=True,
-                data={"count": len(all_sensors), "types": types, "models": models, "token_estimate": 50},
+                data={"count": len(all_sensors), "types": types, "models": models,
+                      "source": source, "token_estimate": 50},
             )
 
         elif response_format == "concise":
@@ -117,6 +121,7 @@ def list_sensors(
                     "name": s["name"],
                     "type": s.get("type", "unknown"),
                     "model": s.get("model", "unknown"),
+                    "topic": s.get("topic", ""),
                     "active": s.get("active", True),
                 }
                 for s in all_sensors
@@ -127,6 +132,7 @@ def list_sensors(
                 data={
                     "sensors": concise_sensors,
                     "count": len(all_sensors),
+                    "source": source,
                     "token_estimate": len(all_sensors) * 20,
                 },
             )
@@ -137,6 +143,7 @@ def list_sensors(
                 data={
                     "sensors": all_sensors,
                     "count": len(all_sensors),
+                    "source": source,
                     # Show agents how to filter locally:
                     "filter_examples": {
                         "search_by_type": "ResultFilter.search(sensors, 'lidar', ['type'])",
@@ -156,6 +163,7 @@ def list_sensors(
                 data={
                     "sensors": all_sensors,
                     "count": len(all_sensors),
+                    "source": source,
                     "token_estimate": len(all_sensors) * TokenEstimates.TOKENS_PER_SENSOR * 5,
                 },
             )
@@ -296,12 +304,22 @@ def subscribe_sensor_stream(
             else:
                 msg_type = _get_message_type_class(message_type)
 
+            # Infer sensor type string from message class for later summarization
+            _sensor_type_map = {
+                "LaserScan": "lidar",
+                "Image": "camera",
+                "Imu": "imu",
+                "NavSatFix": "gps",
+            }
+            inferred_type = _sensor_type_map.get(msg_type.__name__, "unknown")
+
             # Create callback to cache data:
-            def sensor_callback(msg):
+            def sensor_callback(msg, _sname=sensor_name, _stype=inferred_type):
                 # Convert message to dict and cache:
-                data = _message_to_dict(msg, sensor_name)
-                _sensor_data_cache[sensor_name] = data
-                _logger.debug(f"Cached data for {sensor_name}")
+                data = _message_to_dict(msg, _sname)
+                data["type"] = _stype
+                _sensor_data_cache[_sname] = data
+                _logger.debug(f"Cached data for {_sname}")
 
             # Subscribe:
             subscription = bridge.subscribe_to_topic(
@@ -439,6 +457,240 @@ def _message_to_dict(msg, sensor_name: str) -> Dict[str, Any]:
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "error": f"Conversion failed: {e}",
         }
+
+
+def _discover_sensors_real(bridge) -> List[Dict[str, Any]]:
+    """Try real sensor discovery via scene/info service, then ROS2 topic fallback."""
+    world = getattr(bridge, 'world', 'default')
+
+    # Strategy 1: Parse /world/{world}/scene/info proto output
+    sensors = _discover_sensors_from_scene(world)
+    if sensors:
+        _logger.info(f"Discovered {len(sensors)} sensors via scene/info service")
+        return sensors
+
+    # Strategy 2: Infer sensors from active ROS2 topics
+    sensors = _discover_sensors_from_topics(bridge.node)
+    if sensors:
+        _logger.info(f"Discovered {len(sensors)} sensors via ROS2 topic list")
+        return sensors
+
+    return []
+
+
+def _discover_sensors_from_scene(world: str) -> List[Dict[str, Any]]:
+    """Parse /world/{world}/scene/info service output to discover sensors."""
+    import subprocess
+    import re
+
+    # Ignition sensor type enum values → normalized type string.
+    # Integer values from ignition.msgs.Sensor.Type proto enum.
+    # String keys cover cases where the CLI prints enum names instead of integers.
+    IGN_SENSOR_TYPES: Dict[str, str] = {
+        '1': 'camera', 'CAMERA': 'camera',
+        '2': 'depth_camera', 'DEPTH_CAMERA': 'depth_camera',
+        '3': 'lidar', 'LIDAR': 'lidar',
+        '5': 'contact', 'CONTACT': 'contact',
+        '6': 'lidar', 'RAY': 'lidar',
+        '7': 'lidar', 'GPU_RAY': 'lidar', 'GPU_LIDAR': 'lidar',
+        '8': 'force_torque', 'FORCE_TORQUE': 'force_torque',
+        '9': 'sonar', 'SONAR': 'sonar',
+        '10': 'imu', 'IMU': 'imu',
+        '11': 'contact', 'ALTIMETER': 'altimeter',
+        '12': 'sonar', 'MAGNETOMETER': 'magnetometer',
+        '13': 'gps', 'GPS': 'gps',
+        '22': 'magnetometer', '23': 'altimeter',
+    }
+
+    service_name = f'/world/{world}/scene/info'
+
+    for cli, req_type, rep_type in [
+        ('gz',  'gz.msgs.Empty',         'gz.msgs.Scene'),
+        ('ign', 'ignition.msgs.Empty',   'ignition.msgs.Scene'),
+    ]:
+        try:
+            result = subprocess.run(
+                [cli, 'service', '-s', service_name,
+                 '--reqtype', req_type, '--reptype', rep_type,
+                 '--timeout', '3000', '--req', ''],
+                capture_output=True, text=True, timeout=5.0
+            )
+            if result.returncode != 0 or not result.stdout.strip():
+                continue
+
+            sensors = _parse_scene_for_sensors(result.stdout, IGN_SENSOR_TYPES)
+            if sensors:
+                return sensors
+
+        except FileNotFoundError:
+            continue
+        except subprocess.TimeoutExpired:
+            _logger.warning(f"Timeout querying scene/info via {cli}")
+            continue
+        except Exception as e:
+            _logger.debug(f"Scene sensor discovery via {cli} failed: {e}")
+            continue
+
+    return []
+
+
+def _parse_scene_for_sensors(text: str, type_map: Dict[str, str]) -> List[Dict[str, Any]]:
+    """
+    Parse proto text-format scene output to extract sensor entries.
+
+    Tracks brace depth via a state machine to associate each sensor with
+    its parent model and link without requiring a full proto parser.
+    """
+    import re
+
+    sensors: List[Dict[str, Any]] = []
+    lines = text.splitlines()
+
+    # State machine variables
+    depth = 0
+    current_model: Optional[str] = None
+    current_link: Optional[str] = None
+    model_depth: Optional[int] = None
+    link_depth: Optional[int] = None
+    in_sensor = False
+    sensor_depth: Optional[int] = None
+    current_sensor: Optional[Dict[str, Any]] = None
+
+    n_lines = len(lines)
+    i = 0
+    while i < n_lines:
+        line = lines[i]
+        stripped = line.strip()
+        opens = stripped.count('{')
+        closes = stripped.count('}')
+
+        # --- Collect sensor fields while inside a sensor block ---
+        if in_sensor:
+            if depth > sensor_depth:  # type: ignore[operator]
+                m = re.match(r'name:\s*"([^"]+)"', stripped)
+                if m and 'name' not in current_sensor:  # type: ignore[operator]
+                    current_sensor['name'] = m.group(1)  # type: ignore[index]
+
+                m = re.match(r'type:\s*(\w+)', stripped)
+                if m and 'type' not in current_sensor:  # type: ignore[operator]
+                    raw = m.group(1)
+                    current_sensor['type'] = type_map.get(raw, raw.lower())  # type: ignore[index]
+
+                m = re.match(r'topic:\s*"([^"]+)"', stripped)
+                if m and 'topic' not in current_sensor:  # type: ignore[operator]
+                    topic = m.group(1)
+                    current_sensor['topic'] = topic if topic.startswith('/') else '/' + topic  # type: ignore[index]
+
+        # --- Detect block openers (before depth update) ---
+        elif re.search(r'\bmodel\s*\{', stripped) and depth == 0:
+            model_depth = depth
+            current_model = None
+            current_link = None
+
+        elif (model_depth is not None
+              and depth == model_depth + 1
+              and re.match(r'name:\s*"', stripped)
+              and current_model is None):
+            m = re.match(r'name:\s*"([^"]+)"', stripped)
+            if m:
+                current_model = m.group(1)
+
+        elif current_model and re.search(r'\blink\s*\{', stripped) and not in_sensor:
+            link_depth = depth
+            current_link = None  # name will be set on the next matching line
+
+        elif (link_depth is not None
+              and depth == link_depth + 1
+              and re.match(r'name:\s*"', stripped)
+              and current_link is None):
+            m = re.match(r'name:\s*"([^"]+)"', stripped)
+            if m:
+                current_link = m.group(1)
+
+        elif current_model and re.search(r'\bsensor\s*\{', stripped):
+            in_sensor = True
+            sensor_depth = depth
+            current_sensor = {
+                'model': current_model,
+                'frame_id': current_link or '',
+                'active': True,
+            }
+
+        # --- Update brace depth ---
+        depth += opens - closes
+
+        # --- Detect block exits (after depth update) ---
+        if in_sensor and depth <= sensor_depth:  # type: ignore[operator]
+            if current_sensor and 'name' in current_sensor:
+                current_sensor.setdefault('type', 'unknown')
+                sensors.append(current_sensor)
+            in_sensor = False
+            current_sensor = None
+
+        if not in_sensor and link_depth is not None and depth <= link_depth:
+            link_depth = None
+            current_link = None
+
+        if model_depth is not None and depth <= model_depth:
+            current_model = None
+            current_link = None
+            model_depth = None
+            link_depth = None
+
+        i += 1
+
+    return sensors
+
+
+def _discover_sensors_from_topics(node) -> List[Dict[str, Any]]:
+    """
+    Discover sensors from active ROS2 topics as a fallback.
+
+    Maps ROS2 message types to sensor types. Model association is best-effort
+    (inferred from topic namespace when available).
+    """
+    # ROS2 message type → (sensor_type, generic_name_suffix)
+    MSG_TO_SENSOR = {
+        'sensor_msgs/msg/LaserScan': 'lidar',
+        'sensor_msgs/msg/Imu': 'imu',
+        'sensor_msgs/msg/Image': 'camera',
+        'sensor_msgs/msg/NavSatFix': 'gps',
+        'sensor_msgs/msg/MagneticField': 'magnetometer',
+        'sensor_msgs/msg/FluidPressure': 'altimeter',
+        'sensor_msgs/msg/PointCloud2': 'lidar',
+    }
+
+    sensors: List[Dict[str, Any]] = []
+    try:
+        topic_list = node.get_topic_names_and_types()
+    except Exception as e:
+        _logger.warning(f"Could not retrieve ROS2 topic list: {e}")
+        return sensors
+
+    for topic_name, msg_types in topic_list:
+        for msg_type in msg_types:
+            if msg_type not in MSG_TO_SENSOR:
+                continue
+
+            sensor_type = MSG_TO_SENSOR[msg_type]
+            parts = topic_name.strip('/').split('/')
+
+            # Derive sensor name from the topic leaf component
+            sensor_name = parts[-1] if parts else topic_name.strip('/')
+            # Infer model from namespace if topic is nested (e.g. /robot/scan)
+            model = parts[0] if len(parts) > 1 else 'unknown'
+
+            sensors.append({
+                'name': sensor_name,
+                'type': sensor_type,
+                'model': model,
+                'topic': topic_name,
+                'frame_id': '',
+                'active': True,
+            })
+            break  # Use first matching message type per topic
+
+    return sensors
 
 
 def _get_mock_sensors() -> List[Dict[str, Any]]:
