@@ -75,6 +75,49 @@ Enable AI assistants like Claude to control Gazebo simulations, spawn robots (Tu
 
 ### Installation
 
+There are two ways to install: **pixi** (recommended — self-contained, no `apt`/system ROS2 needed) or a manual ROS2 + pip setup.
+
+---
+
+#### Option A — pixi (recommended)
+
+[pixi](https://pixi.sh) pulls ROS2 Jazzy from [RoboStack](https://robostack.github.io/) and the Python deps from conda-forge into one reproducible, locked environment. No `/opt/ros`, no `apt`.
+
+```bash
+# Install pixi (if you don't have it)
+curl -fsSL https://pixi.sh/install.sh | bash
+
+# Clone and install
+git clone https://github.com/kvgork/gazebo-mcp.git
+cd gazebo-mcp
+pixi install            # server only
+# pixi install -e dev   # + pytest/ruff/mypy
+# pixi install -e sim   # + full gz simulator (ros_gz)
+# pixi install -e full  # everything
+
+# Run the server
+pixi run serve
+```
+
+Environments:
+
+| Command | Includes |
+|---|---|
+| `pixi install` | ROS2 Jazzy (rclpy + msgs) + MCP server |
+| `pixi install -e dev` | + pytest, pytest-asyncio/cov/mock/timeout, ruff, mypy |
+| `pixi install -e sim` | + `ros-jazzy-ros-gz` (full Gazebo simulator + bridge) |
+| `pixi install -e full` | sim + dev |
+
+Tasks: `pixi run serve` (stdio server), `pixi run server` (console script), `pixi run -e dev test`, `pixi run -e dev lint`.
+
+The package is installed editable, so `gazebo_mcp` and the `gazebo-mcp-server` entry point are immediately on PATH inside the env. Backend defaults (`GAZEBO_BACKEND=modern`, `GAZEBO_WORLD_NAME=empty`, `PYTHONUNBUFFERED=1`) are set via pixi activation — override per shell as needed.
+
+> Modern (`gz`) Gazebo is the default backend and is fully covered by RoboStack. The classic-Gazebo `gazebo_msgs` spawn/delete paths are not packaged by RoboStack; use Option B if you need classic Gazebo.
+
+---
+
+#### Option B — manual ROS2 + pip
+
 #### 1. Install ROS2 and Gazebo
 
 ```bash
@@ -153,6 +196,21 @@ export GAZEBO_TIMEOUT=5.0
 **Note:** Modern Gazebo is now the default backend. Classic Gazebo support is deprecated and will be removed in v2.0.0.
 
 **For Claude Desktop Integration**, add to your `claude_desktop_config.json`:
+
+If installed via **pixi (Option A)** — `pixi run` handles ROS2 sourcing and env activation, so no `PYTHONPATH`/sourcing needed:
+
+```json
+{
+  "mcpServers": {
+    "gazebo": {
+      "command": "pixi",
+      "args": ["run", "--manifest-path", "/path/to/gazebo-mcp/pixi.toml", "serve"]
+    }
+  }
+}
+```
+
+If installed via **manual setup (Option B)**:
 
 ```json
 {

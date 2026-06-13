@@ -3,7 +3,7 @@ Gazebo MCP Server.
 
 Model Context Protocol server that exposes Gazebo control tools to AI assistants.
 Provides model management, sensor data, world control, simulation operations,
-and ROS2 introspection.
+ROS2 introspection, and developer experience tools.
 
 Architecture:
 - Main server implements MCP protocol (JSON-RPC 2.0 over stdio)
@@ -40,6 +40,7 @@ from mcp.server.adapters import (
     world_tools_adapter,
     simulation_tools_adapter,
     ros2_tools_adapter,
+    developer_tools_adapter,
 )
 
 _logger = get_logger("mcp_server")
@@ -50,8 +51,8 @@ class GazeboMCPServer:
     MCP Server for Gazebo control.
 
     Exposes Gazebo operations as MCP tools via JSON-RPC 2.0 over stdio.
-    Supports 27 tools across 5 domains: model management, sensors, world,
-    simulation, and ROS2 introspection.
+    Supports 39 tools across 6 domains: model management, sensors, world,
+    simulation, ROS2 introspection, and developer experience.
     """
 
     def __init__(self):
@@ -68,6 +69,7 @@ class GazeboMCPServer:
             world_tools_adapter,
             simulation_tools_adapter,
             ros2_tools_adapter,
+            developer_tools_adapter,
         ]
 
         for adapter in adapters:
