@@ -567,6 +567,8 @@ Suggests: Specific parameter changes for performance
 
 ## Enhancement Area 7: Developer Experience & Debugging
 
+**Status:** ✅ IMPLEMENTED (12 tools, branch `feature/planned-capabilities`) — `gazebo_add_debug_marker`, `gazebo_clear_debug_markers`, `gazebo_highlight_model`, `gazebo_launch_rviz`, `gazebo_add_rviz_visualization`, `gazebo_start_recording`, `gazebo_stop_recording`, `gazebo_playback_recording`, `gazebo_save_snapshot`, `gazebo_restore_snapshot`, `gazebo_profile_simulation`, `gazebo_identify_bottlenecks`. RViz/rosbag tools are instruction-style; all support mock-mode fallback.
+
 **Priority:** 🔴 HIGH
 **Impact:** Faster development and easier debugging
 **Estimated Effort:** 2-3 weeks

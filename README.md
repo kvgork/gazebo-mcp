@@ -2,66 +2,52 @@
 
 > **ROS2 Model Context Protocol Server for Gazebo Simulation**
 
-Enable AI assistants like Claude to control Gazebo simulations, spawn robots (TurtleBot3), coordinate multi-robot fleets, manipulate environments, generate test worlds, and gather sensor data through a standardized MCP interface.
+Enable AI assistants like Claude to control Gazebo simulations, spawn and manage models, query world and physics properties, drive robots, and gather sensor data through a standardized MCP interface.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![ROS2 Humble](https://img.shields.io/badge/ROS2-Humble-blue.svg)](https://docs.ros.org/en/humble/)
 [![Gazebo Harmonic](https://img.shields.io/badge/Gazebo-Harmonic-orange.svg)](https://gazebosim.org/)
 
-## Features (Most still planned)
+## Features
 
-### Simulation Control
-- Start, stop, pause, and reset Gazebo simulations
-- Configure physics properties (gravity, timestep, etc.)
-- Monitor simulation state
+The server exposes **27 MCP tools across 5 categories**. See [Available MCP Tools](#available-mcp-tools) for the full per-tool list.
 
-### Robot Management (TurtleBot3 Focus)
-- Spawn TurtleBot3 variants (Burger, Waffle, Waffle Pi)
-- Control robot movement via velocity commands
-- Access joint states and control
-- Load custom robot models from URDF/SDF
-
-### Multi-Robot Coordination ✨ NEW
-- **Fleet Spawning**: Create robot fleets with formation algorithms
-  - Grid formation (auto-sized NxN grids)
-  - Circle formation (robots face center)
-  - Line formation (X or Y axis aligned)
-  - Random formation (collision-free placement)
-- **Fleet Monitoring**: Track multiple robots efficiently
-  - Token-efficient response formats (95% savings with summary)
-  - Fleet statistics (active, moving, idle counts)
-  - Position and velocity tracking
-- **Fleet Command**: Coordinate multiple robots simultaneously
-  - Velocity commands (synchronized movement)
-  - Goal commands (formation initialization)
-  - Emergency stop (broadcast to all robots)
-  - Targeted or pattern-based robot selection
+### Model Management
+- Spawn models from URDF/SDF files or XML strings
+- List, delete, and query models in the simulation
+- Set model pose and velocity (teleport / set velocity)
+- Apply force and torque for physics testing
 
 ### Sensor Integration
-- Access camera images (RGB, depth)
-- Retrieve LiDAR point clouds
-- Read IMU data (acceleration, gyroscope)
-- Query GPS positions
-- Monitor contact sensors
+- List sensors with filtering by model/type
+- Read latest sensor data (camera, depth, RGBD, IMU, LiDAR, GPS, contact, force/torque, magnetometer, altimeter, sonar)
+- Subscribe to a sensor topic and cache streamed data
 
-### Dynamic World Generation
-- **Object Placement**: Add static and dynamic objects
-  - Primitive shapes (boxes, spheres, cylinders)
-  - Custom mesh models
-  - Physics properties (mass, friction, collision)
-- **Terrain Modification**: Create diverse environments
-  - Heightmap-based terrain
-  - Surface types (grass, concrete, sand, gravel)
-  - Procedural terrain generation
-- **Lighting Control**: Customize scene lighting
-  - Ambient, directional, point, and spot lights
-  - Day/night cycle simulation
-  - Real-time lighting updates
-- **Live World Updates**: Modify running simulations
-  - Move objects dynamically
-  - Apply forces and torques
-  - Change appearances and properties
+### World Tools
+- Validate and load world files; save the current world
+- Query physics, gravity, and scene properties
+- Update world properties and set the gravity vector (Earth, Moon, zero-g, custom)
+
+### Simulation Control
+- Pause, unpause, and reset the simulation
+- Set simulation speed and query simulation time / performance metrics
+- Get comprehensive simulation status and list active worlds
+
+### ROS2 Tools
+- List ROS2 topics and inspect topic info
+- Publish velocity (twist) commands to drive a robot
+- Look up TF transforms between coordinate frames
+- Spawn models from SDF/URDF XML and read joint states
+
+### Developer Experience & Debugging
+- Add and clear visual debug markers; highlight models
+- Generate RViz2 launch and visualization-panel instructions
+- Record and play back simulations via rosbag (`ros2 bag` commands)
+- Save and restore simulation snapshots for regression testing
+- Profile performance and identify bottlenecks
+
+> **Note:** Tools gracefully fall back to mock data when Gazebo is not running, so the server is usable for development and testing without a live simulator.
 
 ## Quick Start
 
@@ -300,7 +286,7 @@ python 05_complete_workflow.py
 
 ## Available MCP Tools
 
-**Total Tools**: 27 tools across 5 categories
+**Total Tools**: 39 tools across 6 categories
 
 See `mcp/README.md` for detailed tool documentation and examples.
 
@@ -358,6 +344,25 @@ See `mcp/README.md` for detailed tool documentation and examples.
 | `gazebo_spawn_sdf` | Spawn a model from complete SDF/URDF XML string |
 | `gazebo_get_joint_states` | Read current joint positions and velocities from a robot |
 
+### Developer Experience & Debugging (12 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_add_debug_marker` | Add a visual debug marker (line, arrow, point, text, bounding_box, trajectory, force_vector) |
+| `gazebo_clear_debug_markers` | Remove a specific marker or clear all markers |
+| `gazebo_highlight_model` | Highlight a model with a visual effect (glow, outline, transparency, color_overlay) |
+| `gazebo_launch_rviz` | Generate the RViz2 launch command and recommended panel configuration |
+| `gazebo_add_rviz_visualization` | Generate RViz2 display-panel instructions for a topic (point_cloud, marker, trajectory, map, laser_scan, image) |
+| `gazebo_start_recording` | Start a rosbag recording session; returns the `ros2 bag record` command |
+| `gazebo_stop_recording` | Stop the active recording session and report bag info |
+| `gazebo_playback_recording` | Generate the `ros2 bag play` command for a recorded bag |
+| `gazebo_save_snapshot` | Save a named snapshot of model poses/velocities and world state |
+| `gazebo_restore_snapshot` | Restore a previously saved simulation snapshot |
+| `gazebo_profile_simulation` | Profile real-time factor, physics step time, FPS, memory, sensor rates |
+| `gazebo_identify_bottlenecks` | Return a ranked list of performance bottlenecks with suggestions |
+
+> **Note:** RViz2 launch, rosbag record/play, and snapshot restoration require an external ROS2/Gazebo session — these tools return the exact CLI commands/instructions to run, and operate in mock mode when Gazebo is not available.
+
 ## Project Structure
 
 ```
@@ -391,7 +396,9 @@ ros2_gazebo_mcp/
 │   │       ├── model_management_adapter.py
 │   │       ├── sensor_tools_adapter.py
 │   │       ├── world_tools_adapter.py
-│   │       └── simulation_tools_adapter.py
+│   │       ├── simulation_tools_adapter.py
+│   │       ├── ros2_tools_adapter.py
+│   │       └── developer_tools_adapter.py
 │   └── README.md                    # MCP server documentation
 ├── tests/
 │   ├── conftest.py                  # Pytest configuration
@@ -710,16 +717,22 @@ See **[Performance Metrics Guide](docs/METRICS.md)** for complete documentation 
 - Utility functions (validators, converters, geometry)
 
 ### ✅ Phase 2: Tool Implementation (100% Complete)
-- Model management (5 tools)
+- Model management (6 tools)
 - Sensor tools (3 tools)
-- World tools (4 tools)
-- Simulation control (6 tools)
+- World tools (5 tools)
+- Simulation control (7 tools)
+- ROS2 tools (6 tools)
 
 ### ✅ Phase 3: MCP Server & Testing (100% Complete)
 - MCP server with stdio protocol
-- 4 tool adapters with schemas
+- 6 tool adapters with schemas
 - 80+ tests (unit + integration)
 - Comprehensive documentation
+
+### ✅ Enhancement Area 7: Developer Experience & Debugging (100% Complete)
+- Developer tools (12 tools): debug markers, model highlighting, RViz integration, rosbag record/playback, simulation snapshots, performance profiling
+- 49 unit tests (mock-mode coverage), 244 unit tests passing total
+- See `CAPABILITY_ENHANCEMENT_PLAN.md` Area 7 for the full capability map
 
 ### ✅ Phase 4: Production Enhancements (100% Complete)
 - Complete `set_model_state()` implementation for teleporting models
