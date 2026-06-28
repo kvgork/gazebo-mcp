@@ -228,6 +228,23 @@ class TestMonitorSensorHealth:
         assert "alerts" in result.data
         assert isinstance(result.data["alerts"], list)
 
+    def test_monitor_alerts_fire_for_unhealthy_sensor(self):
+        """gps_sensor (dropout + quality 0.72) produces dropout and low-quality alerts."""
+        with patch.object(advanced_sensor_tools, "use_real_gazebo", return_value=False):
+            result = advanced_sensor_tools.monitor_sensor_health()
+        alerts = result.data["alerts"]
+        assert len(alerts) >= 2
+        joined = " ".join(alerts)
+        assert "gps_sensor" in joined
+        assert "dropout" in joined.lower()
+        assert "low quality" in joined.lower()
+
+    def test_monitor_alerts_empty_for_healthy_sensor(self):
+        """A healthy sensor (lidar_front) produces no alerts."""
+        with patch.object(advanced_sensor_tools, "use_real_gazebo", return_value=False):
+            result = advanced_sensor_tools.monitor_sensor_health(sensor="lidar_front")
+        assert result.data["alerts"] == []
+
 
 class TestRecordSensorStream:
     """Tests for advanced_sensor_tools.record_sensor_stream()."""

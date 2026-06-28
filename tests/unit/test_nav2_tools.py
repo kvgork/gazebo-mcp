@@ -104,6 +104,14 @@ class TestSendNavGoal:
         assert result.error_code == "INVALID_PLANNER"
         assert result.suggestions is not None
 
+    def test_send_goal_rejects_path_only_planners(self):
+        """Path-planner-only values (A*, RRT, RRT*) are NOT valid nav-goal planners."""
+        with patch.object(nav2_tools, "use_real_gazebo", return_value=False):
+            for p in ["A*", "RRT", "RRT*"]:
+                result = nav2_tools.send_nav_goal(1.0, 2.0, planner=p)
+                assert result.success is False, f"send_nav_goal must reject planner={p}"
+                assert result.error_code == "INVALID_PLANNER"
+
     def test_send_goal_data_shape(self):
         with patch.object(nav2_tools, "use_real_gazebo", return_value=False):
             result = nav2_tools.send_nav_goal(2.0, 0.0, theta=1.57)
@@ -208,6 +216,14 @@ class TestPlanPath:
         assert result.success is False
         assert result.error_code == "INVALID_PLANNER"
 
+    def test_plan_path_rejects_goal_only_planners(self):
+        """Goal-controller-only values (RPP, MPPI) are NOT valid path planners."""
+        with patch.object(nav2_tools, "use_real_gazebo", return_value=False):
+            for p in ["RPP", "MPPI"]:
+                result = nav2_tools.plan_path({"x": 0, "y": 0}, {"x": 1, "y": 1}, planner=p)
+                assert result.success is False, f"plan_path must reject planner={p}"
+                assert result.error_code == "INVALID_PLANNER"
+
     def test_plan_path_missing_start_keys_returns_error(self):
         with patch.object(nav2_tools, "use_real_gazebo", return_value=False):
             result = nav2_tools.plan_path({"x": 0}, {"x": 1, "y": 1})
@@ -280,6 +296,13 @@ class TestCreateOccupancyMap:
         with patch.object(nav2_tools, "use_real_gazebo", return_value=False):
             result = nav2_tools.create_occupancy_map(resolution=0.0)
         assert result.success is False
+
+    def test_create_map_non_finite_resolution_returns_error(self):
+        """Inf/NaN resolution is rejected (not silently turned into a bogus map)."""
+        with patch.object(nav2_tools, "use_real_gazebo", return_value=False):
+            for bad in (float("inf"), float("nan"), float("-inf")):
+                result = nav2_tools.create_occupancy_map(resolution=bad)
+                assert result.success is False, f"resolution={bad} must be rejected"
 
     def test_create_map_data_shape(self):
         with patch.object(nav2_tools, "use_real_gazebo", return_value=False):

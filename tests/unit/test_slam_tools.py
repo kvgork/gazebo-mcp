@@ -240,20 +240,26 @@ class TestGetLocalizationQuality:
     """Tests for slam_tools.get_localization_quality()."""
 
     def test_quality_succeeds(self):
-        """Returns success with a quality rating."""
+        """Returns success and the mock metrics classify as 'good'."""
         with patch.object(slam_tools, "use_real_gazebo", return_value=False):
             result = slam_tools.get_localization_quality()
 
         assert result.success is True
-        assert result.data["quality"] in ("good", "fair", "poor")
+        # Pin the categorization: the mock metrics (match_score 0.91,
+        # particle_spread 0.12, ambiguity 0.07) satisfy the 'good' branch.
+        assert result.data["quality"] == "good"
 
     def test_quality_data_shape(self):
-        """Response contains particle_spread, match_score, ambiguity, quality."""
+        """Response contains the documented metrics with their mock values."""
         with patch.object(slam_tools, "use_real_gazebo", return_value=False):
             result = slam_tools.get_localization_quality()
 
         for key in ("particle_spread", "match_score", "ambiguity", "quality"):
             assert key in result.data
+        # Pin the numeric mock values so a constant/threshold regression is caught.
+        assert result.data["match_score"] == 0.91
+        assert result.data["particle_spread"] == 0.12
+        assert result.data["ambiguity"] == 0.07
 
     def test_quality_detailed_includes_timestamp(self):
         """Detailed format includes a timestamp."""

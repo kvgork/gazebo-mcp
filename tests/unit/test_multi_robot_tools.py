@@ -99,6 +99,12 @@ class TestSpawnRobotFleet:
         result = _spawn(count=3, spacing=0.0)
         assert result.success is False
 
+    def test_spawn_non_finite_spacing_returns_error(self):
+        """Inf/NaN spacing is rejected (would otherwise emit inf/nan poses)."""
+        for bad in (float("inf"), float("nan"), float("-inf")):
+            result = _spawn(count=3, spacing=bad)
+            assert result.success is False, f"spacing={bad} must be rejected"
+
     def test_spawn_robots_have_distinct_poses(self):
         """Computed poses are collision-free (distinct) for a grid fleet."""
         result = _spawn(count=4, formation="grid", spacing=2.0)
