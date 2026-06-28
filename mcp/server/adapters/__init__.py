@@ -13,6 +13,7 @@ Each adapter module provides tools for a specific domain:
 - multi_robot_tools_adapter: Fleet spawning, swarm behaviors, coordination
 - advanced_sensor_tools_adapter: Sensor fusion, visualization, calibration
 - slam_tools_adapter: SLAM mapping, localization, loop closure
+- nav2_tools_adapter: Nav2 navigation, path planning, costmaps, waypoints
 """
 
 from . import model_management_adapter
@@ -24,6 +25,7 @@ from . import developer_tools_adapter
 from . import multi_robot_tools_adapter
 from . import advanced_sensor_tools_adapter
 from . import slam_tools_adapter
+from . import nav2_tools_adapter
 
 __all__ = [
     "model_management_adapter",
@@ -35,4 +37,5 @@ __all__ = [
     "multi_robot_tools_adapter",
     "advanced_sensor_tools_adapter",
     "slam_tools_adapter",
+    "nav2_tools_adapter",
 ]

@@ -11,6 +11,7 @@ Tool modules that implement Gazebo simulation control:
 - multi_robot_tools: Fleet spawning, swarm behaviors, multi-robot coordination
 - advanced_sensor_tools: Sensor fusion, visualization, processing, calibration
 - slam_tools: SLAM mapping, localization, loop closure detection
+- nav2_tools: Nav2 navigation, path planning, costmaps, waypoint missions
 """
 
 from . import model_management
@@ -22,6 +23,7 @@ from . import developer_tools
 from . import multi_robot_tools
 from . import advanced_sensor_tools
 from . import slam_tools
+from . import nav2_tools
 
 __all__ = [
     "model_management",
@@ -33,4 +35,5 @@ __all__ = [
     "multi_robot_tools",
     "advanced_sensor_tools",
     "slam_tools",
+    "nav2_tools",
 ]

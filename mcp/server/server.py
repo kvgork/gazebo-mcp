@@ -44,6 +44,7 @@ from mcp.server.adapters import (
     multi_robot_tools_adapter,
     advanced_sensor_tools_adapter,
     slam_tools_adapter,
+    nav2_tools_adapter,
 )
 
 _logger = get_logger("mcp_server")
@@ -54,9 +55,9 @@ class GazeboMCPServer:
     MCP Server for Gazebo control.
 
     Exposes Gazebo operations as MCP tools via JSON-RPC 2.0 over stdio.
-    Supports 59 tools across 9 domains: model management, sensors, world,
+    Supports 69 tools across 10 domains: model management, sensors, world,
     simulation, ROS2 introspection, developer experience, multi-robot
-    coordination, advanced sensors, and SLAM.
+    coordination, advanced sensors, SLAM, and Nav2 navigation.
     """
 
     def __init__(self):
@@ -77,6 +78,7 @@ class GazeboMCPServer:
             multi_robot_tools_adapter,
             advanced_sensor_tools_adapter,
             slam_tools_adapter,
+            nav2_tools_adapter,
         ]
 
         for adapter in adapters:
@@ -210,7 +212,7 @@ class GazeboMCPServer:
                         },
                         "serverInfo": {
                             "name": "gazebo-mcp-server",
-                            "version": "0.3.0",
+                            "version": "0.4.0",
                         },
                     },
                 }
