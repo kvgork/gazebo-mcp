@@ -221,6 +221,63 @@ class GazeboInterface(ABC):
         Get backend identifier.
 
         Returns:
-            "classic" or "modern"
+            "classic", "modern", or "mock"
         """
         pass
+
+    # --- Simulation timing/physics control (added in P0 of the evolution plan) ---
+    # These are NON-abstract with a NotImplementedError default so existing
+    # adapters remain instantiable; backends implement them incrementally.
+    # The mock backend implements all three; real backends land them in the
+    # sim-env slice (map to /control multi_step, /set_physics, and reset seed).
+
+    async def step(self, steps: int = 1, world: str = "default") -> Dict[str, Any]:
+        """
+        Advance the simulation by a fixed number of steps.
+
+        Args:
+            steps: Number of physics steps to advance (>= 1)
+            world: World name
+
+        Returns:
+            Dict with at least 'sim_time' (float) after stepping and 'steps' executed.
+        """
+        raise NotImplementedError(
+            f"step() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def set_physics(
+        self,
+        step_size: Optional[float] = None,
+        rtf: Optional[float] = None,
+        world: str = "default",
+    ) -> bool:
+        """
+        Set physics step size and/or real-time factor at runtime.
+
+        Args:
+            step_size: Physics step size in seconds (optional)
+            rtf: Target real-time factor (optional)
+            world: World name
+
+        Returns:
+            True if applied successfully.
+        """
+        raise NotImplementedError(
+            f"set_physics() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def seed(self, value: int, world: str = "default") -> bool:
+        """
+        Set the simulation random seed for reproducibility.
+
+        Args:
+            value: Seed value
+            world: World name
+
+        Returns:
+            True if applied successfully.
+        """
+        raise NotImplementedError(
+            f"seed() not implemented for backend '{self.get_backend_name()}'"
+        )

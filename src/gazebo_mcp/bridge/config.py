@@ -14,6 +14,7 @@ class GazeboBackend(Enum):
     CLASSIC = "classic"
     MODERN = "modern"
     AUTO = "auto"
+    MOCK = "mock"  # In-memory deterministic backend for CI / no-Gazebo dev
 
 
 class GazeboConfig:
@@ -52,7 +53,7 @@ class GazeboConfig:
             except ValueError:
                 raise ValueError(
                     f"Invalid GAZEBO_BACKEND: {backend_str}. "
-                    f"Must be 'classic', 'modern', or 'auto'"
+                    f"Must be 'classic', 'modern', 'auto', or 'mock'"
                 )
 
         self.backend = backend

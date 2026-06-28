@@ -374,6 +374,9 @@ PY
 
 ### P0 — Bridge gap fixes + own-SDF skeleton; lean `world_*` + `scene_*` *(T4 bridge + T3 consolidation; maps §8 P0)*
 
+> **STATUS — P0-A (mock foundation) ✅ DONE 2026-06-28; P0-B (real adapters + lean tools) PENDING.**
+> Done & verified in `-e dev`: `MockGazeboAdapter` (honest in-memory backend, correct pose readback), `GazeboInterface` extended with async `step`/`set_physics`/`seed` (non-abstract defaults), `GazeboBackend.MOCK` + node-optional factory wiring, and the headline acceptance "spawn cube → query pose → step → remove" as `tests/unit/test_mock_adapter.py` (7 tests, full suite 500 passed). **Still pending (P0-B, needs `-e sim`/`-e full` + the FastMCP-coexistence decision):** real `ModernGazeboAdapter` pose-readback fix + `step`/`set_physics`/`seed` impls (`/control` multi_step, `/set_physics`), the `WorldProvisioner` + owned launch SDF, and the lean `world_*`/`scene_*` tools authored as FastMCP `@mcp.tool`.
+
 **Objective.** Make "spawn cube → query pose → step → remove" **actually pass** against a mock with no real Gazebo. Fix the broken pose readback, add `async` step/physics/seed, land the mock adapter + detection fallback, provision the owned world (matching the P-1 backend decision), and ship lean `world_*`/`scene_*` over stdio.
 
 **Files.**
