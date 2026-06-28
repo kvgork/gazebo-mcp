@@ -73,7 +73,7 @@ else
     check_fail "Server source files missing"
 fi
 
-if [ -f "$SCRIPT_DIR/mcp/server/server.py" ]; then
+if [ -f "$SCRIPT_DIR/gz_mcp_server/server/server.py" ]; then
     check_pass "MCP server implementation found"
 else
     check_fail "MCP server implementation missing"

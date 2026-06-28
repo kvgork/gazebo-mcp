@@ -124,7 +124,7 @@ The MCP server can run in mock mode for testing without a Gazebo simulation:
 ```bash
 cd <path_to_gazebo_mcp_package>
 source /opt/ros/humble/setup.bash
-python3.10 -m mcp.server.server
+python3.10 -m gz_mcp_server.server.server
 ```
 
 It will return mock data but verify the server works.

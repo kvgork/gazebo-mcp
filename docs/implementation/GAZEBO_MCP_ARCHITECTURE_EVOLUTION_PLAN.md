@@ -268,6 +268,9 @@ Each phase lists Objective, Files, Key signatures, Dependencies, **Test migratio
 - Pin the `gz` version compatible with **RoboStack Jazzy `ros-jazzy-ros-gz`** (`pixi.toml [feature.sim]`). State the `ros_gz`↔`gz` compatibility constraint in the decision note.
 - Decide **Fortress-stay** vs **Fortress→Harmonic migration**. The existing `worlds/empty_ros2.sdf` is **Fortress** (`ignition-gazebo-*`, `libros_gz_sim`). Whichever is chosen, P0's `worlds/provisioned.sdf.jinja` must use the matching plugin filenames (`ignition-gazebo-*` for Fortress, `gz-sim-*` for Harmonic). Do **not** assume Harmonic. Record the decision; all later phases inherit it.
 
+> **DECISION (recorded in P-1 — 2026-06-28): target Harmonic; migrate the Fortress world in P0.**
+> Rationale: ROS 2 Jazzy's official Gazebo pairing is **gz Harmonic** (REP-2000), and RoboStack's `ros-jazzy-ros-gz` (`[feature.sim]`) is built against Harmonic. The current `worlds/empty_ros2.sdf` (Fortress `ignition-gazebo-*` plugin names) is therefore mismatched with the Jazzy default and will be re-authored with `gz-sim-*` / `libgz-sim-*` plugin names as `worlds/provisioned.sdf.jinja` in P0. **Verify-before-P0:** once `-e sim`/`-e full` is stood up, confirm the exact gz distro `ros-jazzy-ros-gz` resolves to (`gz sim --version`) and that `gz-sim-*` plugins load; if RoboStack unexpectedly pins Fortress, fall back to Fortress-stay (plugin names already match the existing world) — the choice is isolated to the `.sdf.jinja` plugin block, so the reversal cost is one template.
+
 **Test migration.** None functionally — the 500 collected / 410 unit tests must pass unchanged after the rename. Any test that does `from mcp.server...` (for the local package) is updated to `from gz_mcp_server.server...`. This is a mechanical sed-style edit and is the entire test work for P-1.
 
 **Rollback.** Single rename commit; revert restores the shadowing package. Low risk — no logic changes.

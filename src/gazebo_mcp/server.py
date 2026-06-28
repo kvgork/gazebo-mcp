@@ -4,7 +4,7 @@ Gazebo MCP Server entry point.
 This module provides the `main()` function referenced by pyproject.toml's
 `gazebo-mcp-server` console script entry point.
 
-It delegates to the actual MCP server implementation at mcp/server/server.py.
+It delegates to the actual MCP server implementation at gz_mcp_server/server/server.py.
 """
 
 import sys
@@ -28,7 +28,7 @@ def main():
         stream=sys.stderr,
     )
 
-    from mcp.server.server import GazeboMCPServer
+    from gz_mcp_server.server.server import GazeboMCPServer
 
     server = GazeboMCPServer()
     server.run()

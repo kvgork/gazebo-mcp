@@ -180,7 +180,7 @@ claude mcp remove gazebo 2>/dev/null || true
 
 # Build the command
 MCP_COMMAND="$PYTHON_CMD"
-MCP_ARGS="-m mcp.server.server"
+MCP_ARGS="-m gz_mcp_server.server.server"
 
 # Determine if ROS2 is available
 if [ -f "/opt/ros/humble/setup.bash" ]; then
@@ -209,7 +209,7 @@ fi
 export PYTHONPATH="PROJECT_ROOT_PLACEHOLDER/src:PROJECT_ROOT_PLACEHOLDER:$PYTHONPATH"
 
 # Execute the MCP server
-exec PYTHON_CMD_PLACEHOLDER -m mcp.server.server "$@"
+exec PYTHON_CMD_PLACEHOLDER -m gz_mcp_server.server.server "$@"
 WRAPPER_EOF
 
 # Replace placeholders

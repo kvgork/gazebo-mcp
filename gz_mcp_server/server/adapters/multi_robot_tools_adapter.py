@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from gazebo_mcp.tools import multi_robot_tools
-from mcp.server.mcp_tool import MCPTool
+from gz_mcp_server.server.mcp_tool import MCPTool
 
 
 def get_tools() -> List[MCPTool]:
