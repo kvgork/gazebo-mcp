@@ -8,6 +8,7 @@ Tool modules that implement Gazebo simulation control:
 - world_tools: Load, save, and configure worlds
 - ros2_tools: ROS2 topic discovery, velocity publishing, TF lookups
 - developer_tools: Debug markers, RViz, recording, snapshots, profiling
+- multi_robot_tools: Fleet spawning, swarm behaviors, multi-robot coordination
 """
 
 from . import model_management
@@ -16,6 +17,7 @@ from . import simulation_tools
 from . import world_tools
 from . import ros2_tools
 from . import developer_tools
+from . import multi_robot_tools
 
 __all__ = [
     "model_management",
@@ -24,4 +26,5 @@ __all__ = [
     "world_tools",
     "ros2_tools",
     "developer_tools",
+    "multi_robot_tools",
 ]

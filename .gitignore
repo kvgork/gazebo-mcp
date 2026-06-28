@@ -16,6 +16,9 @@ env/
 # Pixi (keep pixi.lock committed for reproducibility)
 .pixi/
 
+# Orchestration session state
+.agent-state/
+
 # Testing & coverage
 .pytest_cache/
 .coverage

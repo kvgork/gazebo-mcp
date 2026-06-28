@@ -41,6 +41,7 @@ from mcp.server.adapters import (
     simulation_tools_adapter,
     ros2_tools_adapter,
     developer_tools_adapter,
+    multi_robot_tools_adapter,
 )
 
 _logger = get_logger("mcp_server")
@@ -51,8 +52,9 @@ class GazeboMCPServer:
     MCP Server for Gazebo control.
 
     Exposes Gazebo operations as MCP tools via JSON-RPC 2.0 over stdio.
-    Supports 39 tools across 6 domains: model management, sensors, world,
-    simulation, ROS2 introspection, and developer experience.
+    Supports 45 tools across 7 domains: model management, sensors, world,
+    simulation, ROS2 introspection, developer experience, and multi-robot
+    coordination.
     """
 
     def __init__(self):
@@ -70,6 +72,7 @@ class GazeboMCPServer:
             simulation_tools_adapter,
             ros2_tools_adapter,
             developer_tools_adapter,
+            multi_robot_tools_adapter,
         ]
 
         for adapter in adapters:
