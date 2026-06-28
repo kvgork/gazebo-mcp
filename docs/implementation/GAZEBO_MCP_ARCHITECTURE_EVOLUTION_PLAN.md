@@ -292,9 +292,21 @@ pixi run -e dev pytest -q            # 500 collected, all green (410 unit)
 
 ---
 
-### Step 0 — FastMCP scaffold on stdio (parity) *(T1 framework swap, flag-gated)*
+### Step 0 — SDK server scaffold on stdio (parity) *(T1 framework swap, flag-gated)* — ✅ IMPLEMENTED 2026-06-28
 
-**Objective.** Stand up an SDK-bundled FastMCP app on stdio while keeping the existing 69 `gazebo_*` tools 1:1, proving protocol parity before any consolidation. **The old hand-rolled server stays runnable behind a flag/second entry point** until the FastMCP path's acceptance is green.
+> **DECISION (execution-time amendment): use the SDK low-level `Server`, NOT `FastMCP`, for the parity port.**
+> Empirically verified during execution: `FastMCP.add_tool` *infers* a tool's input schema from the Python
+> function signature. The 69 legacy tools are adapter-wrapped handlers with hand-curated JSON schemas
+> (enums, defaults) and `**kwargs` call surfaces, so FastMCP inference corrupts them (`{kwargs: string}`).
+> Since the 69 are consolidated/retired in P0–P2, retyping them all for FastMCP is throwaway work.
+> `mcp.server.lowlevel.Server` lets `list_tools` return the curated `Tool` objects verbatim (proven
+> byte-identical to the legacy server) and `call_tool` dispatch to the existing handlers — exact parity,
+> SDK-compliant lifecycle, zero throwaway. New lean tools (P0+) are authored on **FastMCP** `@mcp.tool`;
+> the app shell adopts FastMCP when its resources/Context/Streamable-HTTP features land (P3).
+
+**Objective.** Stand up an SDK low-level `Server` on the SDK's compliant stdio transport while keeping the existing 69 `gazebo_*` tools 1:1, proving protocol parity before any consolidation. **The old hand-rolled server stays runnable behind a second entry point** until the new path's acceptance is green.
+
+**As-built.** `gz_mcp_server/server/sdk_app.py` (`build_server()` → low-level `Server`, reuses adapter schemas + handlers, `validate_input=False` to preserve handlers' structured errors), `src/gazebo_mcp/sdk_server.py` (`main()` shim → `stdio_server()` + `server.run`), `gazebo-mcp-sdk` console script + `serve-sdk` pixi task (both **parallel** to the retained `gazebo-mcp-server`). Parity test `tests/unit/test_sdk_server_parity.py`: registry count, **exact schema parity vs the legacy server**, in-memory-client `initialize→tools/list→call_tool`, and a real stdio-subprocess smoke. Acceptance met: 69 tools, full suite 493 passed (410 unit), 0 regressions.
 
 **Files.**
 - New: `gz_mcp_server/server/app.py` (`mcp = FastMCP("gazebo-mcp", lifespan=lifespan)`; `lifespan` opens/closes the async bridge connection and stores the `GazeboSession`), `gz_mcp_server/server/fastmcp_main.py` (thin `main()` calling `mcp.run(transport="stdio")`).

@@ -62,6 +62,8 @@ Issues = "https://github.com/kvgork/gazebo-mcp/issues"
 
 [project.scripts]
 gazebo-mcp-server = "gazebo_mcp.server:main"
+# Step-0 migration target: MCP SDK low-level server (parallel to the legacy server above).
+gazebo-mcp-sdk = "gazebo_mcp.sdk_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
