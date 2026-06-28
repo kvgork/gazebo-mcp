@@ -1,7 +1,7 @@
 # Gazebo MCP Server - Capability Enhancement Plan
 
 **Created:** 2025-12-29
-**Status:** 🔵 Planning Phase
+**Status:** 🟢 In Progress — Areas 1, 2, 3, 4, 7 implemented (69 tools total)
 **Goal:** Expand Gazebo MCP server capabilities to provide world-class robot simulation control through AI assistants
 
 ---
@@ -50,6 +50,8 @@ Nice-to-have features for specialized use cases
 ---
 
 ## Enhancement Area 1: Advanced Multi-Robot Coordination
+
+**Status:** ✅ IMPLEMENTED (6 tools, branch `feature/planned-capabilities`) — `gazebo_spawn_robot_fleet`, `gazebo_get_fleet_status`, `gazebo_send_fleet_command`, `gazebo_apply_swarm_behavior`, `gazebo_visualize_robot_network`, `gazebo_enable_multi_robot_collision_avoidance`. Deterministic collision-free formation placement; all support mock-mode fallback. 37 unit tests.
 
 **Priority:** 🔴 HIGH
 **Impact:** Unlocks swarm robotics, multi-agent testing, fleet management
@@ -133,6 +135,8 @@ Features:
 ---
 
 ## Enhancement Area 2: Advanced Sensor Capabilities
+
+**Status:** ✅ IMPLEMENTED (8 tools, branch `feature/planned-capabilities`) — `gazebo_fuse_sensor_data`, `gazebo_visualize_sensor_data`, `gazebo_process_sensor_data`, `gazebo_calibrate_sensor`, `gazebo_monitor_sensor_health`, `gazebo_record_sensor_stream`, `gazebo_detect_objects_in_view`, `gazebo_segment_camera_image`. New `advanced_sensor_tools` module (distinct from baseline `sensor_tools`); mock-mode fallback. 41 unit tests.
 
 **Priority:** 🔴 HIGH
 **Impact:** Better data access, sensor fusion, real-time visualization
@@ -244,6 +248,8 @@ Features:
 
 ## Enhancement Area 3: Navigation & Path Planning (Nav2 Integration)
 
+**Status:** ✅ IMPLEMENTED (10 tools, branch `feature/planned-capabilities`) — `gazebo_initialize_nav2`, `gazebo_send_nav_goal`, `gazebo_cancel_nav_goal`, `gazebo_get_nav_status`, `gazebo_plan_path`, `gazebo_visualize_path`, `gazebo_create_occupancy_map`, `gazebo_update_costmap`, `gazebo_follow_waypoints`, `gazebo_plan_coverage_path`. Multi-planner (A*/RRT/RRT*/DWB/TEB), waypoint missions, coverage planning; mock-mode fallback. 52 unit tests.
+
 **Priority:** 🔴 HIGH
 **Impact:** Complete autonomous navigation capabilities
 **Estimated Effort:** 3-4 weeks
@@ -342,6 +348,8 @@ Applications: Cleaning robots, lawn mowers, inspection
 ---
 
 ## Enhancement Area 4: SLAM & Mapping
+
+**Status:** ✅ IMPLEMENTED (6 tools, branch `feature/planned-capabilities`) — `gazebo_start_slam`, `gazebo_save_slam_map`, `gazebo_load_slam_map`, `gazebo_localize_robot`, `gazebo_get_localization_quality`, `gazebo_detect_loop_closure`. Multi-backend SLAM (slam_toolbox/cartographer/rtabmap/orb_slam3), localization (AMCL/map-matching/ICP); mock-mode fallback. 28 unit tests.
 
 **Priority:** 🔴 HIGH
 **Impact:** Autonomous mapping and localization

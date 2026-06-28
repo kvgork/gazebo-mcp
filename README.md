@@ -286,7 +286,7 @@ python 05_complete_workflow.py
 
 ## Available MCP Tools
 
-**Total Tools**: 39 tools across 6 categories
+**Total Tools**: 69 tools across 10 categories
 
 See `mcp/README.md` for detailed tool documentation and examples.
 
@@ -362,6 +362,58 @@ See `mcp/README.md` for detailed tool documentation and examples.
 | `gazebo_identify_bottlenecks` | Return a ranked list of performance bottlenecks with suggestions |
 
 > **Note:** RViz2 launch, rosbag record/play, and snapshot restoration require an external ROS2/Gazebo session — these tools return the exact CLI commands/instructions to run, and operate in mock mode when Gazebo is not available.
+
+### Multi-Robot Coordination (6 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_spawn_robot_fleet` | Spawn a fleet with collision-free formation placement (line, grid, circle, random) |
+| `gazebo_get_fleet_status` | Query per-robot position, velocity, battery, and task status |
+| `gazebo_send_fleet_command` | Dispatch a command (move, stop, formation, sync, return_home) to the whole fleet or a subset |
+| `gazebo_apply_swarm_behavior` | Apply a swarm behavior (flocking, coverage, formation_keeping, leader_follower, consensus) |
+| `gazebo_visualize_robot_network` | Build comms-graph / task-allocation / formation-line / collision-zone visualization markers |
+| `gazebo_enable_multi_robot_collision_avoidance` | Enable inter-robot collision avoidance (dynamic, social_force, velocity_obstacles, priority) |
+
+### Advanced Sensors (8 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_fuse_sensor_data` | Fuse multiple sensors (lidar_camera, multi_lidar, imu_gps, camera_depth) |
+| `gazebo_visualize_sensor_data` | Build sensor visualization markers (point_cloud, camera_frustum, imu_arrows, gps_path, contact_forces) |
+| `gazebo_process_sensor_data` | Apply processing (voxel/statistical filter, image_blur, edge_detection, segmentation, imu_filter, ground_removal) |
+| `gazebo_calibrate_sensor` | Calibrate a sensor (camera_intrinsics/extrinsics, lidar_offset, imu_bias, time_sync) |
+| `gazebo_monitor_sensor_health` | Report data rate, latency, dropout, and quality score with alerts |
+| `gazebo_record_sensor_stream` | Record sensor topics to a bag (none/lz4/zstd compression) |
+| `gazebo_detect_objects_in_view` | Run object detection on a camera feed with confidence threshold |
+| `gazebo_segment_camera_image` | Semantic or instance segmentation of a camera image |
+
+### SLAM & Mapping (6 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_start_slam` | Start SLAM with a chosen backend (slam_toolbox, cartographer, rtabmap, orb_slam3) |
+| `gazebo_save_slam_map` | Save the generated map (pgm_yaml or ros_map_server format) |
+| `gazebo_load_slam_map` | Load a saved map for localization |
+| `gazebo_localize_robot` | Localize in a known map (amcl, map_matching, icp) |
+| `gazebo_get_localization_quality` | Report particle spread, match score, and ambiguity |
+| `gazebo_detect_loop_closure` | Detect loop closures via visual bag-of-words |
+
+### Navigation & Path Planning — Nav2 (10 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_initialize_nav2` | Initialize the Nav2 stack and lifecycle nodes for a robot |
+| `gazebo_send_nav_goal` | Send a navigation goal (planner: DWB, TEB, RPP, MPPI) |
+| `gazebo_cancel_nav_goal` | Cancel the current or a specific navigation goal |
+| `gazebo_get_nav_status` | Query active goal, progress, distance remaining, obstacles |
+| `gazebo_plan_path` | Plan a path without executing (A*, RRT, RRT*, DWB, TEB) |
+| `gazebo_visualize_path` | Build visualization markers for a planned path |
+| `gazebo_create_occupancy_map` | Generate an occupancy grid from the world |
+| `gazebo_update_costmap` | Inject, clear, or inflate costmap regions |
+| `gazebo_follow_waypoints` | Execute a multi-waypoint mission (sequence, loop, patrol) |
+| `gazebo_plan_coverage_path` | Plan area coverage (boustrophedon, spiral, energy_efficient) |
+
+> **Note:** Multi-robot, advanced-sensor, SLAM, and Nav2 tools integrate with external ROS2 stacks (Nav2, SLAM Toolbox, etc.) where available, and operate in deterministic mock mode when Gazebo/ROS2 is not running.
 
 ## Project Structure
 
