@@ -10,6 +10,7 @@ Tool modules that implement Gazebo simulation control:
 - developer_tools: Debug markers, RViz, recording, snapshots, profiling
 - multi_robot_tools: Fleet spawning, swarm behaviors, multi-robot coordination
 - advanced_sensor_tools: Sensor fusion, visualization, processing, calibration
+- slam_tools: SLAM mapping, localization, loop closure detection
 """
 
 from . import model_management
@@ -20,6 +21,7 @@ from . import ros2_tools
 from . import developer_tools
 from . import multi_robot_tools
 from . import advanced_sensor_tools
+from . import slam_tools
 
 __all__ = [
     "model_management",
@@ -30,4 +32,5 @@ __all__ = [
     "developer_tools",
     "multi_robot_tools",
     "advanced_sensor_tools",
+    "slam_tools",
 ]
