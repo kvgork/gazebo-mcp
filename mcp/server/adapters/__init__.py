@@ -11,6 +11,7 @@ Each adapter module provides tools for a specific domain:
 - ros2_tools_adapter: ROS2 topic discovery, velocity publishing, TF, SDF spawn
 - developer_tools_adapter: Debug markers, RViz, recording, snapshots, profiling
 - multi_robot_tools_adapter: Fleet spawning, swarm behaviors, coordination
+- advanced_sensor_tools_adapter: Sensor fusion, visualization, calibration
 """
 
 from . import model_management_adapter
@@ -20,6 +21,7 @@ from . import simulation_tools_adapter
 from . import ros2_tools_adapter
 from . import developer_tools_adapter
 from . import multi_robot_tools_adapter
+from . import advanced_sensor_tools_adapter
 
 __all__ = [
     "model_management_adapter",
@@ -29,4 +31,5 @@ __all__ = [
     "ros2_tools_adapter",
     "developer_tools_adapter",
     "multi_robot_tools_adapter",
+    "advanced_sensor_tools_adapter",
 ]
