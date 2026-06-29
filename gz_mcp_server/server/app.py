@@ -56,12 +56,24 @@ class GazeboSession:
 
 @asynccontextmanager
 async def app_lifespan(server: FastMCP):
-    """Yield a GazeboSession with the shared bridge.
+    """Yield a GazeboSession holding the shared bridge when reachable.
 
-    Mock-safe: ``get_bridge()`` under ``GAZEBO_BACKEND=mock`` builds a node-less
-    bridge with the deterministic MockGazeboAdapter and never touches ROS.
+    Best-effort by design: a backend connection failure here must NOT abort
+    server startup — otherwise even ``tools/list`` would die when Gazebo is
+    merely not started yet. The lean tools resolve the bridge lazily via
+    ``get_bridge()`` at call time and return a structured ``OperationResult``
+    error if it is down, so startup stays resilient. Mock-safe:
+    ``GAZEBO_BACKEND=mock`` builds a node-less bridge and never touches ROS.
     """
-    yield GazeboSession(bridge=get_bridge())
+    bridge = None
+    try:
+        bridge = get_bridge()
+    except Exception as e:  # noqa: BLE001 — startup must survive a down backend
+        _logger.warning(
+            "Bridge unavailable at startup; tools will retry lazily per call",
+            error=str(e),
+        )
+    yield GazeboSession(bridge=bridge)
 
 
 def build_app() -> FastMCP:

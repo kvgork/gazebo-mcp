@@ -106,13 +106,23 @@ class GazeboConfig:
         Returns:
             GazeboConfig instance
         """
+        def _env_float(name: str, default: str) -> float:
+            raw = os.getenv(name, default)
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"{name} must be a number, got {raw!r}. "
+                    f"Unset it to use the default ({default})."
+                )
+
         return GazeboConfig(
             backend=None,  # Read from GAZEBO_BACKEND
             world_name=os.getenv('GAZEBO_WORLD_NAME', 'default'),
-            timeout=float(os.getenv('GAZEBO_TIMEOUT', '5.0')),
+            timeout=_env_float('GAZEBO_TIMEOUT', '5.0'),
             own_world=os.getenv('GAZEBO_OWN_WORLD', '0').lower() in ('1', 'true', 'yes'),
-            step_size=float(os.getenv('GAZEBO_STEP_SIZE', '0.001')),
-            rtf=float(os.getenv('GAZEBO_RTF', '1.0')),
+            step_size=_env_float('GAZEBO_STEP_SIZE', '0.001'),
+            rtf=_env_float('GAZEBO_RTF', '1.0'),
             model_manifest=os.getenv('GAZEBO_MODEL_MANIFEST'),
         )
 
