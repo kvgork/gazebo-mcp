@@ -375,7 +375,7 @@ PY
 
 ### P0 — Bridge gap fixes + own-SDF skeleton; lean `world_*` + `scene_*` *(T4 bridge + T3 consolidation; maps §8 P0)*
 
-> **STATUS — P0-A (mock foundation) ✅ DONE 2026-06-28; P0-B (real adapters + lean tools) PENDING.**
+> **STATUS — P0-A ✅ DONE 2026-06-28; P0-B MOCK SIDE ✅ DONE & VERIFIED 2026-06-29 (real ros_gz code written, live-verify DEFERRED — see the detailed STATUS block after Acceptance below).**
 > Done & verified in `-e dev`: `MockGazeboAdapter` (honest in-memory backend, correct pose readback), `GazeboInterface` extended with async `step`/`set_physics`/`seed` (non-abstract defaults), `GazeboBackend.MOCK` + node-optional factory wiring, and the headline acceptance "spawn cube → query pose → step → remove" as `tests/unit/test_mock_adapter.py` (7 tests, full suite 500 passed). **Still pending (P0-B, needs `-e sim`/`-e full` + the FastMCP-coexistence decision):** real `ModernGazeboAdapter` pose-readback fix + `step`/`set_physics`/`seed` impls (`/control` multi_step, `/set_physics`), the `WorldProvisioner` + owned launch SDF, and the lean `world_*`/`scene_*` tools authored as FastMCP `@mcp.tool`.
 
 **Objective.** Make "spawn cube → query pose → step → remove" **actually pass** against a mock with no real Gazebo. Fix the broken pose readback, add `async` step/physics/seed, land the mock adapter + detection fallback, provision the owned world (matching the P-1 backend decision), and ship lean `world_*`/`scene_*` over stdio.
@@ -409,16 +409,29 @@ class WorldProvisioner:
 
 **Acceptance.**
 ```bash
-# mock backend, no Gazebo/ROS graph — runs in -e dev:
-GAZEBO_BACKEND=mock pixi run -e dev pytest tests/integration/test_p0_acceptance.py -q
+# mock backend, no Gazebo/ROS graph — runs in -e dev.
+# NOTE: pixi [activation.env] pins GAZEBO_BACKEND=modern, which OVERRIDES a shell
+# `GAZEBO_BACKEND=mock pixi run ...`. The acceptance test therefore forces mock
+# IN-PROCESS (monkeypatch.setenv in an autouse fixture) — do NOT rely on the shell var.
+pixi run -e dev pytest tests/integration/test_p0_acceptance.py tests/unit/test_lean_tools.py -q
 #   asserts: scene_spawn test_cube@(1,2,0.5); scene_get_state == (1,2,0.5)  (impossible before the readback fix);
-#            world_step(100) => sim_time == 100*step_size; scene_remove => not in scene_list_models()
-pixi run -e dev pytest tests/unit/ -q                       # retargeted unit suite green
-# opt-in REAL hardware — needs ros_gz, so -e full (NOT -e dev):
+#            world_step(100) => sim_time == 100*step_size (0.1); scene_remove => not in scene_list_models()
+pixi run -e dev pytest -q                                   # full suite green (2 pre-existing failures unrelated to P0-B)
+# opt-in REAL hardware — needs ros_gz, so -e full (NOT -e dev):  *** DEFERRED — env not installed ***
 pixi run -e full pytest -m gazebo tests/integration/test_p0_acceptance.py
 ```
 
 **Risks.** `/world/<w>/pose/info` typing (`gz.msgs.Pose_V` → `tf2_msgs/TFMessage`) must be exact or readback stays broken — covered by the acceptance assert. World-template plugin filenames must match the P-1 backend (Fortress `ignition-gazebo-*` vs Harmonic `gz-sim-*`) or systems silently don't load.
+
+> **STATUS — P0-B MOCK SIDE ✅ DONE & VERIFIED 2026-06-29** (`-e dev`, commits `8407748` bridge, `3a78749` tools+FastMCP, `b63837b` tests, `065e556` review-fixes). Mock acceptance green (11 new tests; headline spawn→state(1,2,0.5)→step(100)=0.1→remove). FastMCP app introduced now (user decision) — lean tools as `@mcp.tool`; **legacy 69 stay on the retained low-level `sdk_app` entry point** (FastMCP validates args against inferred `FuncMetadata`, not an overridden curated `.parameters`, so clean single-server mount is not viable on mcp 1.27.1 → unification deferred to **P3**). Real ros_gz/Harmonic code is **written but NOT live-verified** (no `-e full`/`ros_gz` here).
+>
+> **P0-B-real — DEFERRED follow-ups (adversarial grill 2026-06-29; all require live ros_gz/Harmonic to fix+verify, none block the mock-side merge):**
+> 1. **`modern_adapter` pose cache keyed only by `child_frame_id`** — SceneBroadcaster `Pose_V`/`TFMessage` carries *every* entity (links/visuals/nested), so cross-model link-name collisions (e.g. `base_link`) shadow model entries; ignores `header.frame_id`. Fix: filter to world-scoped top-level models / key by `(parent, child)`. Add an integration assert that the bridged `child_frame_id` == spawn name. *(high once real)*
+> 2. **`set_physics` claims `applied=True` while silently no-op** — Harmonic physics is a **gz-transport** service (`gz.msgs.Physics`), not a ROS srv; `ros_gz_interfaces.srv.SetPhysics` ImportErrors → both branches `return True`. Fix: shell out to `gz service` (like `list_entities`) or report `applied=False`/`unsupported`. Same honesty bug in **`seed`** (#11) and partially **`step`** sim_time fabricated as 0.0 (#6).
+> 3. **`get_entity_state` cache never invalidated** — returns first-ever pose forever (stale for moving models); deleted entities still report a pose; `ModelNotFoundError` only for never-seen. Fix: always refresh-spin or timestamp+stale-evict; clear cache in `delete_entity`.
+> 4. **`PosePublisher` placed at `<world>` scope** in `provisioned.sdf.jinja` — attaches to no model, may publish nothing on `/world/<w>/pose/info`; verify per-model placement when assets land (P1).
+> 5. **`spin_once` executor-conflict risk** in `get_entity_state` if the node is concurrently spun elsewhere; **bridge-mapping payload syntax** `@...[gz.msgs.Pose_V` in the launch needs the registered `Pose_V↔TFMessage` mapping confirmed on the installed `ros_gz_bridge`.
+> 6. **`detection` AUTO→MOCK silent fallback** (#4) can mask a "Gazebo not started yet" prod condition — by-design per plan, but loud-WARN it and consider gating to opt-in. **`get_bridge` singleton not backend-keyed / no thread guard** (#12) — fine for single-backend-per-process; revisit if runtime backend switching is ever needed.
 
 ---
 
