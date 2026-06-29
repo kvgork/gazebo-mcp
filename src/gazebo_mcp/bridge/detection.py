@@ -36,9 +36,8 @@ class GazeboDetector:
         Returns:
             GazeboBackend.MODERN if Fortress/Harmonic detected
             GazeboBackend.CLASSIC if Classic detected
-
-        Raises:
-            RuntimeError: If no Gazebo detected
+            GazeboBackend.MOCK as a last-resort fallback when no live Gazebo
+                is detected (so no-Gazebo dev/CI still gets a usable backend)
         """
         if self._detected_backend:
             return self._detected_backend
@@ -72,11 +71,17 @@ class GazeboDetector:
             )
             return self._detected_backend
 
-        raise RuntimeError(
-            "No Gazebo detected. Start Gazebo first:\n"
-            "  Classic: gazebo --verbose\n"
-            "  Modern:  gz sim -v4"
+        # Last-resort fallback: no live Gazebo detected. Rather than hard-fail
+        # (which broke no-Gazebo dev/CI), fall back to the deterministic MOCK
+        # backend so the MCP server still starts and tests stay runnable.
+        self._detected_backend = GazeboBackend.MOCK
+        self.node.get_logger().warn(
+            "No Gazebo detected (no Modern/Classic services or processes). "
+            "Falling back to MOCK backend (in-memory, deterministic). "
+            "Start a real backend with: 'gz sim -v4' (Modern) or "
+            "'gazebo --verbose' (Classic)."
         )
+        return self._detected_backend
 
     def _check_modern_services(self) -> bool:
         """Check if Modern Gazebo services exist."""

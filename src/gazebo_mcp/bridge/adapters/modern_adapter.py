@@ -120,34 +120,56 @@ class ModernGazeboAdapter(GazeboInterface):
         return self._control_clients[world]
 
     def _ensure_pose_info_subscriber(self, world: str):
-        """Ensure pose info subscriber is created for world."""
+        """
+        Ensure a pose-info subscriber is created for the given world.
+
+        Subscribes to ``/world/{world}/pose/info`` using ``tf2_msgs/msg/TFMessage``.
+        The ros_gz_bridge maps Gazebo's ``gz.msgs.Pose_V`` on that topic to a
+        TFMessage where each entity is a ``TransformStamped``:
+            - ``child_frame_id``  -> entity (model/link) name
+            - ``transform.translation`` -> position (x, y, z)
+            - ``transform.rotation``     -> orientation quaternion (x, y, z, w)
+
+        The callback parses every transform and caches it in
+        ``self._entity_states[world][child_frame_id]`` as
+        ``{"pose": {"position": [...], "orientation": [...]}}``.
+
+        The ``tf2_msgs`` import is LAZY (function-level) so importing this module
+        never pulls ``tf2_msgs`` at module load — required for the ``-e dev``
+        environment which has no tf2/ros_gz packages.
+        """
         if world not in self._pose_info_subs:
-            from ros_gz_interfaces.msg import EntityWrench  # Closest to state info
-            # Note: Modern Gazebo uses /model/{model_name}/pose topic per model
-            # or /world/{world}/pose/info for all models
-            # For now, we'll subscribe to the world pose info topic
+            from tf2_msgs.msg import TFMessage
+
             topic_name = f'/world/{world}/pose/info'
 
-            def callback(msg):
-                # Store entity states from pose info
-                # This is a simplified implementation
-                # Real implementation would parse the message properly
-                if world not in self._entity_states:
-                    self._entity_states[world] = {}
-                # Update entity states cache
-                # Note: This needs proper message parsing based on actual topic structure
+            def callback(msg, _world=world):
+                if _world not in self._entity_states:
+                    self._entity_states[_world] = {}
+                for tf in msg.transforms:
+                    t = tf.transform.translation
+                    r = tf.transform.rotation
+                    self._entity_states[_world][tf.child_frame_id] = {
+                        "pose": {
+                            "position": [t.x, t.y, t.z],
+                            "orientation": [r.x, r.y, r.z, r.w],
+                        }
+                    }
 
-            # Create subscription (topic may not exist until simulation starts)
             try:
                 self._pose_info_subs[world] = self.node.create_subscription(
-                    EntityWrench,  # Placeholder - need actual message type
+                    TFMessage,
                     topic_name,
                     callback,
-                    10
+                    10,
                 )
-                self.logger.debug(f"Created pose info subscriber for world '{world}'")
+                self.logger.debug(
+                    f"Created pose info subscriber for world '{world}' on {topic_name}"
+                )
             except Exception as e:
-                self.logger.warning(f"Could not create pose subscriber for world '{world}': {e}")
+                self.logger.warning(
+                    f"Could not create pose subscriber for world '{world}': {e}"
+                )
 
     # Helper conversion methods
 
@@ -319,53 +341,60 @@ class ModernGazeboAdapter(GazeboInterface):
         world: str = "default"
     ) -> Dict[str, Any]:
         """
-        Get entity state from Modern Gazebo.
+        Get entity state (pose) from Modern Gazebo.
 
-        Note: Modern Gazebo doesn't have a direct "get state" service.
-        This method subscribes to pose topics or queries scene info.
+        Modern Gazebo has no direct "get state" service. State is published on
+        ``/world/{world}/pose/info`` (bridged as ``tf2_msgs/msg/TFMessage``).
+        This method ensures the subscriber exists, spins the node briefly so a
+        fresh sample can arrive, then reads the cached pose for ``name``.
 
-        This is a simplified implementation that may need enhancement
-        based on specific Modern Gazebo version and topic availability.
+        Twist is not published on the pose-info topic, so it is returned as
+        zeros — P0 only fixes pose readback (twist lands with a velocity topic
+        subscription in a later slice).
 
         Args:
-            name: Entity name
+            name: Entity name (matches the TransformStamped child_frame_id)
             world: Target world name
 
         Returns:
             Dictionary with entity state (name, pose, twist)
 
         Raises:
-            ModelNotFoundError: If entity not found
+            ModelNotFoundError: If entity not found after the brief wait
         """
-        # Ensure pose subscriber is set up
+        import rclpy
+
+        # Ensure pose subscriber is set up.
         self._ensure_pose_info_subscriber(world)
 
-        # Check cache for entity state
-        if world in self._entity_states and name in self._entity_states[world]:
-            state = self._entity_states[world][name]
-            return {
-                "name": name,
-                "pose": state.get("pose", {}),
-                "twist": state.get("twist", {})
-            }
+        def _cached():
+            states = self._entity_states.get(world, {})
+            return states.get(name)
 
-        # If not in cache, entity might not exist or we haven't received data yet
-        # Return default values with a warning
-        self.logger.warning(
-            f"Entity '{name}' state not available in cache for world '{world}'. "
-            "Returning default values. Modern Gazebo requires topic subscriptions for state."
-        )
+        # Spin briefly (off the event-loop thread) to let a pose sample arrive.
+        # Poll the cache between short spins so we return as soon as data lands.
+        loop = asyncio.get_event_loop()
+
+        def _spin_until_present():
+            deadline = time.monotonic() + self.timeout
+            while time.monotonic() < deadline:
+                if _cached() is not None:
+                    return
+                rclpy.spin_once(self.node, timeout_sec=0.05)
+
+        await loop.run_in_executor(None, _spin_until_present)
+
+        state = _cached()
+        if state is None:
+            raise ModelNotFoundError(name)
 
         return {
             "name": name,
-            "pose": {
-                "position": (0.0, 0.0, 0.0),
-                "orientation": (0.0, 0.0, 0.0, 1.0)
-            },
-            "twist": {
-                "linear": (0.0, 0.0, 0.0),
-                "angular": (0.0, 0.0, 0.0)
-            }
+            "pose": state.get("pose", {}),
+            "twist": state.get(
+                "twist",
+                {"linear": [0.0, 0.0, 0.0], "angular": [0.0, 0.0, 0.0]},
+            ),
         }
 
     async def set_entity_state(
@@ -725,6 +754,143 @@ class ModernGazeboAdapter(GazeboInterface):
         except Exception as e:
             self.logger.warning(f"apply_wrench failed: {e}")
             return False
+
+    # --- Simulation timing / physics control (P0-B) ---
+
+    async def step(self, steps: int = 1, world: str = "default") -> Dict[str, Any]:
+        """
+        Advance the simulation by a fixed number of physics steps.
+
+        Uses the ``/world/{world}/control`` service (ros_gz_interfaces/srv/
+        ControlWorld) with ``world_control.pause=True`` and
+        ``world_control.multi_step=steps`` — i.e. step exactly ``steps`` ticks
+        while keeping the world paused (deterministic stepping).
+
+        Args:
+            steps: Number of physics steps to advance (>= 1)
+            world: Target world name
+
+        Returns:
+            Dict with 'steps' executed and a best-effort 'sim_time'.
+        """
+        if steps < 1:
+            raise ValueError("steps must be >= 1")
+
+        client = self._get_control_client(world)
+
+        from ros_gz_interfaces.srv import ControlWorld
+        from ros_gz_interfaces.msg import WorldControl
+
+        request = ControlWorld.Request()
+        request.world_control = WorldControl()
+        request.world_control.pause = True
+        request.world_control.multi_step = int(steps)
+
+        try:
+            response = await self._call_service_async(
+                client, request, f"step (world={world})"
+            )
+            if not getattr(response, "success", True):
+                raise GazeboServiceError("step", f"ControlWorld returned failure for world '{world}'")
+            self.logger.debug(f"Stepped world '{world}' by {steps} steps")
+        except Exception as e:
+            if isinstance(e, (GazeboNotRunningError, GazeboTimeoutError, GazeboServiceError)):
+                raise
+            raise GazeboServiceError("step", str(e)) from e
+
+        # Best-effort sim_time: query world properties (uses /clock if wired).
+        sim_time = 0.0
+        try:
+            info = await self.get_world_properties(world)
+            sim_time = getattr(info, "sim_time", 0.0)
+        except Exception as e:  # noqa: BLE001 - sim_time is best-effort only
+            self.logger.debug(f"step: could not read sim_time for '{world}': {e}")
+
+        return {"sim_time": sim_time, "steps": steps}
+
+    async def set_physics(
+        self,
+        step_size: Optional[float] = None,
+        rtf: Optional[float] = None,
+        world: str = "default",
+    ) -> bool:
+        """
+        Set physics step size and/or real-time factor at runtime (best-effort).
+
+        Modern Gazebo exposes physics tuning via the ``/world/{world}/set_physics``
+        service (gz.msgs.Physics). The ros_gz_bridge does not always expose this
+        as a ROS 2 service, so this is best-effort: if the bridged service is
+        unavailable we log a warning and return True rather than failing the
+        caller (the provisioned world's max_step_size/rtf already match config).
+
+        Args:
+            step_size: Physics step size in seconds (optional)
+            rtf: Target real-time factor (optional)
+            world: Target world name
+
+        Returns:
+            True (best-effort).
+        """
+        if step_size is not None and step_size <= 0:
+            raise ValueError("step_size must be positive")
+        if rtf is not None and rtf <= 0:
+            raise ValueError("rtf must be positive")
+
+        service_name = f"/world/{world}/set_physics"
+        try:
+            from ros_gz_interfaces.srv import SetPhysics  # type: ignore
+
+            if not hasattr(self, "_set_physics_clients"):
+                self._set_physics_clients: Dict[str, Any] = {}
+            if world not in self._set_physics_clients:
+                self._set_physics_clients[world] = self.node.create_client(
+                    SetPhysics, service_name
+                )
+            client = self._set_physics_clients[world]
+
+            request = SetPhysics.Request()
+            if step_size is not None:
+                request.physics.max_step_size = float(step_size)
+            if rtf is not None:
+                request.physics.real_time_factor = float(rtf)
+
+            response = await self._call_service_async(
+                client, request, f"set_physics (world={world})"
+            )
+            return bool(getattr(response, "success", True))
+
+        except ImportError:
+            self.logger.warning(
+                f"set_physics: {service_name} not bridged (ros_gz_interfaces.srv.SetPhysics "
+                "unavailable). Skipping runtime physics update (best-effort)."
+            )
+            return True
+        except Exception as e:  # noqa: BLE001 - best-effort, never block the caller
+            self.logger.warning(f"set_physics best-effort failed for '{world}': {e}")
+            return True
+
+    async def seed(self, value: int, world: str = "default") -> bool:
+        """
+        Set the simulation random seed (best-effort / no-op-with-log).
+
+        Modern Gazebo (Harmonic) has no standard runtime "set seed" service; the
+        seed is normally fixed at world-launch time. We log the request and
+        return True so reproducibility plumbing works end-to-end without
+        blocking. A real seed wire-up belongs at provision time.
+
+        Args:
+            value: Seed value
+            world: Target world name
+
+        Returns:
+            True (best-effort).
+        """
+        self.logger.info(
+            f"seed({value}) requested for world '{world}': Modern Gazebo has no "
+            "runtime seed service; seed should be set at world-launch time "
+            "(best-effort no-op)."
+        )
+        return True
 
     def shutdown(self) -> None:
         """

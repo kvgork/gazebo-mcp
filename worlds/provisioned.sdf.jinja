@@ -1,0 +1,96 @@
+<?xml version="1.0" ?>
+<!--
+  Provisioned Gazebo Harmonic world template (P0-B, OWN mode).
+
+  Rendered by gazebo_mcp.bridge.world_provisioner.WorldProvisioner using
+  string.Template substitution (no jinja2 dependency required):
+    $world_name  -> world name
+    $step_size   -> physics max_step_size (seconds)
+    $rtf         -> physics real_time_factor
+    $models      -> rendered <include> blocks from the model manifest
+
+  Plugin filenames are the Gazebo Sim 8 (Harmonic) "gz-sim-*-system" names.
+  PosePublisher publishes entity poses to /world/<name>/pose/info, which the
+  ros_gz_bridge maps to tf2_msgs/msg/TFMessage for the Modern adapter's
+  pose-readback path. ApplyLinkWrench / JointController are P1 (omitted).
+-->
+<sdf version="1.9">
+  <world name="$world_name">
+    <physics name="provisioned_physics" type="ignored">
+      <max_step_size>$step_size</max_step_size>
+      <real_time_factor>$rtf</real_time_factor>
+    </physics>
+
+    <!-- Core Harmonic system plugins -->
+    <plugin
+      filename="gz-sim-physics-system"
+      name="gz::sim::systems::Physics">
+    </plugin>
+    <plugin
+      filename="gz-sim-user-commands-system"
+      name="gz::sim::systems::UserCommands">
+    </plugin>
+    <plugin
+      filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+
+    <!-- Publishes entity poses to /world/<name>/pose/info -->
+    <plugin
+      filename="gz-sim-pose-publisher-system"
+      name="gz::sim::systems::PosePublisher">
+      <publish_link_pose>false</publish_link_pose>
+      <publish_collision_pose>false</publish_collision_pose>
+      <publish_visual_pose>false</publish_visual_pose>
+      <publish_model_pose>true</publish_model_pose>
+      <publish_nested_model_pose>true</publish_nested_model_pose>
+      <use_pose_vector_msg>true</use_pose_vector_msg>
+      <update_frequency>60</update_frequency>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.8 0.8 0.8 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Models from the manifest (rendered <include> blocks; empty if none) -->
+$models
+
+  </world>
+</sdf>

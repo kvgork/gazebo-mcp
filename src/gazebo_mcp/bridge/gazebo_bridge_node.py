@@ -123,6 +123,18 @@ class GazeboBridgeNode:
                 world=self.world
             )
 
+        # Stash config (may be None for pure dependency-injection in tests).
+        self.config = config
+
+        # World provisioner (P0-B): only when this bridge OWNS its world.
+        # Lazy import keeps WorldProvisioner (and its template path resolution)
+        # out of the import graph until actually needed.
+        self.provisioner = None
+        if config is not None and getattr(config, "own_world", False):
+            from .world_provisioner import WorldProvisioner
+            self.provisioner = WorldProvisioner(config)
+            self.logger.info("Created WorldProvisioner (own_world=True)")
+
         # Persistent async event loop for adapter calls — avoids creating
         # a new event loop on every single bridge call (performance win).
         self._async_loop = asyncio.new_event_loop()
@@ -994,6 +1006,64 @@ class GazeboBridgeNode:
         except Exception as e:
             self.logger.error("Failed to apply wrench", model=model_name, error=str(e))
             return False
+
+    # Simulation timing / physics control (P0-B):
+
+    async def step(self, steps: int = 1, world: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Advance the simulation by a fixed number of physics steps.
+
+        Async passthrough to ``adapter.step``. Unlike the legacy sync methods,
+        this is awaited directly by the (async) lean tools / FastMCP layer.
+
+        Args:
+            steps: Number of physics steps to advance (>= 1)
+            world: Target world name (default: self.world)
+
+        Returns:
+            Dict with at least 'sim_time' and 'steps'.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.step(steps=steps, world=world)
+
+    async def set_physics(
+        self,
+        step_size: Optional[float] = None,
+        rtf: Optional[float] = None,
+        world: Optional[str] = None,
+    ) -> bool:
+        """
+        Set physics step size and/or real-time factor (async passthrough).
+
+        Args:
+            step_size: Physics step size in seconds (optional)
+            rtf: Target real-time factor (optional)
+            world: Target world name (default: self.world)
+
+        Returns:
+            True if applied (best-effort for real backends).
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.set_physics(
+            step_size=step_size, rtf=rtf, world=world
+        )
+
+    async def seed(self, value: int, world: Optional[str] = None) -> bool:
+        """
+        Set the simulation random seed (async passthrough).
+
+        Args:
+            value: Seed value
+            world: Target world name (default: self.world)
+
+        Returns:
+            True if applied (best-effort for real backends).
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.seed(value=value, world=world)
 
     # Joint state reading:
 
