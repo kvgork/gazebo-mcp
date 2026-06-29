@@ -12,6 +12,8 @@ Tool modules that implement Gazebo simulation control:
 - advanced_sensor_tools: Sensor fusion, visualization, processing, calibration
 - slam_tools: SLAM mapping, localization, loop closure detection
 - nav2_tools: Nav2 navigation, path planning, costmaps, waypoint missions
+- world: Lean P0-B world-control tools (step/set_physics/seed/get_stats)
+- scene: Lean P0-B scene/entity tools (spawn/get_state/set_state/remove/list)
 """
 
 from . import model_management
@@ -24,6 +26,8 @@ from . import multi_robot_tools
 from . import advanced_sensor_tools
 from . import slam_tools
 from . import nav2_tools
+from . import world
+from . import scene
 
 __all__ = [
     "model_management",
@@ -36,4 +40,6 @@ __all__ = [
     "advanced_sensor_tools",
     "slam_tools",
     "nav2_tools",
+    "world",
+    "scene",
 ]

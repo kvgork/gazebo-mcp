@@ -64,6 +64,9 @@ Issues = "https://github.com/kvgork/gazebo-mcp/issues"
 gazebo-mcp-server = "gazebo_mcp.server:main"
 # Step-0 migration target: MCP SDK low-level server (parallel to the legacy server above).
 gazebo-mcp-sdk = "gazebo_mcp.sdk_server:main"
+# P0-B: FastMCP app serving the 9 lean world_*/scene_* tools (coexists with the
+# legacy low-level server above; single-server unification lands in P3).
+gazebo-mcp-fastmcp = "gazebo_mcp.fastmcp_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
