@@ -11,6 +11,7 @@ mock-mode-is-the-contract pattern: when not connected to a real Gazebo
 instance they return deterministic, useful results.
 """
 
+import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
@@ -70,6 +71,20 @@ def _coerce_response_format(response_format: str) -> str:
     return response_format
 
 
+def _deprecated(name: str, replacement: str) -> OperationResult:
+    """Build the structured deprecation result for a flag-gated legacy tool.
+
+    Emitted only when ``GAZEBO_LEGACY_TOOLS=0``; the default (flag ON) keeps the
+    real tool body running so existing tests stay green.
+    """
+    return OperationResult(
+        success=False,
+        error=f"{name} is deprecated; use {replacement}",
+        error_code="DEPRECATED_TOOL",
+        suggestions=[f"Use {replacement}"],
+    )
+
+
 def fuse_sensor_data(
     fusion_type: str,
     sensors: list,
@@ -90,6 +105,8 @@ def fuse_sensor_data(
     Example:
         >>> fuse_sensor_data("lidar_camera", ["lidar_front", "camera_rgb"])
     """
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return _deprecated("fuse_sensor_data", "sensor_snapshot")
     try:
         if fusion_type not in _VALID_FUSION_TYPES:
             return OperationResult(
@@ -200,6 +217,8 @@ def visualize_sensor_data(
     Example:
         >>> visualize_sensor_data("lidar_front", "point_cloud")
     """
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return _deprecated("visualize_sensor_data", "sensor_snapshot")
     try:
         sensor = validate_entity_name(sensor, "sensor")
 
@@ -291,6 +310,8 @@ def process_sensor_data(
     Example:
         >>> process_sensor_data("lidar_front", "voxel_filter", params={"leaf_size": 0.05})
     """
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return _deprecated("process_sensor_data", "sensor_snapshot")
     try:
         sensor = validate_entity_name(sensor, "sensor")
 
@@ -379,6 +400,8 @@ def calibrate_sensor(
     Example:
         >>> calibrate_sensor("camera_rgb", "camera_intrinsics")
     """
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return _deprecated("calibrate_sensor", "sensor_list")
     try:
         sensor = validate_entity_name(sensor, "sensor")
 
@@ -465,6 +488,12 @@ def monitor_sensor_health(
 
     Returns:
         OperationResult with per-sensor health metrics and any alerts
+
+    Note:
+        This tool is the retained survivor of the advanced-sensor set. Its
+        per-sensor ``health`` data is ALSO surfaced (folded in) by the lean
+        ``sensor_list`` tool, whose descriptors each carry a ``health`` field —
+        prefer ``sensor_list`` for one-shot health checks alongside discovery.
 
     Example:
         >>> monitor_sensor_health()              # all sensors
@@ -566,6 +595,8 @@ def record_sensor_stream(
     Example:
         >>> record_sensor_stream(["lidar_front", "camera_rgb"], "/tmp/run1")
     """
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return _deprecated("record_sensor_stream", "sensor_snapshot")
     try:
         if not isinstance(sensors, list) or len(sensors) == 0:
             return OperationResult(
@@ -670,6 +701,8 @@ def detect_objects_in_view(
     Example:
         >>> detect_objects_in_view("camera_rgb", confidence=0.6)
     """
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return _deprecated("detect_objects_in_view", "sensor_camera_image")
     try:
         camera = validate_entity_name(camera, "camera")
 
@@ -752,6 +785,8 @@ def segment_camera_image(
     Example:
         >>> segment_camera_image("camera_rgb", mode="instance")
     """
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return _deprecated("segment_camera_image", "sensor_camera_image")
     try:
         camera = validate_entity_name(camera, "camera")
 

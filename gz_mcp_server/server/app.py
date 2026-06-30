@@ -32,15 +32,18 @@ informational log records the chosen path; it is retained so the P3 unification
 can flip behaviour without an interface change.
 """
 
+import base64
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp import Context, FastMCP, Image
 
 from gazebo_mcp.tools import actuate as _actuate
+from gazebo_mcp.tools import param as _param
 from gazebo_mcp.tools import scene as _scene
+from gazebo_mcp.tools import sensor as _sensor
 from gazebo_mcp.tools import world as _world
 from gazebo_mcp.tools._bridge_helper import get_bridge
 from gazebo_mcp.utils.logger import get_logger
@@ -248,6 +251,64 @@ def build_app() -> FastMCP:
             await _actuate.actuate_joint_trajectory(model=model, points=points, world=world)
         ).to_dict()
 
+    # ------------------------------- sensor_* ------------------------------
+
+    @mcp.tool()
+    async def sensor_list(
+        sensor_type: Optional[str] = None,
+        world: str = "default",
+        ctx: Optional[Context] = None,
+    ) -> dict:
+        """List sensors in the world (each descriptor carries health), optionally filtered by type."""
+        return (await _sensor.sensor_list(sensor_type=sensor_type, world=world)).to_dict()
+
+    @mcp.tool()
+    async def sensor_snapshot(
+        topic: str, world: str = "default", ctx: Optional[Context] = None
+    ) -> dict:
+        """Get the latest typed one-shot sample for the sensor publishing on a topic."""
+        return (await _sensor.sensor_snapshot(topic=topic, world=world)).to_dict()
+
+    @mcp.tool()
+    async def sensor_camera_image(
+        topic: str,
+        resolution: str = "640x480",
+        quality: int = 60,
+        world: str = "default",
+        ctx: Optional[Context] = None,
+    ):
+        """Capture a one-shot camera image; returns an Image on success, else a structured error."""
+        result = await _sensor.sensor_camera_image(
+            topic=topic, resolution=resolution, quality=quality, world=world
+        )
+        if result.success:
+            return Image(
+                data=base64.b64decode(result.data["image_b64"]),
+                format=result.data["format"],
+            )
+        return result.to_dict()
+
+    # ------------------------------- param_* -------------------------------
+
+    @mcp.tool()
+    async def param_list(world: str = "default", ctx: Optional[Context] = None) -> dict:
+        """List the simulation parameter names."""
+        return (await _param.param_list(world=world)).to_dict()
+
+    @mcp.tool()
+    async def param_get(
+        name: str, world: str = "default", ctx: Optional[Context] = None
+    ) -> dict:
+        """Get a single simulation parameter's value."""
+        return (await _param.param_get(name=name, world=world)).to_dict()
+
+    @mcp.tool()
+    async def param_set(
+        name: str, value: Any, world: str = "default", ctx: Optional[Context] = None
+    ) -> dict:
+        """Set (or create) a simulation parameter's value."""
+        return (await _param.param_set(name=name, value=value, world=world)).to_dict()
+
     # Legacy coexistence: documented-fallback path (see module docstring).
     if os.getenv("GAZEBO_LEGACY_TOOLS", "1") != "0":
         _logger.info(
@@ -256,5 +317,5 @@ def build_app() -> FastMCP:
             "Single-server unification lands in P3.",
         )
 
-    _logger.info("FastMCP app built (lean tools)", tool_count=13)
+    _logger.info("FastMCP app built (lean tools)", tool_count=19)
     return mcp
