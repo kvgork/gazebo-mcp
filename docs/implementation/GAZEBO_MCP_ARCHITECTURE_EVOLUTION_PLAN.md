@@ -476,6 +476,22 @@ pixi run -e full pytest -m gazebo tests/integration/test_p1_actuation.py
 
 **Risks.** Wrench-as-topic must round-trip ROS→gz correctly. Joint controller only works if provisioned per-model at load (never runtime-injected). Persistent wrench can diverge sim — bounds land in P5, but track persistent wrenches from day one. If the SO-101 asset slips, the substitute keeps P1 acceptance runnable.
 
+> **STATUS — P1 MOCK SIDE ✅ DONE & VERIFIED 2026-06-30** (`-e dev`, commits `772a2a2` bridge, `0fa55c3` tools+manifest+world/launch, `f08ef55` tests, `a2cfb88` review-fixes). Mock acceptance green (14+8 tests; `actuate_wrench(fx=10)`→`world_step(100)`→x≈0.05; joint-limit/INVALID_MODE/UNKNOWN_JOINT/INVALID_TRAJECTORY rejections; 13 tools listed). Full suite 533 passed, 10 skipped, 2 pre-existing failures. JETANK joint manifest (arm + gripper joints, faithful limits from the xacro) wheel-packaged at `src/gazebo_mcp/data/jetank_manifest.json`. Real ros_gz/Harmonic code **written but NOT live-verified** (no `-e full`/`ros_gz`/`gz_ros2_control`; arm asset SDF not yet converted).
+>
+> **Adversarial grill 2026-06-30: 25 raw → 24 confirmed → 0 blockers. FIXED now (a2cfb88):** INVALID_MODE + INVALID_TRAJECTORY validation on the verified path; wheel-safe manifest packaging; gripper joints; **ApplyLinkWrench system added to the world** (topic `/world/<w>/wrench` is serviced by `gz-sim-apply-link-wrench-system`/`gz::sim::systems::ApplyLinkWrench`, NOT UserCommands — corrected the false comment); honesty docstrings (mock kinematic linear-only approximation; topic-wrench persistent-until-cleared).
+>
+> **P1-real — DEFERRED follow-ups (need live ros_gz/Harmonic or the arm asset; none block the mock-side merge):**
+> 1. **No spawnable JETANK SDF exists** — the manifest references `jetank` but `models/jetank/*.sdf` is unconverted (needs `xacro→urdf→gz sdf` + `ignition-*`→`gz-sim`/`gz_ros2_control` plugin swap; xacro tool not installed here). **Blocks real P1 acceptance** — author before live-verify. *(#8)*
+> 2. **`duration`/`persistent` not implemented on the real wrench path** — `EntityWrench` topic is persistent-until-cleared; non-persistent must be implemented as a scheduled `clear_wrench` (currently only doc'd). *(#2,#20)*
+> 3. **`command_joint` `vel`/`force` modes have no consumer** — only `cmd_pos` is bridged + only `JointPositionController` injected; vel/force topics are silent no-ops on the real path. Add `gz-sim-joint-controller-system` + bridge lines, or reject vel/force until provisioned. *(#3,#13-real)*
+> 4. **No controller-spawner / `gz_ros2_control` config wired** in the launch — `actuate_joint_trajectory` has no consumer even once assets land. *(#21,#9)*
+> 5. **PosePublisher `child_frame_id` vs `frame_id`** ambiguity for `/world/<w>/pose/info`→TFMessage joint/model naming (relates to the P0-B-real pose-cache finding). *(#10)*
+> 6. **Publisher cache keyed by topic only (ignores msg type); QoS depth 10 volatile** may drop commands to late-joining gz subscribers. *(#11)*
+> 7. **vel/force joints unbounded** (only `pos` is limit-checked) — safety clamps land in **P5** (`actuation_bounds`). *(#16)*
+> 8. **Trajectory `time_from_start` monotonicity / negative-time not validated** on the real path; **wrench frame (world vs body) + units unspecified** at the tool boundary and `link` target not exposed to MCP callers. *(#22,#24)*
+> 9. **Two divergent force paths coexist** — legacy service-based `apply_wrench`/`apply_force` vs new topic-based `actuate_wrench`; reconcile/deprecate the legacy one when the real path is verified. *(#23)*
+> 10. **Mock fidelity caps (documented, by-design):** constant mass m=1.0, torque/twist not integrated, last-write-wins single wrench per entity, FastMCP `points` bare-list schema. *(#5,#12,#14,#15,#18)*
+
 ---
 
 ### P2 — Sensors one-shot (`sensor_*`) + parameters (`param_*`) *(T3 consolidation; maps §8 P2)*
