@@ -22,7 +22,13 @@ import argparse
 import sys
 from pathlib import Path
 
-# Default Streamable-HTTP bind (P3): localhost:8931.
+from gazebo_mcp.utils.logger import get_logger
+
+_logger = get_logger("fastmcp_server")
+
+# Default Streamable-HTTP bind (P3): localhost:8931. Bind to loopback by default
+# (#4/#14) — the server has NO authentication, so it must not be reachable beyond
+# localhost unless an operator deliberately fronts it with a proxy/auth.
 DEFAULT_HTTP_HOST = "127.0.0.1"
 DEFAULT_HTTP_PORT = 8931
 
@@ -81,6 +87,28 @@ def main(argv=None):
         # to configure uvicorn on mcp 1.27.1), then run Streamable HTTP.
         mcp.settings.host = args.host
         mcp.settings.port = args.port
+
+        # HTTP auth/bind safety (#4/#14): the Streamable-HTTP transport serves
+        # every tool (incl. actuation: wrenches, joint commands, trajectories)
+        # with NO authentication. Warn loudly at startup; warn LOUDER if bound to
+        # a non-loopback interface (0.0.0.0 / any external host).
+        tool_count = len(mcp._tool_manager._tools)
+        bind = f"{args.host}:{args.port}"
+        base_warning = (
+            f"Streamable-HTTP serves {tool_count} tools (incl. actuation) with NO "
+            f"authentication; bound to {bind}. Do not expose beyond localhost "
+            f"without a proxy/auth."
+        )
+        if args.host not in ("127.0.0.1", "localhost", "::1"):
+            _logger.warning(
+                f"!!! INSECURE BIND !!! {base_warning} Host {args.host!r} is "
+                f"NON-LOOPBACK: this server is reachable from OTHER machines with "
+                f"ZERO authentication and can actuate the simulation. Put it behind "
+                f"a reverse proxy with auth, or bind --host 127.0.0.1."
+            )
+        else:
+            _logger.warning(base_warning)
+
         mcp.run(transport="streamable-http")
     else:
         # DEFAULT path: stdio, unchanged from P0-B.

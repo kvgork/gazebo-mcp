@@ -7,6 +7,7 @@ and _use_real_gazebo() across model_management, sensor_tools,
 simulation_tools, and world_tools.
 """
 
+import contextvars
 from typing import Optional
 from gazebo_mcp.utils.exceptions import ROS2NotConnectedError
 from gazebo_mcp.utils.logger import get_logger
@@ -16,6 +17,30 @@ from gazebo_mcp.bridge.config import GazeboConfig, GazeboBackend
 _connection_manager: Optional[ConnectionManager] = None
 _bridge_node: Optional[GazeboBridgeNode] = None
 _logger = get_logger("bridge_helper")
+
+# Per-request bridge override (P3 isolation). When set (by the HTTP layer for a
+# given Mcp-Session-Id) ``get_bridge()`` returns THIS bridge instead of the
+# process singleton, so every unchanged tool handler (lean + legacy) transparently
+# operates on the per-session world. Default ``None`` → singleton path, so stdio
+# and the existing test suite are unaffected (no contextvar is ever set there).
+_current_bridge: contextvars.ContextVar = contextvars.ContextVar(
+    "_current_bridge", default=None
+)
+
+
+def set_current_bridge(bridge):
+    """Bind ``bridge`` as the current per-request bridge; return the reset token.
+
+    The token must be passed to :func:`reset_current_bridge` in a ``finally`` to
+    restore the previous value (contextvars are copied per asyncio Task and per
+    ``asyncio.to_thread`` worker, so this is safe under concurrency).
+    """
+    return _current_bridge.set(bridge)
+
+
+def reset_current_bridge(token) -> None:
+    """Restore the previous per-request bridge using the token from ``set``."""
+    _current_bridge.reset(token)
 
 
 def backend_is_mock() -> bool:
@@ -41,6 +66,13 @@ def get_bridge() -> GazeboBridgeNode:
         ROS2NotConnectedError: If a real ROS2 connection is required but fails.
     """
     global _connection_manager, _bridge_node
+
+    # P3 isolation: a per-request bridge (set by the HTTP layer for an
+    # Mcp-Session-Id) wins over the process singleton, so all unchanged tool
+    # handlers operate on the per-session world. Unset (stdio/tests) → singleton.
+    b = _current_bridge.get()
+    if b is not None:
+        return b
 
     if _bridge_node is not None:
         return _bridge_node

@@ -27,22 +27,26 @@ thread sees it) AND resets the ``_bridge_helper`` singletons BEFORE ``build_app`
 so the lifespan constructs the deterministic ``MockGazeboAdapter`` rather than a
 real bridge. The env is auto-reverted, never leaking into the stdio suite.
 
-Per-session isolation — what is and is not isolated (HONEST)
-------------------------------------------------------------
+Per-session isolation — REAL tools, both surfaces (P3 blocker, now CLOSED)
+-------------------------------------------------------------------------
 Two distinct ``Mcp-Session-Id`` HTTP sessions resolve to **isolated**
 ``GazeboSession`` objects (separate fresh bridges + subscriptions) via
-``app.get_session(ctx)`` / ``_bridge_helper.get_bridge_for_ctx(ctx)``. This test
-exercises that mechanism with a small test-only tool that resolves the bridge
-through ``get_bridge_for_ctx(ctx)`` — the path a per-session-aware tool uses.
+``app.get_session(ctx)`` / ``_bridge_helper.get_bridge_for_ctx(ctx)``.
 
-KNOWN LIMITATION (deferred, documented): the production *lean* ``scene_*`` /
-``world_*`` tools and the mounted *legacy* tools still call the module-level
-process-singleton ``get_bridge()`` in their handlers (not ``get_bridge_for_ctx``),
-so over HTTP they share ONE world across sessions — a model spawned with the lean
-``scene_spawn`` in session A IS visible to session B's ``scene_list_models``
-(verified in ``scratchpad/probe_lean_iso.py``). Re-pointing every tool handler at
-the per-session bridge is follow-up work; P3's deliverable is the isolated
-session *mechanism*, which this test verifies directly.
+The isolation is now wired into the PRODUCTION tools via a ``ContextVar``
+(``_bridge_helper._current_bridge``): the lean ``@mcp.tool`` wrappers bind the
+per-session bridge with ``_with_session_bridge(ctx, ...)``, and the mounted
+*legacy* closures (now ``async``, with an injected ``ctx: Context``) bind it then
+run the sync handler via ``asyncio.to_thread`` (which copies the contextvar into
+the worker thread). Both surfaces' unchanged ``get_bridge()`` calls therefore hit
+the per-session world. The two tests below prove it over a REAL Streamable-HTTP
+transport for BOTH the lean and the legacy surfaces:
+
+- ``test_p3_http_lean_tool_isolation``: lean ``scene_spawn('cubeA')`` in session
+  A is INVISIBLE to session B's ``scene_list_models`` (and vice-versa).
+- ``test_p3_http_legacy_tool_isolation``: legacy
+  ``gazebo_spawn_model('boxA', geometry='box')`` in session A is INVISIBLE to
+  session B's ``gazebo_list_models``.
 """
 
 import json
@@ -65,10 +69,7 @@ import uvicorn  # noqa: E402
 import mcp.types as types  # noqa: E402
 from mcp.client.session import ClientSession  # noqa: E402
 from mcp.client.streamable_http import streamablehttp_client  # noqa: E402
-from mcp.server.fastmcp import Context  # noqa: E402
 
-from gazebo_mcp.bridge.gazebo_interface import EntityPose  # noqa: E402
-from gazebo_mcp.tools._bridge_helper import get_bridge_for_ctx  # noqa: E402
 from gz_mcp_server.server.app import build_app  # noqa: E402
 
 # Unified tool count with the default flag (GAZEBO_LEGACY_TOOLS unset/"1"):
@@ -142,57 +143,103 @@ class _UvicornServer:
         self.thread.join(timeout=5.0)
 
 
-def test_p3_http_session_isolation():
-    """Two distinct ``Mcp-Session-Id`` sessions get ISOLATED per-session bridges.
+def test_p3_http_lean_tool_isolation():
+    """REAL lean tools are per-session over HTTP (P3 blocker, the lean half).
 
-    A test-only tool resolves its bridge via ``get_bridge_for_ctx(ctx)`` (the
-    per-session path). Session A spawns ``modelA``; session B — a different
-    ``Mcp-Session-Id`` — lists models and must NOT see ``modelA`` (it owns a
-    separate fresh mock bridge). Also asserts the two resolved bridges are
-    distinct objects and the session ids differ.
+    Session A calls the production lean ``scene_spawn('cubeA')``; session B — a
+    different ``Mcp-Session-Id`` — calls the production lean ``scene_list_models``
+    and must NOT see ``cubeA`` (it owns a separate fresh mock bridge). The reverse
+    is also asserted (B's ``cubeB`` invisible to A). No test-only tool is used —
+    the ``_with_session_bridge`` / ``ContextVar`` wiring in the real tool handlers
+    is what makes this pass.
     """
     mcp = build_app()
 
-    @mcp.tool()
-    async def _iso_spawn(name: str, ctx: Context = None) -> dict:
-        """Spawn ``name`` on THIS session's bridge; return its bridge id + models."""
-        bridge = await get_bridge_for_ctx(ctx)
-        await bridge.adapter.spawn_entity(
-            name=name,
-            sdf=SDF,
-            pose=EntityPose(position=(0, 0, 0), orientation=(0, 0, 0, 1)),
-        )
-        return {"bridge_id": id(bridge), "models": await bridge.adapter.list_entities()}
-
-    @mcp.tool()
-    async def _iso_list(ctx: Context = None) -> dict:
-        """List models on THIS session's bridge; return its bridge id + models."""
-        bridge = await get_bridge_for_ctx(ctx)
-        return {"bridge_id": id(bridge), "models": await bridge.adapter.list_entities()}
+    def _models(call_result) -> list:
+        return json.loads(call_result.content[0].text)["data"]["models"]
 
     async def _run():
         with _UvicornServer(mcp.streamable_http_app()) as srv:
+            # Session A spawns cubeA, lists -> sees cubeA only.
             async with streamablehttp_client(srv.url) as (r, w, get_sid):
                 async with ClientSession(r, w) as sa:
                     await sa.initialize()
                     sid_a = get_sid()
-                    da = json.loads(
-                        (await sa.call_tool("_iso_spawn", {"name": "modelA"})).content[0].text
+                    spawn_a = await sa.call_tool(
+                        "scene_spawn", {"name": "cubeA", "sdf": SDF}
                     )
+                    assert json.loads(spawn_a.content[0].text)["success"], spawn_a
+                    list_a = _models(await sa.call_tool("scene_list_models", {}))
 
+            # Session B spawns cubeB, lists -> sees cubeB only, NOT cubeA.
             async with streamablehttp_client(srv.url) as (r, w, get_sid):
                 async with ClientSession(r, w) as sb:
                     await sb.initialize()
                     sid_b = get_sid()
-                    db = json.loads(
-                        (await sb.call_tool("_iso_list", {})).content[0].text
+                    spawn_b = await sb.call_tool(
+                        "scene_spawn", {"name": "cubeB", "sdf": SDF}
                     )
+                    assert json.loads(spawn_b.content[0].text)["success"], spawn_b
+                    list_b = _models(await sb.call_tool("scene_list_models", {}))
 
             assert sid_a and sid_b and sid_a != sid_b, (sid_a, sid_b)
-            assert da["bridge_id"] != db["bridge_id"], "sessions shared a bridge"
-            assert "modelA" in da["models"], da
-            assert "modelA" not in db["models"], (
-                f"isolation broken: session B saw session A's model: {db}"
+            assert "cubeA" in list_a, list_a
+            assert "cubeB" not in list_a, f"A saw B's model (future leak?): {list_a}"
+            assert "cubeB" in list_b, list_b
+            assert "cubeA" not in list_b, (
+                f"LEAN isolation broken: session B saw session A's model: {list_b}"
+            )
+
+    anyio.run(_run)
+
+
+def test_p3_http_legacy_tool_isolation():
+    """REAL legacy tools are per-session over HTTP (P3 blocker, the legacy half).
+
+    Session A calls the mounted legacy ``gazebo_spawn_model(model_name='boxA',
+    geometry='box')``; session B — a different ``Mcp-Session-Id`` — calls the
+    legacy ``gazebo_list_models`` and must NOT see ``boxA``. Proves the async
+    legacy closures bind the per-session bridge and that ``asyncio.to_thread``
+    propagates the ``ContextVar`` into the sync handler's ``get_bridge()``.
+    """
+    mcp = build_app()
+
+    def _model_names(call_result) -> list:
+        data = json.loads(call_result.content[0].text)["data"]
+        return [m["name"] for m in data["models"]]
+
+    async def _run():
+        with _UvicornServer(mcp.streamable_http_app()) as srv:
+            # Session A spawns boxA via the legacy tool.
+            async with streamablehttp_client(srv.url) as (r, w, get_sid):
+                async with ClientSession(r, w) as sa:
+                    await sa.initialize()
+                    sid_a = get_sid()
+                    spawn_a = await sa.call_tool(
+                        "gazebo_spawn_model",
+                        {"model_name": "boxA", "geometry": "box"},
+                    )
+                    assert json.loads(spawn_a.content[0].text)["success"], spawn_a
+                    list_a = _model_names(await sa.call_tool("gazebo_list_models", {}))
+
+            # Session B spawns boxB; must NOT see boxA, and A must not see boxB.
+            async with streamablehttp_client(srv.url) as (r, w, get_sid):
+                async with ClientSession(r, w) as sb:
+                    await sb.initialize()
+                    sid_b = get_sid()
+                    spawn_b = await sb.call_tool(
+                        "gazebo_spawn_model",
+                        {"model_name": "boxB", "geometry": "box"},
+                    )
+                    assert json.loads(spawn_b.content[0].text)["success"], spawn_b
+                    list_b = _model_names(await sb.call_tool("gazebo_list_models", {}))
+
+            assert sid_a and sid_b and sid_a != sid_b, (sid_a, sid_b)
+            assert "boxA" in list_a, list_a
+            assert "boxB" not in list_a, f"A saw B's model: {list_a}"
+            assert "boxB" in list_b, list_b
+            assert "boxA" not in list_b, (
+                f"LEGACY isolation broken: session B saw session A's model: {list_b}"
             )
 
     anyio.run(_run)

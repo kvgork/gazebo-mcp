@@ -30,11 +30,19 @@ Deprecation honor (P2 #17)
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import time
 from typing import Any, Callable, Dict, Literal, Optional
 
+from mcp.server.fastmcp import Context
+
+from gazebo_mcp.tools._bridge_helper import (
+    get_bridge_for_ctx,
+    reset_current_bridge,
+    set_current_bridge,
+)
 from gazebo_mcp.utils import OperationResult
 from gazebo_mcp.utils.logger import get_logger
 from gazebo_mcp.utils.metrics import get_metrics_collector
@@ -120,14 +128,32 @@ def _internal_error_payload(exc: Exception) -> Dict[str, Any]:
 
 def _make_legacy_closure(
     name: str, params_schema: Dict[str, Any], handler: Callable
-) -> Callable[..., Dict[str, Any]]:
-    """Build a closure whose ``__signature__`` mirrors the curated JSON schema.
+) -> Callable[..., Any]:
+    """Build an ASYNC closure whose ``__signature__`` mirrors the curated schema.
 
-    The closure is a ``def _tool(**kwargs)`` with ``__signature__`` and
+    The closure is an ``async def _tool(**kwargs)`` with ``__signature__`` and
     ``__annotations__`` set so ``func_metadata`` / ``inspect.signature`` see real
     typed, named parameters and infer a matching ``arg_model``. The body invokes
-    the original adapter ``handler`` and returns the legacy payload dict (or the
-    INTERNAL_ERROR payload on the same exception path ``sdk_app`` uses).
+    the original (synchronous) adapter ``handler`` and returns the legacy payload
+    dict (or the INTERNAL_ERROR payload on the same exception path ``sdk_app``
+    uses).
+
+    Per-session isolation + non-blocking (P3, findings #1/#6/#7/#16)
+    ---------------------------------------------------------------
+    A ``ctx: Optional[Context] = None`` param is appended to the synthesized
+    signature. FastMCP detects it by type annotation (``find_context_parameter``
+    uses ``typing.get_type_hints``) and EXCLUDES it from the tool's input schema
+    (verified on mcp 1.27.1), then INJECTS the request ``Context`` into it at call
+    time. At entry the closure resolves the request's per-session bridge from
+    ``ctx`` and binds it into the ``_current_bridge`` contextvar, so the sync
+    handler's internal ``get_bridge()`` transparently hits the per-session world
+    (over HTTP two ``Mcp-Session-Id`` clients stay isolated; over stdio / no ctx
+    it stays the singleton — unchanged behaviour).
+
+    The sync handler is run via ``asyncio.to_thread`` so it never blocks the
+    event loop (#6). ``asyncio.to_thread`` runs the call inside a copy of the
+    CURRENT context (``contextvars.copy_context``), so the contextvar binding set
+    here is visible to the handler's ``get_bridge()`` in the worker thread.
 
     Required params -> no default. Optional params -> ``Optional[T]`` with the
     schema ``default`` if present, else ``None``.
@@ -153,14 +179,43 @@ def _make_legacy_closure(
                 annotation=hint,
             )
         )
+    # Append the Context param LAST. FastMCP excludes it from the input schema and
+    # injects the request Context into it; the curated data params are unaffected.
+    sig_params.append(
+        inspect.Parameter(
+            "ctx",
+            inspect.Parameter.KEYWORD_ONLY,
+            default=None,
+            annotation=Optional[Context],
+        )
+    )
+    annotations["ctx"] = Optional[Context]
     annotations["return"] = dict
 
     metrics = get_metrics_collector()
 
-    def _tool(**kwargs: Any) -> Dict[str, Any]:
+    async def _tool(ctx: Optional[Context] = None, **kwargs: Any) -> Dict[str, Any]:
         start = time.time()
+        # Bind the per-session bridge for the duration of this call so the sync
+        # handler's get_bridge() sees the right world. No ctx (stdio / unit test)
+        # -> no bind -> singleton, unchanged.
+        token = None
+        if ctx is not None:
+            try:
+                bridge = await get_bridge_for_ctx(ctx)
+                token = set_current_bridge(bridge)
+            except Exception as e:  # noqa: BLE001 — fall back to the singleton
+                _logger.debug(
+                    "Per-session bridge bind failed; using singleton",
+                    tool=name,
+                    error=str(e),
+                )
+                token = None
         try:
-            result: OperationResult = handler(**kwargs)
+            # Run the SYNC handler off the event loop. asyncio.to_thread copies
+            # the current context (incl. _current_bridge) into the worker thread,
+            # so handler -> get_bridge() resolves the per-session bridge.
+            result: OperationResult = await asyncio.to_thread(handler, **kwargs)
             metrics.record_tool_call(
                 tool_name=name, duration=time.time() - start, success=result.success
             )
@@ -172,6 +227,9 @@ def _make_legacy_closure(
             metrics.record_error(error_type=type(e).__name__, error_message=str(e))
             _logger.exception("Error calling legacy tool", tool=name)
             return _internal_error_payload(e)
+        finally:
+            if token is not None:
+                reset_current_bridge(token)
 
     _tool.__name__ = name
     _tool.__qualname__ = name
