@@ -14,6 +14,7 @@ Tool modules that implement Gazebo simulation control:
 - nav2_tools: Nav2 navigation, path planning, costmaps, waypoint missions
 - world: Lean P0-B world-control tools (step/set_physics/seed/get_stats)
 - scene: Lean P0-B scene/entity tools (spawn/get_state/set_state/remove/list)
+- actuate: Lean P1 actuation tools (wrench/clear_wrench/joint/joint_trajectory)
 """
 
 from . import model_management
@@ -28,6 +29,7 @@ from . import slam_tools
 from . import nav2_tools
 from . import world
 from . import scene
+from . import actuate
 
 __all__ = [
     "model_management",
@@ -42,4 +44,5 @@ __all__ = [
     "nav2_tools",
     "world",
     "scene",
+    "actuate",
 ]

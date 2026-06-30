@@ -12,7 +12,19 @@
   Plugin filenames are the Gazebo Sim 8 (Harmonic) "gz-sim-*-system" names.
   PosePublisher publishes entity poses to /world/<name>/pose/info, which the
   ros_gz_bridge maps to tf2_msgs/msg/TFMessage for the Modern adapter's
-  pose-readback path. ApplyLinkWrench / JointController are P1 (omitted).
+  pose-readback path.
+
+  P1 ACTUATION (WRITE-ONLY this session; live-verify deferred):
+  - A JointPositionController (gz-sim-joint-position-controller-system) is
+    injected per *revolute* joint of each model in the manifest, listening on
+    /model/<m>/joint/<j>/cmd_pos. Continuous joints are skipped (no positional
+    target). The static example block below documents the exact plugin form for
+    the JETANK arm; when the JETANK SDF lands and the WorldProvisioner is
+    extended to substitute a $joint_controllers slot per manifest model, this
+    static block is replaced by the generated set. Until then it is inert
+    documentation co-located with the world it provisions.
+  - EntityWrench commands arrive on /world/<name>/wrench (handled by the
+    UserCommands system already loaded below); no extra world plugin needed.
 -->
 <sdf version="1.9">
   <world name="$world_name">
@@ -91,6 +103,52 @@
 
     <!-- Models from the manifest (rendered <include> blocks; empty if none) -->
 $models
+
+    <!-- ===================================================================
+         P1 actuation: per-joint JointPositionController (WRITE-ONLY example).
+         One block per *revolute* joint of the JETANK arm (manifest model
+         "jetank"); continuous joints (arm_base_to_arm_bearing_joint) omitted.
+         Each controller subscribes to /model/jetank/joint/<j>/cmd_pos
+         (std_msgs/Float64 after the ros_gz bridge). The launch file bridges
+         those topics. Inert until the JETANK SDF + provisioner substitution
+         land; documents the exact Harmonic plugin form for live-verify.
+         =================================================================== -->
+    <plugin
+      filename="gz-sim-joint-position-controller-system"
+      name="gz::sim::systems::JointPositionController">
+      <joint_name>chassis_to_arm_bearing_joint</joint_name>
+      <topic>/model/jetank/joint/chassis_to_arm_bearing_joint/cmd_pos</topic>
+      <p_gain>10.0</p_gain>
+      <i_gain>0.1</i_gain>
+      <d_gain>0.5</d_gain>
+    </plugin>
+    <plugin
+      filename="gz-sim-joint-position-controller-system"
+      name="gz::sim::systems::JointPositionController">
+      <joint_name>arm_base_to_camera_joint</joint_name>
+      <topic>/model/jetank/joint/arm_base_to_camera_joint/cmd_pos</topic>
+      <p_gain>10.0</p_gain>
+      <i_gain>0.1</i_gain>
+      <d_gain>0.5</d_gain>
+    </plugin>
+    <plugin
+      filename="gz-sim-joint-position-controller-system"
+      name="gz::sim::systems::JointPositionController">
+      <joint_name>arm_base_to_long_joint</joint_name>
+      <topic>/model/jetank/joint/arm_base_to_long_joint/cmd_pos</topic>
+      <p_gain>10.0</p_gain>
+      <i_gain>0.1</i_gain>
+      <d_gain>0.5</d_gain>
+    </plugin>
+    <plugin
+      filename="gz-sim-joint-position-controller-system"
+      name="gz::sim::systems::JointPositionController">
+      <joint_name>arm_long_to_short_joint</joint_name>
+      <topic>/model/jetank/joint/arm_long_to_short_joint/cmd_pos</topic>
+      <p_gain>10.0</p_gain>
+      <i_gain>0.1</i_gain>
+      <d_gain>0.5</d_gain>
+    </plugin>
 
   </world>
 </sdf>

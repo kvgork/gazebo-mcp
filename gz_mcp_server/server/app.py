@@ -39,6 +39,7 @@ from typing import Optional
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from gazebo_mcp.tools import actuate as _actuate
 from gazebo_mcp.tools import scene as _scene
 from gazebo_mcp.tools import world as _world
 from gazebo_mcp.tools._bridge_helper import get_bridge
@@ -180,6 +181,73 @@ def build_app() -> FastMCP:
         """List the names of all models in the world."""
         return (await _scene.scene_list_models(world=world)).to_dict()
 
+    # ------------------------------ actuate_* ------------------------------
+
+    @mcp.tool()
+    async def actuate_wrench(
+        entity: str,
+        fx: float = 0.0,
+        fy: float = 0.0,
+        fz: float = 0.0,
+        tx: float = 0.0,
+        ty: float = 0.0,
+        tz: float = 0.0,
+        duration: float = 0.0,
+        persistent: bool = False,
+        world: str = "default",
+        ctx: Optional[Context] = None,
+    ) -> dict:
+        """Apply a wrench (force + torque) to an entity via the wrench topic."""
+        return (
+            await _actuate.actuate_wrench(
+                entity=entity,
+                fx=fx,
+                fy=fy,
+                fz=fz,
+                tx=tx,
+                ty=ty,
+                tz=tz,
+                duration=duration,
+                persistent=persistent,
+                world=world,
+            )
+        ).to_dict()
+
+    @mcp.tool()
+    async def actuate_clear_wrench(
+        entity: str, world: str = "default", ctx: Optional[Context] = None
+    ) -> dict:
+        """Clear any wrench applied to an entity."""
+        return (await _actuate.actuate_clear_wrench(entity=entity, world=world)).to_dict()
+
+    @mcp.tool()
+    async def actuate_joint(
+        model: str,
+        joint: str,
+        mode: str = "pos",
+        value: float = 0.0,
+        world: str = "default",
+        ctx: Optional[Context] = None,
+    ) -> dict:
+        """Command a single joint (pos/vel/force), validated against the manifest."""
+        return (
+            await _actuate.actuate_joint(
+                model=model, joint=joint, mode=mode, value=value, world=world
+            )
+        ).to_dict()
+
+    @mcp.tool()
+    async def actuate_joint_trajectory(
+        model: str,
+        points: list,
+        world: str = "default",
+        ctx: Optional[Context] = None,
+    ) -> dict:
+        """Command a joint trajectory ([{positions, time_from_start}, ...]) for a model."""
+        return (
+            await _actuate.actuate_joint_trajectory(model=model, points=points, world=world)
+        ).to_dict()
+
     # Legacy coexistence: documented-fallback path (see module docstring).
     if os.getenv("GAZEBO_LEGACY_TOOLS", "1") != "0":
         _logger.info(
@@ -188,5 +256,5 @@ def build_app() -> FastMCP:
             "Single-server unification lands in P3.",
         )
 
-    _logger.info("FastMCP app built (lean tools)", tool_count=9)
+    _logger.info("FastMCP app built (lean tools)", tool_count=13)
     return mcp
