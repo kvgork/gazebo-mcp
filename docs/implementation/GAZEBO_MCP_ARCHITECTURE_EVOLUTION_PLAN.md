@@ -534,6 +534,19 @@ pixi run -e full pytest -m gazebo tests/integration/test_p2_sensors.py
 
 **Risks.** Image token cost (the scaling wall, §9) — caps enforced **before** constructing the `Image`. `gz topic -n 1` CLI latency; if unacceptable, defer to optional `gz.transport` feature (P4+), not core. `param_*` service names differ Fortress vs Harmonic — verify against the P-1-decided backend.
 
+> **STATUS — P2 MOCK SIDE ✅ DONE & VERIFIED 2026-06-30** (`-e dev`, commits `1598b6a` bridge+mock, `c4bd347` tools+FastMCP+deprecation, `bf9897d` tests, `8b95458` review-fixes). 27+10 tests; full suite **570 passed, 10 skipped, 2 pre-existing failures**. `sensor_list`/`sensor_snapshot`/`sensor_camera_image` (returns FastMCP `Image`, byte-capped) + `param_list`/`get`/`set`; **19 tools total**. Advanced-sensor tools (7) + the fake `subscribe_sensor_stream` are deprecated (flag-gated hard-stub under `GAZEBO_LEGACY_TOOLS=0`; always-on deprecation **warning**); `monitor_sensor_health` kept, its status folded into `sensor_list.health`. Mock camera frames marked `synthetic:true,backend:mock`; mock snapshots marked `typed:true`. Real ros_gz/gz paths **written but NOT live-verified** (no `-e full`/live camera/gz param services).
+>
+> **Adversarial grill 2026-06-30: 23 raw → 21 confirmed → 0 blockers. FIXED now (8b95458):** synthetic-frame marker (+text content block); honest `health` (reflects `active`); `param_set` scalar validation (`INVALID_PARAM_VALUE`); camera `INVALID_RESOLUTION` on ≤0 dims; visible deprecation warnings + fake-streamer guard; honest `typed` flag + corrected "typed sample" docstrings; dim-cap/b64-guard comments.
+>
+> **P2-real — DEFERRED follow-ups (need live ros_gz/gz; none block the mock-side merge):**
+> 1. **Param transport likely wrong** — modern `param_*` calls `rcl_interfaces` services at a **guessed** node path `/world/<w>/gz_parameters`; Harmonic params are **gz-transport** (`gz.msgs.ParameterValue`), not auto-bridged to ROS. Verify against a live graph; route via `gz service`/`gz param` CLI or gate with a clear `PARAM_BACKEND_UNAVAILABLE` (currently `param_get` masks unavailability as `UNKNOWN_PARAM`). *(#2,#18)*
+> 2. **Modern `sensor_snapshot` returns raw `gz-text`**, not the typed dict the mock provides — parse the `gz topic -e` echo into typed per-sensor shapes (now honestly marked `typed:false` + TODO). *(#1,#5)*
+> 3. **`list_sensors` type-classification is topic-name substring guessing** (false positives / missed sensors) and real health is hardcoded `"unknown"` — use scene/topic-type info once live. *(#6,#21)*
+> 4. **`gz topic -e` uses `text=True` for binary msg types** — may mangle binary samples (UnicodeDecodeError handled, but masks real captures). *(#7)*
+> 5. **Param-service clients lazily created, never destroyed** (minor leak on the real path). *(#8)*
+> 6. **Legacy 69-tool `sdk_app` surface still advertises the 7 deprecated tools + `subscribe_sensor_stream` regardless of the flag** — filter them from `_build_registry` when `GAZEBO_LEGACY_TOOLS=0` (ties into the P3 single-server unification). *(#17)*
+> 7. **Completeness:** lean `sensor_list` dropped the legacy `response_format` token-budget control; camera output fixed to PNG with no requestable `format`/`quality` honoring; `param_set` has no allowlist/namespace check (arbitrary param creation). *(#19,#20,#15)*
+
 ---
 
 ### P3 — Streamable HTTP + sessions + resources *(T2 transport; the breaking change; maps §8 P3)*
