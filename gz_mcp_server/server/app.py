@@ -6,34 +6,26 @@ here as real ``@mcp.tool()`` async functions that delegate to the framework-agno
 implementations in ``gazebo_mcp.tools.world`` and ``gazebo_mcp.tools.scene`` and
 return ``result.to_dict()``.
 
-Legacy coexistence — DOCUMENTED FALLBACK (not mounted)
-------------------------------------------------------
-We evaluated mounting the 69 curated legacy tools onto this FastMCP instance via
-``Tool.from_function(closure, ...)`` + overriding ``Tool.parameters`` with the
-curated ``inputSchema`` from ``sdk_app._build_registry()``. Empirically:
-  - ``tools/list`` works: the tool appears with the curated schema.
-  - ``tools/call`` does NOT: FastMCP derives a ``FuncMetadata.arg_model`` from the
-    *closure signature*, and the call path validates incoming arguments against
-    that inferred model — NOT against the schema we set on ``.parameters``. A
-    ``**kwargs`` (or ``arguments: dict``) closure therefore rejects the real
-    curated arguments at call time. Making the call work would require hand-
-    building a ``FuncMetadata`` whose ``arg_model`` mirrors each curated JSON
-    schema — the exact fragile hack the plan forbids.
+Legacy unification — UNIFIED IN P3
+----------------------------------
+The 69 curated legacy tools are now mounted onto this same FastMCP instance as
+*native* callable tools (see ``gz_mcp_server.server.legacy_mount``), so ONE
+FastMCP server serves the lean (19) + legacy (69) surfaces over BOTH stdio and
+Streamable HTTP. The P0-B blocker (``tools/call`` rejecting curated arguments
+because FastMCP inferred an ``arg_model`` from a ``**kwargs`` closure) is solved
+by synthesizing a closure whose ``__signature__`` mirrors each curated JSON
+schema — so the inferred ``arg_model`` matches the curated surface and calls
+succeed. ``register_legacy_tools(mcp)`` runs after the lean tools below.
 
-Per the frozen contract: DO NOT block or hack. The 69 legacy tools remain served
-by the retained low-level ``gz_mcp_server.server.sdk_app`` entry point
-(``gazebo-mcp-sdk``). Full single-server unification (lean + legacy on one
-FastMCP transport) lands in P3, when the app shell migrates to FastMCP and the
-curated handlers are refactored to native ``@mcp.tool`` signatures. This P0-B
-FastMCP app serves only the lean tools.
+The low-level ``gz_mcp_server.server.sdk_app`` entry point (``gazebo-mcp-sdk``)
+is RETAINED as a revert path, but the FastMCP app is now the unified one.
 
-The ``GAZEBO_LEGACY_TOOLS`` env var (default ``"1"``) is read and a one-line
-informational log records the chosen path; it is retained so the P3 unification
-can flip behaviour without an interface change.
+The ``GAZEBO_LEGACY_TOOLS`` env var (default ``"1"``) gates the deprecated 8
+advanced-sensor tools: ``"1"`` mounts all 69 (back-compat); ``"0"`` mounts the
+61 non-deprecated legacy tools only.
 """
 
 import base64
-import os
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
@@ -46,6 +38,7 @@ from gazebo_mcp.tools import scene as _scene
 from gazebo_mcp.tools import sensor as _sensor
 from gazebo_mcp.tools import world as _world
 from gazebo_mcp.utils.logger import get_logger
+from gz_mcp_server.server.legacy_mount import register_legacy_tools
 from gz_mcp_server.server.session import GazeboSession
 
 _logger = get_logger("fastmcp_app")
@@ -174,11 +167,16 @@ async def get_session(ctx: Optional[Context]) -> GazeboSession:
 
 
 def build_app() -> FastMCP:
-    """Build the FastMCP app with the nine lean tools registered.
+    """Build the unified FastMCP app: 19 lean tools + the curated legacy tools.
 
-    Legacy 69 tools are intentionally NOT mounted here — see module docstring.
-    They remain served by the retained ``gz_mcp_server.server.sdk_app`` entry
-    point until the P3 single-server unification.
+    The 19 lean ``@mcp.tool`` functions are registered first, then
+    ``register_legacy_tools(mcp)`` mounts the curated legacy tools as native
+    FastMCP tools (P3 unification — see module docstring). Result: one FastMCP
+    app serving lean + legacy over both stdio and Streamable HTTP.
+
+    The ``GAZEBO_LEGACY_TOOLS`` env var (default ``"1"``) gates only the
+    deprecated 8 advanced-sensor tools: legacy is always mounted; ``"0"`` simply
+    excludes those 8 (P2 #17).
     """
     mcp = FastMCP("gazebo-mcp", lifespan=app_lifespan)
 
@@ -419,13 +417,15 @@ def build_app() -> FastMCP:
         """Set (or create) a simulation parameter's value."""
         return (await _param.param_set(name=name, value=value, world=world)).to_dict()
 
-    # Legacy coexistence: documented-fallback path (see module docstring).
-    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") != "0":
-        _logger.info(
-            "Legacy 69 tools served by the retained low-level sdk_app entry "
-            "point (gazebo-mcp-sdk); this FastMCP app serves the 9 lean tools. "
-            "Single-server unification lands in P3.",
-        )
+    # P3 unification: mount the curated legacy tools as native FastMCP tools on
+    # this same app (lists AND calls). Honors GAZEBO_LEGACY_TOOLS for the
+    # deprecated-8 exclusion; lean tools above win on any name collision.
+    legacy_count = register_legacy_tools(mcp)
 
-    _logger.info("FastMCP app built (lean tools)", tool_count=19)
+    _logger.info(
+        "Unified FastMCP app built (lean + legacy)",
+        lean_count=19,
+        legacy_count=legacy_count,
+        total=19 + legacy_count,
+    )
     return mcp

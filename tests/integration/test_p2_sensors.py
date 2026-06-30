@@ -193,8 +193,14 @@ def test_p2_sensor_camera_image_too_large_rejected():
     anyio.run(_run)
 
 
-def test_p2_six_sensor_tools_listed_among_nineteen():
-    """tools/list exposes all six P2 tools; the app advertises 19 tools total."""
+def test_p2_six_sensor_tools_listed_among_lean():
+    """tools/list exposes all six P2 tools among the 19 lean tools.
+
+    P3 unified the 69 curated legacy tools onto this same FastMCP app, so the
+    total advertised count is now lean + legacy (~88), not 19. This test pins the
+    lean-surface contract: the 19 lean tools (including the six P2 tools) are all
+    present, and the legacy unification has added more tools on top.
+    """
 
     async def _run():
         mcp = build_app()
@@ -210,7 +216,25 @@ def test_p2_six_sensor_tools_listed_among_nineteen():
                 "param_get",
                 "param_set",
             }
+            lean_tools = {
+                "world_step",
+                "world_set_physics",
+                "world_seed",
+                "world_get_stats",
+                "scene_spawn",
+                "scene_get_state",
+                "scene_set_state",
+                "scene_remove",
+                "scene_list_models",
+                "actuate_wrench",
+                "actuate_clear_wrench",
+                "actuate_joint",
+                "actuate_joint_trajectory",
+            } | p2_tools
             assert p2_tools <= names, f"missing P2 tools: {p2_tools - names}"
-            assert len(names) == 19, sorted(names)
+            assert lean_tools <= names, f"missing lean tools: {lean_tools - names}"
+            assert len(lean_tools) == 19, sorted(lean_tools)
+            # P3 unification mounts the legacy tools on top of the 19 lean tools.
+            assert len(names) > 19, sorted(names)
 
     anyio.run(_run)
