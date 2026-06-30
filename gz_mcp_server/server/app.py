@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from mcp.server.fastmcp import Context, FastMCP, Image
+from mcp.types import TextContent
 
 from gazebo_mcp.tools import actuate as _actuate
 from gazebo_mcp.tools import param as _param
@@ -277,15 +278,32 @@ def build_app() -> FastMCP:
         world: str = "default",
         ctx: Optional[Context] = None,
     ):
-        """Capture a one-shot camera image; returns an Image on success, else a structured error."""
+        """Capture a one-shot camera image; returns an Image on success, else a structured error.
+
+        When the backend marks the frame as synthetic (the mock solid-color
+        fill), the success return is a content LIST ``[Image, TextContent]``
+        where the trailing text warns "synthetic mock frame (backend=mock)" so a
+        vision consumer cannot mistake the fill for a real rendered frame. The
+        Image is always first, so callers that read ``content[0]`` are unchanged.
+        """
         result = await _sensor.sensor_camera_image(
             topic=topic, resolution=resolution, quality=quality, world=world
         )
         if result.success:
-            return Image(
+            image = Image(
                 data=base64.b64decode(result.data["image_b64"]),
                 format=result.data["format"],
             )
+            if result.data.get("synthetic"):
+                backend = result.data.get("backend", "mock")
+                return [
+                    image,
+                    TextContent(
+                        type="text",
+                        text=f"synthetic mock frame (backend={backend})",
+                    ),
+                ]
+            return image
         return result.to_dict()
 
     # ------------------------------- param_* -------------------------------

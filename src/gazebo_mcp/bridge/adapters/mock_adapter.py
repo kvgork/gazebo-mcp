@@ -37,8 +37,9 @@ _FIXED_TIMESTAMP = "2026-01-01T00:00:00Z"
 MAX_IMAGE_DIM = 4096
 
 # P2: the four deterministic mock sensor descriptors. Reuses the legacy
-# _get_mock_sensors() content (sensor_tools.py) and folds in a "health" field
-# so list_sensors subsumes monitor_sensor_health at the tool layer.
+# _get_mock_sensors() content (sensor_tools.py). ``list_sensors`` DERIVES each
+# descriptor's "health" from its "active" flag at read time (see below) so the
+# status is honest rather than a hardcoded constant.
 _MOCK_SENSORS: List[Dict[str, Any]] = [
     {
         "name": "lidar_front",
@@ -54,7 +55,6 @@ _MOCK_SENSORS: List[Dict[str, Any]] = [
             "angle_max": 3.14,
             "resolution": 360,
         },
-        "health": "ok",
     },
     {
         "name": "camera_rgb",
@@ -64,7 +64,6 @@ _MOCK_SENSORS: List[Dict[str, Any]] = [
         "frame_id": "camera_link",
         "active": True,
         "specs": {"width": 1920, "height": 1080, "fov": 1.3962634, "format": "RGB8"},
-        "health": "ok",
     },
     {
         "name": "imu_sensor",
@@ -74,7 +73,6 @@ _MOCK_SENSORS: List[Dict[str, Any]] = [
         "frame_id": "imu_link",
         "active": True,
         "specs": {"update_rate": 200.0, "noise": 0.01},
-        "health": "ok",
     },
     {
         "name": "gps_sensor",
@@ -84,7 +82,6 @@ _MOCK_SENSORS: List[Dict[str, Any]] = [
         "frame_id": "gps_link",
         "active": True,
         "specs": {"horizontal_accuracy": 1.0, "vertical_accuracy": 1.5},
-        "health": "ok",
     },
 ]
 
@@ -418,19 +415,32 @@ class MockGazeboAdapter(GazeboInterface):
         """Return deep copies of the 4 deterministic mock sensor descriptors.
 
         Each descriptor carries name/type/model/topic/frame_id/active/specs plus
-        a ``"health"`` field (always "ok" in the mock). Copies are returned so a
-        caller mutating the result cannot corrupt the module-level fixtures.
+        a ``"health"`` field DERIVED from ``active`` ("ok" if active else
+        "inactive"). Copies are returned so a caller mutating the result cannot
+        corrupt the module-level fixtures.
+
+        HONESTY NOTE: this ``health`` is a BASIC active/inactive status only.
+        Richer health metrics (data-rate / latency / dropout / quality, the old
+        ``monitor_sensor_health`` payload) are DEFERRED to the real backend and
+        are not synthesised here.
         """
         import copy
 
-        return [copy.deepcopy(s) for s in _MOCK_SENSORS]
+        sensors = []
+        for s in _MOCK_SENSORS:
+            d = copy.deepcopy(s)
+            d["health"] = "ok" if d.get("active") else "inactive"
+            sensors.append(d)
+        return sensors
 
     async def sensor_snapshot(self, topic: str, world: str = "default") -> Dict[str, Any]:
-        """Return the deterministic typed sample for the sensor at ``topic``.
+        """Return the deterministic TYPED sample for the sensor at ``topic``.
 
         Shapes mirror the legacy ``_get_mock_sensor_data`` payloads but every
         snapshot uses the FIXED timestamp ``_FIXED_TIMESTAMP`` so the result is
-        fully reproducible.
+        fully reproducible. Every return carries ``"typed": True`` — this is the
+        typed-sample backend; the modern adapter returns raw gz-text with
+        ``"typed": False`` instead (callers branch on the flag).
 
         Raises:
             KeyError: if no mock sensor publishes on ``topic``.
@@ -445,6 +455,7 @@ class MockGazeboAdapter(GazeboInterface):
         if sensor_type == "lidar":
             return {
                 "type": "lidar",
+                "typed": True,
                 "sensor_name": name,
                 "topic": topic,
                 "timestamp": _FIXED_TIMESTAMP,
@@ -457,6 +468,7 @@ class MockGazeboAdapter(GazeboInterface):
         elif sensor_type == "camera":
             return {
                 "type": "camera",
+                "typed": True,
                 "sensor_name": name,
                 "topic": topic,
                 "timestamp": _FIXED_TIMESTAMP,
@@ -468,6 +480,7 @@ class MockGazeboAdapter(GazeboInterface):
         elif sensor_type == "imu":
             return {
                 "type": "imu",
+                "typed": True,
                 "sensor_name": name,
                 "topic": topic,
                 "timestamp": _FIXED_TIMESTAMP,
@@ -478,6 +491,7 @@ class MockGazeboAdapter(GazeboInterface):
         else:  # gps
             return {
                 "type": "gps",
+                "typed": True,
                 "sensor_name": name,
                 "topic": topic,
                 "timestamp": _FIXED_TIMESTAMP,
@@ -499,7 +513,18 @@ class MockGazeboAdapter(GazeboInterface):
         Only ``/camera/image_raw`` is a valid camera topic in the mock. ``WxH``
         is parsed from ``resolution`` and each dimension is CAPPED at
         ``MAX_IMAGE_DIM``. ``quality`` is accepted for parity but unused (PNG is
-        lossless). Returns {"data": <png bytes>, "format": "png", "width", "height"}.
+        lossless; ``quality`` is reserved for the real backend's JPEG path).
+        Returns {"data": <png bytes>, "format": "png", "width", "height",
+        "synthetic": True, "backend": "mock"}.
+
+        HONESTY NOTE: the returned frame is a solid-color SYNTHETIC fill, NOT a
+        real rendered scene — ``synthetic=True``/``backend="mock"`` mark it so a
+        vision consumer cannot mistake it for a real camera frame.
+
+        Note: in practice the TOOL layer (``tools/sensor.py``) REJECTS dims
+        > ``MAX_IMAGE_DIM`` with IMAGE_TOO_LARGE before this adapter is ever
+        called, so the ``min(...)`` cap below is unreachable via the tool path
+        and only guards a direct adapter call.
 
         Raises:
             KeyError: if ``topic`` is not the mock camera topic.
@@ -528,7 +553,16 @@ class MockGazeboAdapter(GazeboInterface):
         height = min(height, MAX_IMAGE_DIM)
 
         png = _solid_png(width, height)
-        return {"data": png, "format": "png", "width": width, "height": height}
+        return {
+            "data": png,
+            "format": "png",
+            "width": width,
+            "height": height,
+            # Mark the frame as a synthetic solid-color mock fill (not a real
+            # rendered scene) so downstream vision consumers cannot mistake it.
+            "synthetic": True,
+            "backend": "mock",
+        }
 
     @staticmethod
     def _infer_param_type(value: Any) -> str:

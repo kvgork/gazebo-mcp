@@ -59,7 +59,13 @@ async def sensor_list(sensor_type: str | None = None, world: str = "default") ->
 
 
 async def sensor_snapshot(topic: str, world: str = "default") -> OperationResult:
-    """Return the latest typed sample for the sensor publishing on ``topic``.
+    """Return the latest sample for the sensor publishing on ``topic``.
+
+    The sample shape is backend-dependent and callers branch on ``data["typed"]``:
+      - MOCK backend: a deterministic TYPED dict (``"typed": True``) with
+        per-sensor-type fields.
+      - MODERN backend: a RAW gz-text echo (``{"format": "gz-text", "raw": ...,
+        "typed": False}``); typed parsing is DEFERRED to P2-real.
 
     An unknown topic (``KeyError`` from the bridge) maps to
     ``error_code="UNKNOWN_TOPIC"``.
@@ -88,8 +94,9 @@ async def sensor_camera_image(
     """Return a one-shot encoded camera image as base64.
 
     Validation (before the bridge is touched):
-      - ``resolution`` not in "WxH" form  -> INVALID_RESOLUTION
-      - width or height > MAX_IMAGE_DIM    -> IMAGE_TOO_LARGE (REJECT, no cap)
+      - ``resolution`` not in "WxH" form    -> INVALID_RESOLUTION
+      - width or height <= 0                 -> INVALID_RESOLUTION
+      - width or height > MAX_IMAGE_DIM      -> IMAGE_TOO_LARGE (REJECT, no cap)
 
     After encoding:
       - base64 length > MAX_IMAGE_B64_BYTES -> IMAGE_TOO_LARGE
@@ -98,7 +105,13 @@ async def sensor_camera_image(
       - non-camera topic (``KeyError``)        -> NOT_A_CAMERA
       - modern backend (``NotImplementedError``) -> NOT_IMPLEMENTED_REAL
 
-    On success ``data`` = {"format", "width", "height", "bytes_b64", "image_b64"}.
+    ``quality`` is currently a NO-OP: the mock backend always emits a lossless
+    PNG, so the quality hint is ignored. It is reserved for the real backend's
+    JPEG encoding path (deferred).
+
+    On success ``data`` = {"format", "width", "height", "bytes_b64",
+    "image_b64"} plus ``synthetic``/``backend`` when the mock backend marks the
+    frame as a synthetic solid-color fill.
     """
     try:
         # Parse + validate resolution BEFORE any bridge call.
@@ -114,6 +127,16 @@ async def sensor_camera_image(
                 suggestions=["Pass resolution as 'WxH', e.g. '640x480'"],
             )
 
+        # Reject zero/negative dimensions here (INVALID_RESOLUTION) so they do
+        # NOT slip through to the bridge and misclassify as SENSOR_OP_FAILED.
+        if req_w < 1 or req_h < 1:
+            return OperationResult(
+                success=False,
+                error=f"invalid resolution '{resolution}'; each dimension must be >= 1",
+                error_code="INVALID_RESOLUTION",
+                suggestions=["Pass positive dimensions, e.g. '640x480'"],
+            )
+
         if req_w > MAX_IMAGE_DIM or req_h > MAX_IMAGE_DIM:
             return OperationResult(
                 success=False,
@@ -126,6 +149,8 @@ async def sensor_camera_image(
         img = await b.sensor_camera_image(topic, resolution, quality, world)
 
         b64 = base64.b64encode(img["data"]).decode()
+        # MAX_IMAGE_B64_BYTES is a DEFENSIVE guard for the real backend's frames;
+        # the mock's solid-color PNGs (capped at MAX_IMAGE_DIM) never approach it.
         if len(b64) > MAX_IMAGE_B64_BYTES:
             return OperationResult(
                 success=False,
@@ -134,16 +159,21 @@ async def sensor_camera_image(
                 suggestions=["Request a smaller resolution or lower quality"],
             )
 
-        return OperationResult(
-            success=True,
-            data={
-                "format": img["format"],
-                "width": img["width"],
-                "height": img["height"],
-                "bytes_b64": len(b64),
-                "image_b64": b64,
-            },
-        )
+        data = {
+            "format": img["format"],
+            "width": img["width"],
+            "height": img["height"],
+            "bytes_b64": len(b64),
+            "image_b64": b64,
+        }
+        # Propagate the synthetic/backend markers so an agent/vision consumer can
+        # tell a mock solid-color fill from a real rendered frame.
+        if "synthetic" in img:
+            data["synthetic"] = img["synthetic"]
+        if "backend" in img:
+            data["backend"] = img["backend"]
+
+        return OperationResult(success=True, data=data)
     except KeyError:
         return OperationResult(
             success=False,

@@ -55,7 +55,22 @@ async def param_get(name: str, world: str = "default") -> OperationResult:
 
 
 async def param_set(name: str, value: Any, world: str = "default") -> OperationResult:
-    """Set (or create) a parameter's value. ``data`` = {"name", "value", "world"}."""
+    """Set (or create) a parameter's value. ``data`` = {"name", "value", "world"}.
+
+    Only scalar values are accepted: ``int`` / ``float`` / ``bool`` / ``str``.
+    A non-scalar (list/dict/tuple/...) or ``None`` is rejected with
+    ``error_code="INVALID_PARAM_VALUE"`` BEFORE the bridge is touched (bool is a
+    valid scalar; bool-before-int type inference is preserved by the adapter).
+    """
+    # bool is intentionally accepted here (it is a scalar param type); the
+    # adapter's _infer_param_type checks bool BEFORE int so the type is correct.
+    if not isinstance(value, (int, float, bool, str)):
+        return OperationResult(
+            success=False,
+            error="param value must be scalar (int/float/bool/str)",
+            error_code="INVALID_PARAM_VALUE",
+            suggestions=["Pass a scalar value: an int, float, bool, or str"],
+        )
     try:
         b = get_bridge()
         await b.param_set(name, value, world)

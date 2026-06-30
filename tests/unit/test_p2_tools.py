@@ -96,6 +96,58 @@ def test_sensor_camera_image_invalid_resolution_rejected():
     anyio.run(_run)
 
 
+def test_sensor_camera_image_zero_resolution_rejected():
+    """Zero/negative dims are rejected with INVALID_RESOLUTION (not SENSOR_OP_FAILED)."""
+
+    async def _run():
+        result = await sensor_tools.sensor_camera_image(
+            topic="/camera/image_raw", resolution="0x0"
+        )
+        assert result.success is False, result
+        assert result.error_code == "INVALID_RESOLUTION", result
+
+    anyio.run(_run)
+
+
+def test_sensor_camera_image_marks_synthetic_mock_frame():
+    """The mock camera frame is flagged synthetic/backend so it can't be mistaken
+    for a real rendered frame."""
+
+    async def _run():
+        result = await sensor_tools.sensor_camera_image(
+            topic="/camera/image_raw", resolution="64x64"
+        )
+        assert result.success is True, result
+        assert result.data.get("synthetic") is True, result.data
+        assert result.data.get("backend") == "mock", result.data
+
+    anyio.run(_run)
+
+
+def test_sensor_list_health_reflects_active_flag():
+    """list_sensors derives 'health' from 'active' (ok for active sensors)."""
+
+    async def _run():
+        result = await sensor_tools.sensor_list()
+        assert result.success is True, result
+        for s in result.data["sensors"]:
+            expected = "ok" if s.get("active") else "inactive"
+            assert s["health"] == expected, s
+
+    anyio.run(_run)
+
+
+def test_sensor_snapshot_mock_marks_typed():
+    """The mock snapshot carries typed=True so callers can branch vs the modern raw echo."""
+
+    async def _run():
+        result = await sensor_tools.sensor_snapshot(topic="/scan")
+        assert result.success is True, result
+        assert result.data.get("typed") is True, result.data
+
+    anyio.run(_run)
+
+
 # --------------------------------------------------------------------------
 # param type inference round-trips
 # --------------------------------------------------------------------------
@@ -122,6 +174,18 @@ def test_param_set_then_get_infers_type(value, expected_type):
         assert got.success is True, got
         assert got.data["value"] == value
         assert got.data["type"] == expected_type
+
+    anyio.run(_run)
+
+
+@pytest.mark.parametrize("bad_value", [None, [1, 2], {"a": 1}, (1, 2)])
+def test_param_set_rejects_non_scalar_value(bad_value):
+    """param_set rejects None / list / dict / tuple with INVALID_PARAM_VALUE."""
+
+    async def _run():
+        result = await param_tools.param_set(name="x", value=bad_value)
+        assert result.success is False, result
+        assert result.error_code == "INVALID_PARAM_VALUE", result
 
     anyio.run(_run)
 

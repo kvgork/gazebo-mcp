@@ -402,6 +402,12 @@ class GazeboInterface(ABC):
         Returns:
             List of sensor descriptor dicts, each with at least
             name/type/model/topic/frame_id/active/specs and a "health" field.
+
+        Note:
+            ``health`` is a BASIC active/inactive status only (the mock derives
+            it from each sensor's ``active`` flag). Richer health metrics
+            (data-rate / latency / dropout / quality — the old
+            ``monitor_sensor_health`` payload) are DEFERRED to the real backend.
         """
         raise NotImplementedError(
             f"list_sensors() not implemented for backend '{self.get_backend_name()}'"
@@ -409,14 +415,21 @@ class GazeboInterface(ABC):
 
     async def sensor_snapshot(self, topic: str, world: str = "default") -> Dict[str, Any]:
         """
-        Return the latest typed sample for the sensor publishing on ``topic``.
+        Return the latest sample for the sensor publishing on ``topic``.
+
+        Backend-dependent shape (callers branch on the ``"typed"`` flag):
+          - MOCK backend: a deterministic TYPED dict (per-sensor-type fields,
+            ``"typed": True``).
+          - MODERN backend: a RAW gz-text echo (``{"format": "gz-text", "raw":
+            ..., "typed": False}``); typed parsing into the mock-equivalent
+            shapes is DEFERRED to P2-real ros_gz subscription parsing.
 
         Args:
             topic: The sensor's topic (e.g. "/scan", "/imu")
             world: World name
 
         Returns:
-            A deterministic typed sample dict (shape depends on sensor type).
+            A sample dict; shape depends on backend + sensor type (see above).
 
         Raises:
             KeyError: If no sensor publishes on ``topic``.

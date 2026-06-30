@@ -16,6 +16,7 @@ Supported sensor types:
 - Force/Torque sensors
 """
 
+import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -282,7 +283,24 @@ def subscribe_sensor_stream(
         ...     "/scan",
         ...     message_type="sensor_msgs/LaserScan"
         ... )
+
+    Deprecated:
+        This is the fake streamer superseded by the one-shot ``sensor_snapshot``
+        tool (and P3 resources). A deprecation warning is emitted at call time
+        REGARDLESS of the ``GAZEBO_LEGACY_TOOLS`` flag; with the flag set to
+        ``"0"`` the call hard-stops with ``error_code="DEPRECATED_TOOL"``,
+        otherwise (default) it runs its real body unchanged.
     """
+    # Visible deprecation (warning fires regardless of flag); hard-stop only
+    # when GAZEBO_LEGACY_TOOLS=0 so default behaviour stays unchanged for tests.
+    _logger.warning("subscribe_sensor_stream is deprecated; use sensor_snapshot")
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return OperationResult(
+            success=False,
+            error="subscribe_sensor_stream is deprecated; use sensor_snapshot",
+            error_code="DEPRECATED_TOOL",
+            suggestions=["Use sensor_snapshot"],
+        )
     try:
         # Validate parameters:
         sensor_name = validate_entity_name(sensor_name, "sensor")

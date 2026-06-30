@@ -74,7 +74,7 @@ def _coerce_response_format(response_format: str) -> str:
 def _deprecated(name: str, replacement: str) -> OperationResult:
     """Build the structured deprecation result for a flag-gated legacy tool.
 
-    Emitted only when ``GAZEBO_LEGACY_TOOLS=0``; the default (flag ON) keeps the
+    Returned only when ``GAZEBO_LEGACY_TOOLS=0``; the default (flag ON) keeps the
     real tool body running so existing tests stay green.
     """
     return OperationResult(
@@ -83,6 +83,21 @@ def _deprecated(name: str, replacement: str) -> OperationResult:
         error_code="DEPRECATED_TOOL",
         suggestions=[f"Use {replacement}"],
     )
+
+
+def _deprecation_guard(name: str, replacement: str) -> Optional[OperationResult]:
+    """Emit the visible deprecation warning, and hard-stop only if flag is OFF.
+
+    The ``_logger.warning`` fires at call time REGARDLESS of the
+    ``GAZEBO_LEGACY_TOOLS`` flag, so the deprecation is visible even on the
+    default (flag ON) path where the real body still runs. Returns the
+    ``DEPRECATED_TOOL`` result ONLY when ``GAZEBO_LEGACY_TOOLS=0`` (hard-stub),
+    else ``None`` (caller proceeds to run its real body unchanged).
+    """
+    _logger.warning(f"{name} is deprecated; use {replacement}")
+    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
+        return _deprecated(name, replacement)
+    return None
 
 
 def fuse_sensor_data(
@@ -105,8 +120,9 @@ def fuse_sensor_data(
     Example:
         >>> fuse_sensor_data("lidar_camera", ["lidar_front", "camera_rgb"])
     """
-    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
-        return _deprecated("fuse_sensor_data", "sensor_snapshot")
+    _guard = _deprecation_guard("fuse_sensor_data", "sensor_snapshot")
+    if _guard is not None:
+        return _guard
     try:
         if fusion_type not in _VALID_FUSION_TYPES:
             return OperationResult(
@@ -217,8 +233,9 @@ def visualize_sensor_data(
     Example:
         >>> visualize_sensor_data("lidar_front", "point_cloud")
     """
-    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
-        return _deprecated("visualize_sensor_data", "sensor_snapshot")
+    _guard = _deprecation_guard("visualize_sensor_data", "sensor_snapshot")
+    if _guard is not None:
+        return _guard
     try:
         sensor = validate_entity_name(sensor, "sensor")
 
@@ -310,8 +327,9 @@ def process_sensor_data(
     Example:
         >>> process_sensor_data("lidar_front", "voxel_filter", params={"leaf_size": 0.05})
     """
-    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
-        return _deprecated("process_sensor_data", "sensor_snapshot")
+    _guard = _deprecation_guard("process_sensor_data", "sensor_snapshot")
+    if _guard is not None:
+        return _guard
     try:
         sensor = validate_entity_name(sensor, "sensor")
 
@@ -400,8 +418,9 @@ def calibrate_sensor(
     Example:
         >>> calibrate_sensor("camera_rgb", "camera_intrinsics")
     """
-    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
-        return _deprecated("calibrate_sensor", "sensor_list")
+    _guard = _deprecation_guard("calibrate_sensor", "sensor_list")
+    if _guard is not None:
+        return _guard
     try:
         sensor = validate_entity_name(sensor, "sensor")
 
@@ -595,8 +614,9 @@ def record_sensor_stream(
     Example:
         >>> record_sensor_stream(["lidar_front", "camera_rgb"], "/tmp/run1")
     """
-    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
-        return _deprecated("record_sensor_stream", "sensor_snapshot")
+    _guard = _deprecation_guard("record_sensor_stream", "sensor_snapshot")
+    if _guard is not None:
+        return _guard
     try:
         if not isinstance(sensors, list) or len(sensors) == 0:
             return OperationResult(
@@ -701,8 +721,9 @@ def detect_objects_in_view(
     Example:
         >>> detect_objects_in_view("camera_rgb", confidence=0.6)
     """
-    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
-        return _deprecated("detect_objects_in_view", "sensor_camera_image")
+    _guard = _deprecation_guard("detect_objects_in_view", "sensor_camera_image")
+    if _guard is not None:
+        return _guard
     try:
         camera = validate_entity_name(camera, "camera")
 
@@ -785,8 +806,9 @@ def segment_camera_image(
     Example:
         >>> segment_camera_image("camera_rgb", mode="instance")
     """
-    if os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0":
-        return _deprecated("segment_camera_image", "sensor_camera_image")
+    _guard = _deprecation_guard("segment_camera_image", "sensor_camera_image")
+    if _guard is not None:
+        return _guard
     try:
         camera = validate_entity_name(camera, "camera")
 

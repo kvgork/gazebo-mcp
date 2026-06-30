@@ -1187,17 +1187,20 @@ class ModernGazeboAdapter(GazeboInterface):
         (best-effort, DEFERRED/write-only).
 
         Shells out to ``gz topic -e -n 1 -t <topic>`` (matching the CLI style of
-        ``list_entities``) and returns the raw text echo under ``"raw"`` along
-        with the topic/format. Full typed parsing into per-sensor-type dicts
-        (matching the mock shapes) is NOT wired here — that belongs to a real
-        ros_gz subscription feeding a latest-sample cache.
+        ``list_entities``) and returns the RAW text echo under ``"raw"`` along
+        with the topic/format and ``"typed": False`` (so callers know this is
+        NOT the typed per-sensor dict the mock backend returns). Full typed
+        parsing into per-sensor-type dicts (matching the mock shapes) is NOT
+        wired here — that belongs to a real ros_gz subscription feeding a
+        latest-sample cache.
 
         Raises:
             KeyError: if the one-shot read yields nothing (treated as "no sensor
                 publishing on this topic").
 
         # TODO(P2-real): subscribe via sensor_msgs (LaserScan/Imu/NavSatFix) and
-        #   cache the latest sample; parse into the typed mock-equivalent shapes.
+        #   cache the latest sample; parse into the typed mock-equivalent shapes
+        #   (and flip "typed" to True once the typed payload is produced).
         """
         import subprocess
 
@@ -1225,6 +1228,8 @@ class ModernGazeboAdapter(GazeboInterface):
                     "topic": topic,
                     "format": "gz-text",
                     "raw": result.stdout,
+                    # Raw gz-text echo, NOT the typed mock-equivalent dict.
+                    "typed": False,
                 }
 
         # Nothing came back: honestly signal "unknown/no sensor on this topic".
