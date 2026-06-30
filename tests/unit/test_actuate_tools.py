@@ -246,3 +246,69 @@ def test_actuate_joint_trajectory_stores_num_points_and_last_point():
         assert last == {"positions": [0.5, -0.5], "time_from_start": 1.0}
 
     anyio.run(_run)
+
+
+# --------------------------------------------------------------------------
+# P1 review fixes: INVALID_MODE / INVALID_TRAJECTORY / wheel-safe manifest
+# --------------------------------------------------------------------------
+
+
+def test_actuate_joint_invalid_mode_rejected():
+    """A mode outside {pos,vel,force} is rejected with INVALID_MODE; bridge untouched."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint(
+            model="jetank", joint="arm_base_to_long_joint", mode="torque", value=0.1
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_MODE"
+        assert result.data is None
+        # Bridge was never called -> no target recorded.
+        assert (
+            await _adapter().get_joint_target("jetank", "arm_base_to_long_joint")
+        ) is None
+
+    anyio.run(_run)
+
+
+@pytest.mark.parametrize(
+    "bad_points",
+    [
+        None,
+        [],
+        "nope",
+        [{"time_from_start": 1.0}],          # missing positions
+        [{"positions": "0.5"}],              # positions not a list
+        [{"positions": [0.0]}, "oops"],      # second element not a dict
+    ],
+)
+def test_actuate_joint_trajectory_malformed_rejected(bad_points):
+    """Malformed trajectory input is rejected with INVALID_TRAJECTORY."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank", points=bad_points
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TRAJECTORY"
+        assert result.data is None
+
+    anyio.run(_run)
+
+
+def test_manifest_loads_from_package_data_when_no_env_override(monkeypatch):
+    """Wheel-safe load: with no env override, the package-data manifest resolves
+    and joints (including the new gripper joints) are found."""
+    monkeypatch.delenv("GAZEBO_MODEL_MANIFEST", raising=False)
+    actuate_tools._reset_manifest_cache()
+
+    # The package-data path resolves via importlib.resources (wheel-safe).
+    pkg_path = actuate_tools._packaged_manifest_path()
+    assert pkg_path is not None, "package-data manifest should be discoverable"
+
+    # Joints from the manifest are found through the normal loader path.
+    assert actuate_tools._joint_known("jetank", "arm_base_to_long_joint") is True
+    assert actuate_tools._joint_known("jetank", "left_finger_joint") is True
+    assert actuate_tools._joint_known("jetank", "right_finger_joint") is True
+    # The prismatic gripper joint carries its [lower, upper] limits.
+    assert actuate_tools._joint_limits("jetank", "left_finger_joint") == (0.0, 0.02)

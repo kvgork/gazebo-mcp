@@ -23,8 +23,12 @@
     extended to substitute a $joint_controllers slot per manifest model, this
     static block is replaced by the generated set. Until then it is inert
     documentation co-located with the world it provisions.
-  - EntityWrench commands arrive on /world/<name>/wrench (handled by the
-    UserCommands system already loaded below); no extra world plugin needed.
+  - EntityWrench commands arrive on /world/<name>/wrench (and clears on
+    /world/<name>/wrench/clear). In Harmonic gz-sim 8 these topics are serviced
+    by the DEDICATED ApplyLinkWrench system (gz-sim-apply-link-wrench-system /
+    gz::sim::systems::ApplyLinkWrench), loaded below — NOT by UserCommands.
+    Topic-applied wrenches are persistent-until-cleared (the caller must publish
+    to .../wrench/clear); the EntityWrench topic does not honor a duration.
 -->
 <sdf version="1.9">
   <world name="$world_name">
@@ -45,6 +49,14 @@
     <plugin
       filename="gz-sim-scene-broadcaster-system"
       name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+
+    <!-- Services /world/<name>/wrench (+ /wrench/clear): applies the
+         EntityWrench published by the Modern adapter to the named entity's
+         link. Topic-applied wrenches are persistent-until-cleared. -->
+    <plugin
+      filename="gz-sim-apply-link-wrench-system"
+      name="gz::sim::systems::ApplyLinkWrench">
     </plugin>
 
     <!-- Publishes entity poses to /world/<name>/pose/info -->

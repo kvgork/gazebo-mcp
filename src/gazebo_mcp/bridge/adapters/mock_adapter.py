@@ -168,6 +168,20 @@ class MockGazeboAdapter(GazeboInterface):
     # -- physics/timing control (P0 additions) --
 
     async def step(self, steps: int = 1, world: str = "default") -> Dict[str, Any]:
+        """Advance mock time and integrate recorded wrenches.
+
+        HONESTY NOTE — this is a KINEMATIC LINEAR-FORCE APPROXIMATION, not real
+        rigid-body dynamics:
+          - Only LINEAR force is integrated, as Δx = ½·(F/m)·(n·dt)² PER step()
+            call, always FROM REST (the mock carries no velocity state).
+          - TORQUE is recorded by ``apply_wrench_topic`` but is NEVER applied —
+            the entity's orientation does not change.
+          - TWIST (linear/angular velocity) is NOT updated by stepping.
+          - Mass is the constant ``_MOCK_MASS = 1.0`` for every entity,
+            regardless of the spawned SDF's inertial properties.
+        Callers/tests must treat the resulting pose as a deterministic fixture,
+        not a physical prediction.
+        """
         if steps < 1:
             raise ValueError("steps must be >= 1")
         w = self._world(world)
@@ -222,7 +236,15 @@ class MockGazeboAdapter(GazeboInterface):
         persistent: bool = False,
         world: str = "default",
     ) -> bool:
-        """Record a wrench on ``entity``; integrated lazily in ``step``."""
+        """Record a wrench on ``entity``; integrated lazily in ``step``.
+
+        HONESTY NOTE: the recorded ``torque`` is stored but NEVER applied — the
+        mock ``step`` integrates LINEAR force only (kinematic, constant
+        ``_MOCK_MASS = 1.0``, from rest each call) and never rotates the entity
+        or updates its twist. ``duration`` is ignored; ``persistent`` only
+        controls whether the wrench survives a ``step`` call (one-shot vs
+        re-integrated). See ``step`` for the full approximation contract.
+        """
         w = self._world(world)
         w.wrenches[entity] = {
             "force": [float(force[0]), float(force[1]), float(force[2])],

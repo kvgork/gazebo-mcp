@@ -723,19 +723,29 @@ class ModernGazeboAdapter(GazeboInterface):
     ) -> bool:
         """
         Apply a wrench by publishing ``ros_gz_interfaces/msg/EntityWrench`` to
-        ``/world/<world>/wrench`` (the Harmonic wrench-system topic).
+        ``/world/<world>/wrench`` (serviced by the Harmonic ApplyLinkWrench
+        system in the provisioned world).
 
-        Supersedes the legacy service-based ``apply_wrench``. The gz wrench
-        system / launch handles timed (``duration``) vs persistent application;
-        we publish a single EntityWrench message.
+        Supersedes the legacy service-based ``apply_wrench``. We publish a single
+        EntityWrench message.
+
+        HONESTY NOTE: an EntityWrench applied via this TOPIC is
+        **persistent-until-cleared** in gz — it keeps acting every physics step
+        until the caller publishes to ``/world/<world>/wrench/clear`` (see
+        ``clear_wrench``). The topic path does NOT honor ``duration`` or
+        ``persistent``: those args are recorded/logged only and have no effect on
+        gz's behaviour. A one-shot/timed wrench must be emulated by the caller
+        (apply, step, then clear).
+        # TODO(P1-real): implement duration via a scheduled clear_wrench.
 
         Args:
             entity: Entity name (set on ``entity.name``)
             link: Link name within the entity ("" = base/canonical link)
             force: (fx, fy, fz) in Newtons (world frame)
             torque: (tx, ty, tz) in Newton-metres (world frame)
-            duration: Duration in seconds (handled downstream by gz)
-            persistent: If True the wrench persists until cleared
+            duration: NOT honored by the topic path (see HONESTY NOTE above).
+            persistent: NOT honored by the topic path — gz topic-applied wrenches
+                are always persistent-until-cleared (see HONESTY NOTE above).
             world: Target world name
 
         Returns:

@@ -75,6 +75,12 @@ package-dir = {"" = "src"}
 where = ["src"]
 include = ["gazebo_mcp*"]
 
+[tool.setuptools.package-data]
+# Ship the JETANK model manifest as package data so the actuation tools resolve
+# it via importlib.resources when installed as a wheel (the repo models/ dir is
+# NOT shipped). See gazebo_mcp.tools.actuate._packaged_manifest_path.
+gazebo_mcp = ["data/*.json"]
+
 [tool.black]
 line-length = 100
 target-version = ['py310', 'py311', 'py312']

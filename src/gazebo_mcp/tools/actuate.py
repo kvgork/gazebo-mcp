@@ -20,13 +20,20 @@ against the model manifest BEFORE touching the bridge:
     -> ``UNKNOWN_JOINT`` (bridge NOT called; safe-by-default per the contract).
   - a continuous joint (no limits) or a non-``pos`` mode -> no range check.
 
-Manifest resolution: ``GazeboConfig.from_environment().model_manifest`` if set,
-else the in-repo default ``<repo>/models/jetank/manifest.json`` resolved from this
-file's location (``Path(__file__).resolve().parents[3]``). The loaded manifest is
-cached at module level; ``_reset_manifest_cache()`` clears it (used by tests).
+Manifest resolution (first hit wins):
+  1. ``GazeboConfig.from_environment().model_manifest`` env override, if set.
+  2. PACKAGE DATA ``gazebo_mcp/data/jetank_manifest.json`` resolved via
+     ``importlib.resources`` — wheel-safe, works when installed into
+     site-packages where the repo ``models/`` dir is absent.
+  3. The in-repo human-facing asset ``<repo>/models/jetank/manifest.json``
+     resolved from this file's location (``Path(__file__).resolve().parents[3]``)
+     as a fallback for editable / source checkouts.
+The loaded manifest is cached at module level keyed by source path;
+``_reset_manifest_cache()`` clears it (used by tests).
 """
 
 import json
+from importlib.resources import files as _resource_files
 from pathlib import Path
 
 from gazebo_mcp.bridge.config import GazeboConfig
@@ -40,7 +47,10 @@ _ACTUATE_OP_FAILED = "ACTUATE_OP_FAILED"
 
 # Repo root is three levels up from this file:
 #   <repo>/src/gazebo_mcp/tools/actuate.py -> parents[3] == <repo>
-_DEFAULT_MANIFEST = Path(__file__).resolve().parents[3] / "models" / "jetank" / "manifest.json"
+# This path resolves OUTSIDE site-packages when the package is installed as a
+# wheel, so it is only a SOURCE-CHECKOUT fallback — the wheel-safe path is the
+# package-data manifest resolved via importlib.resources (see _manifest_path).
+_REPO_MANIFEST = Path(__file__).resolve().parents[3] / "models" / "jetank" / "manifest.json"
 
 # Module-level cache: maps the resolved manifest path -> parsed dict. Caching by
 # path (rather than a bare bool) keeps the cache correct if the configured path
@@ -48,12 +58,37 @@ _DEFAULT_MANIFEST = Path(__file__).resolve().parents[3] / "models" / "jetank" / 
 _manifest_cache: dict[str, dict] = {}
 
 
+def _packaged_manifest_path() -> Path | None:
+    """Return the wheel-safe package-data manifest path, or None if absent.
+
+    Uses ``importlib.resources.files`` so it resolves correctly whether the
+    package is an editable source checkout OR installed into site-packages as a
+    wheel (where the repo ``models/`` dir does not ship). Non-throwing: any
+    lookup error yields None so we fall through to the repo asset.
+    """
+    try:
+        res = _resource_files("gazebo_mcp").joinpath("data/jetank_manifest.json")
+        path = Path(str(res))
+        return path if path.is_file() else None
+    except Exception:  # noqa: BLE001 — degrade to the repo-asset fallback
+        return None
+
+
 def _manifest_path() -> Path:
-    """Resolve the manifest path: configured ``model_manifest`` or the repo default."""
+    """Resolve the manifest path (first hit wins): env override -> package data
+    -> in-repo asset.
+
+    The env override always wins so operators can point at a custom manifest.
+    Otherwise the wheel-safe package-data copy is preferred, falling back to the
+    human-facing repo asset for source checkouts that have not shipped data/.
+    """
     configured = GazeboConfig.from_environment().model_manifest
     if configured:
         return Path(configured)
-    return _DEFAULT_MANIFEST
+    packaged = _packaged_manifest_path()
+    if packaged is not None:
+        return packaged
+    return _REPO_MANIFEST
 
 
 def _load_manifest() -> dict:
@@ -163,11 +198,23 @@ async def actuate_joint(
     """Command a single joint (pos/vel/force), validated against the manifest.
 
     Validation (before the bridge is touched):
+      - mode not in {pos,vel,force}    -> INVALID_MODE
       - unknown (model, joint)         -> UNKNOWN_JOINT
       - mode=="pos" and value out of   -> JOINT_LIMIT_EXCEEDED
         the joint's [lower, upper]
     """
     try:
+        # Mode validation BEFORE any bridge call. The verified mock path accepts
+        # any mode string, so validate here (the deferred modern adapter also
+        # rejects unknown modes, but that path is not exercised under -e dev).
+        if mode not in ("pos", "vel", "force"):
+            return OperationResult(
+                success=False,
+                error=f"invalid mode '{mode}' (expected pos|vel|force)",
+                error_code="INVALID_MODE",
+                suggestions=["Use one of: pos, vel, force"],
+            )
+
         # Manifest validation BEFORE any bridge call.
         if not _joint_known(model, joint):
             return OperationResult(
@@ -223,9 +270,39 @@ async def actuate_joint_trajectory(
 
     ``points`` is a list of ``{"positions": [...], "time_from_start": float}``
     dicts. No manifest range check is performed on trajectory waypoints (the
-    contract validates only single ``actuate_joint`` pos commands).
+    contract validates only single ``actuate_joint`` pos commands), but the
+    SHAPE of ``points`` is validated before the bridge is touched:
+      - non-empty list ...........................-> else INVALID_TRAJECTORY
+      - each element a dict with a list ``positions`` -> else INVALID_TRAJECTORY
     """
     try:
+        # Trajectory-shape validation BEFORE any bridge call. The mock path would
+        # otherwise silently accept malformed input (e.g. None, a bare string, or
+        # dicts missing ``positions``) and store garbage.
+        if not isinstance(points, list) or not points:
+            return OperationResult(
+                success=False,
+                error="points must be a non-empty list of trajectory waypoints",
+                error_code="INVALID_TRAJECTORY",
+                suggestions=[
+                    'Pass e.g. [{"positions": [0.0, 0.5], "time_from_start": 1.0}]',
+                ],
+            )
+        for idx, p in enumerate(points):
+            if not isinstance(p, dict) or not isinstance(p.get("positions"), list):
+                return OperationResult(
+                    success=False,
+                    error=(
+                        f"trajectory point {idx} must be a dict with a list "
+                        f"'positions'"
+                    ),
+                    error_code="INVALID_TRAJECTORY",
+                    suggestions=[
+                        'Each point must look like {"positions": [...], '
+                        '"time_from_start": float}',
+                    ],
+                )
+
         b = get_bridge()
         ok = await b.command_joint_trajectory(model, points, world)
         return OperationResult(

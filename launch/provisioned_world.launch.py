@@ -60,7 +60,9 @@ def _setup(context, *args, **kwargs):
         "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
         # --- P1 actuation (WRITE-ONLY; live-verify deferred) ---------------
         # Wrench commanding: ros_gz_interfaces/EntityWrench -> gz.msgs.EntityWrench
-        # (ROS -> Gazebo). The UserCommands system applies it to the named entity.
+        # (ROS -> Gazebo). In Harmonic gz-sim 8 this topic is serviced by the
+        # dedicated ApplyLinkWrench system loaded in the provisioned world (NOT
+        # UserCommands). The wrench persists until cleared via .../wrench/clear.
         f"/world/{world_name}/wrench@ros_gz_interfaces/msg/EntityWrench]gz.msgs.EntityWrench",
     ]
     # Per-joint position command: std_msgs/Float64 -> gz.msgs.Double (ROS -> Gazebo),
