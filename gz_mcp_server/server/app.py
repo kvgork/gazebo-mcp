@@ -39,6 +39,7 @@ from gazebo_mcp.tools import sensor as _sensor
 from gazebo_mcp.tools import world as _world
 from gazebo_mcp.utils.logger import get_logger
 from gz_mcp_server.server.legacy_mount import register_legacy_tools
+from gz_mcp_server.server.resources.sensors import register_sensor_resources
 from gz_mcp_server.server.session import GazeboSession
 
 _logger = get_logger("fastmcp_app")
@@ -421,6 +422,10 @@ def build_app() -> FastMCP:
     # this same app (lists AND calls). Honors GAZEBO_LEGACY_TOOLS for the
     # deprecated-8 exclusion; lean tools above win on any name collision.
     legacy_count = register_legacy_tools(mcp)
+
+    # P3 resources: expose gz://sensor/{name} (latest cached sample) + the
+    # notify-then-poll subscribe/updated(bare ping)/read wiring.
+    register_sensor_resources(mcp)
 
     _logger.info(
         "Unified FastMCP app built (lean + legacy)",

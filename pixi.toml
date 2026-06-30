@@ -47,6 +47,8 @@ server = "gazebo-mcp-server"
 serve-sdk = "python -m gazebo_mcp.sdk_server"
 # P0-B: FastMCP app over stdio serving the 9 lean world_*/scene_* tools.
 serve-fastmcp = "python -m gazebo_mcp.fastmcp_server"
+# P3: same unified FastMCP app over Streamable HTTP (opt-in; default port 8931).
+serve-http = "python -m gazebo_mcp.fastmcp_server --http"
 
 # -------- optional feature: full Gazebo (gz) simulator + ros_gz bridge --------
 [feature.sim.dependencies]
