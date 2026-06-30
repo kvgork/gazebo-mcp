@@ -1088,6 +1088,351 @@ class ModernGazeboAdapter(GazeboInterface):
         )
         return True
 
+    # --- Sensors + parameters (P2) ---
+    # WRITE-ONLY this slice: written against the real graph but NOT live-run in
+    # CI (no ros_gz bridge / live camera / gz parameter services in -e dev). All
+    # ros_gz / sensor_msgs / rcl_interfaces / gz-CLI usage below is LAZY
+    # (function-level) so importing this module never pulls them — required for
+    # the -e dev environment which has the message packages but no live bridge.
+    # Where a real mechanism isn't wired we return an honest best-effort result
+    # or raise — we never fabricate success.
+
+    async def list_sensors(self, world: str = "default") -> List[Dict[str, Any]]:
+        """
+        Discover sensors in the world (best-effort, DEFERRED/write-only).
+
+        Modern Gazebo has no single "list sensors" service. The honest discovery
+        path is to enumerate published topics via the ``gz topic -l`` CLI (same
+        shell-out style as ``list_entities``) and classify the sensor-shaped ones
+        by topic name. Building rich descriptors (model/frame_id/specs) requires
+        cross-referencing scene info per sensor, which is not wired here.
+
+        This returns a best-effort descriptor list built from topic names; topics
+        that cannot be classified are skipped. Returns ``[]`` (never fabricated
+        fixtures) when no gz CLI / topics are available — the caller can detect
+        the empty live result vs. the mock's 4 fixtures.
+
+        # TODO(P2-real): enrich descriptors via /world/<w>/scene/info and verify
+        #   against a live Harmonic graph; add per-sensor "health" from topic Hz.
+        """
+        import subprocess
+        import re
+
+        # Map a topic to a coarse sensor type by conventional naming.
+        def _classify(topic: str) -> Optional[str]:
+            t = topic.lower()
+            if "scan" in t or "lidar" in t or "laser" in t:
+                return "lidar"
+            if "image" in t or "camera" in t:
+                return "camera"
+            if "imu" in t:
+                return "imu"
+            if "gps" in t or "navsat" in t or "/fix" in t:
+                return "gps"
+            return None
+
+        topics: List[str] = []
+        for cli in ("gz", "ign"):
+            try:
+                result = subprocess.run(
+                    [cli, "topic", "-l"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5.0,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    topics = [
+                        line.strip()
+                        for line in result.stdout.splitlines()
+                        if line.strip()
+                    ]
+                    break
+            except FileNotFoundError:
+                continue
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"Timeout listing topics via {cli}")
+                continue
+            except Exception as e:  # noqa: BLE001 - best-effort discovery
+                self.logger.warning(f"Error listing topics via {cli}: {e}")
+                continue
+
+        sensors: List[Dict[str, Any]] = []
+        for topic in topics:
+            stype = _classify(topic)
+            if stype is None:
+                continue
+            sensors.append(
+                {
+                    "name": re.sub(r"[^a-zA-Z0-9_]", "_", topic.strip("/")) or "sensor",
+                    "type": stype,
+                    "model": "",  # not resolvable from topic name alone
+                    "topic": topic,
+                    "frame_id": "",  # would come from scene info
+                    "active": True,  # present on the graph ⇒ assumed active
+                    "specs": {},
+                    "health": "unknown",  # best-effort: no live Hz check wired
+                }
+            )
+
+        if not sensors:
+            self.logger.warning(
+                f"list_sensors: no sensor topics discovered for world '{world}' "
+                "(no gz/ign CLI output) — returning empty list (DEFERRED/write-only)."
+            )
+        return sensors
+
+    async def sensor_snapshot(self, topic: str, world: str = "default") -> Dict[str, Any]:
+        """
+        Read the latest sample on ``topic`` via a one-shot ``gz topic -e -n 1``
+        (best-effort, DEFERRED/write-only).
+
+        Shells out to ``gz topic -e -n 1 -t <topic>`` (matching the CLI style of
+        ``list_entities``) and returns the raw text echo under ``"raw"`` along
+        with the topic/format. Full typed parsing into per-sensor-type dicts
+        (matching the mock shapes) is NOT wired here — that belongs to a real
+        ros_gz subscription feeding a latest-sample cache.
+
+        Raises:
+            KeyError: if the one-shot read yields nothing (treated as "no sensor
+                publishing on this topic").
+
+        # TODO(P2-real): subscribe via sensor_msgs (LaserScan/Imu/NavSatFix) and
+        #   cache the latest sample; parse into the typed mock-equivalent shapes.
+        """
+        import subprocess
+
+        for cli in ("gz", "ign"):
+            try:
+                result = subprocess.run(
+                    [cli, "topic", "-e", "-n", "1", "-t", topic],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout,
+                )
+            except FileNotFoundError:
+                continue
+            except subprocess.TimeoutExpired:
+                self.logger.warning(
+                    f"Timeout reading one-shot sample on '{topic}' via {cli}"
+                )
+                continue
+            except Exception as e:  # noqa: BLE001 - best-effort read
+                self.logger.warning(f"Error reading '{topic}' via {cli}: {e}")
+                continue
+
+            if result.returncode == 0 and result.stdout.strip():
+                return {
+                    "topic": topic,
+                    "format": "gz-text",
+                    "raw": result.stdout,
+                }
+
+        # Nothing came back: honestly signal "unknown/no sensor on this topic".
+        raise KeyError(topic)
+
+    async def sensor_camera_image(
+        self,
+        topic: str,
+        resolution: str = "640x480",
+        quality: int = 60,
+        world: str = "default",
+    ) -> Dict[str, Any]:
+        """
+        Capture one camera frame from ``topic`` (DEFERRED/write-only).
+
+        A real implementation subscribes to the camera topic
+        (``sensor_msgs/msg/Image`` via the ros_gz bridge), takes one frame,
+        resizes to ``resolution`` (capped), and re-encodes to PNG/JPEG honoring
+        ``quality``. That requires a live bridge + an image codec (cv_bridge /
+        Pillow) which are NOT available in ``-e dev``, so this is not wired.
+
+        Rather than fabricate an image, this raises ``NotImplementedError`` to be
+        explicit that the live camera path is deferred. The MOCK adapter is the
+        verified surface for camera images this slice.
+
+        # TODO(P2-real): one-shot subscribe to sensor_msgs/Image, resize+encode
+        #   (cv_bridge/Pillow), honor resolution cap + quality; verify on live gz.
+        """
+        raise NotImplementedError(
+            "sensor_camera_image() live capture is deferred (write-only) for the "
+            "'modern' backend: needs a live ros_gz camera bridge + image codec "
+            "not present in -e dev. Use the mock backend for verified images."
+        )
+
+    # -- gz parameter services (P2): lazy ros_gz / rcl_interfaces imports --
+
+    def _param_service_base(self, world: str) -> str:
+        """Return the gz parameter-service node base for ``world``.
+
+        Gazebo exposes parameters through a parameter-service node; under ros_gz
+        these surface as ``<node>/{list,get,set}_parameters`` services typed with
+        ``rcl_interfaces/srv``. The exact node name is deployment-specific; we use
+        a conventional world-scoped base and log it.
+        """
+        return f"/world/{world}/gz_parameters"
+
+    async def param_list(self, world: str = "default") -> List[str]:
+        """
+        List parameters via the gz parameter service (DEFERRED/write-only).
+
+        Calls ``<base>/list_parameters`` (``rcl_interfaces/srv/ListParameters``).
+        The ros_gz parameter bridge is NOT wired in ``-e dev``; on any failure we
+        log and return ``[]`` (honest empty), never fabricated names.
+
+        # TODO(P2-real): confirm the real parameter-node name on a live Harmonic
+        #   graph and verify ListParameters round-trips.
+        """
+        base = self._param_service_base(world)
+        service_name = f"{base}/list_parameters"
+        try:
+            from rcl_interfaces.srv import ListParameters
+
+            if not hasattr(self, "_param_list_clients"):
+                self._param_list_clients: Dict[str, Any] = {}
+            if world not in self._param_list_clients:
+                self._param_list_clients[world] = self.node.create_client(
+                    ListParameters, service_name
+                )
+            client = self._param_list_clients[world]
+
+            request = ListParameters.Request()
+            response = await self._call_service_async(
+                client, request, f"param_list (world={world})"
+            )
+            return sorted(getattr(response.result, "names", []) or [])
+        except ImportError:
+            self.logger.warning(
+                f"param_list: {service_name} not bridged (rcl_interfaces.srv."
+                "ListParameters unavailable). Returning [] (best-effort)."
+            )
+            return []
+        except Exception as e:  # noqa: BLE001 - best-effort, never block
+            self.logger.warning(f"param_list best-effort failed for '{world}': {e}")
+            return []
+
+    async def param_get(self, name: str, world: str = "default") -> Dict[str, Any]:
+        """
+        Get one parameter via the gz parameter service (DEFERRED/write-only).
+
+        Calls ``<base>/get_parameters`` (``rcl_interfaces/srv/GetParameters``) and
+        decodes the ``ParameterValue.type`` into a "double"/"integer"/"string"/
+        "boolean" tag matching the mock. The ros_gz parameter bridge is NOT wired
+        in ``-e dev``.
+
+        Raises:
+            KeyError: if the service reports the parameter as NOT_SET / unknown,
+                or if the parameter bridge is unavailable (honest "unknown").
+
+        # TODO(P2-real): verify type decoding against a live parameter node.
+        """
+        base = self._param_service_base(world)
+        service_name = f"{base}/get_parameters"
+        try:
+            from rcl_interfaces.srv import GetParameters
+            from rcl_interfaces.msg import ParameterType
+        except ImportError as e:
+            self.logger.warning(
+                f"param_get: {service_name} not bridged (rcl_interfaces unavailable)."
+            )
+            raise KeyError(name) from e
+
+        try:
+            if not hasattr(self, "_param_get_clients"):
+                self._param_get_clients: Dict[str, Any] = {}
+            if world not in self._param_get_clients:
+                self._param_get_clients[world] = self.node.create_client(
+                    GetParameters, service_name
+                )
+            client = self._param_get_clients[world]
+
+            request = GetParameters.Request()
+            request.names = [name]
+            response = await self._call_service_async(
+                client, request, f"param_get (world={world})"
+            )
+            values = getattr(response, "values", [])
+            if not values:
+                raise KeyError(name)
+            pv = values[0]
+
+            type_map = {
+                ParameterType.PARAMETER_BOOL: ("boolean", "bool_value"),
+                ParameterType.PARAMETER_INTEGER: ("integer", "integer_value"),
+                ParameterType.PARAMETER_DOUBLE: ("double", "double_value"),
+                ParameterType.PARAMETER_STRING: ("string", "string_value"),
+            }
+            if pv.type == ParameterType.PARAMETER_NOT_SET or pv.type not in type_map:
+                raise KeyError(name)
+            type_str, attr = type_map[pv.type]
+            return {"name": name, "type": type_str, "value": getattr(pv, attr)}
+        except KeyError:
+            raise
+        except Exception as e:  # noqa: BLE001 - honest "unknown" on failure
+            self.logger.warning(f"param_get best-effort failed for '{name}': {e}")
+            raise KeyError(name) from e
+
+    async def param_set(self, name: str, value: Any, world: str = "default") -> bool:
+        """
+        Set one parameter via the gz parameter service (DEFERRED/write-only).
+
+        Calls ``<base>/set_parameters`` (``rcl_interfaces/srv/SetParameters``),
+        packing ``value`` into a ``ParameterValue`` whose type is inferred from
+        the Python type (bool→BOOL, int→INTEGER, float→DOUBLE, else STRING). The
+        ros_gz parameter bridge is NOT wired in ``-e dev``; returns False on any
+        failure (never fabricates success).
+
+        # TODO(P2-real): verify SetParameters result.successful on a live node.
+        """
+        base = self._param_service_base(world)
+        service_name = f"{base}/set_parameters"
+        try:
+            from rcl_interfaces.srv import SetParameters
+            from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
+        except ImportError:
+            self.logger.warning(
+                f"param_set: {service_name} not bridged (rcl_interfaces unavailable). "
+                "Returning False (no fabricated success)."
+            )
+            return False
+
+        try:
+            if not hasattr(self, "_param_set_clients"):
+                self._param_set_clients: Dict[str, Any] = {}
+            if world not in self._param_set_clients:
+                self._param_set_clients[world] = self.node.create_client(
+                    SetParameters, service_name
+                )
+            client = self._param_set_clients[world]
+
+            pv = ParameterValue()
+            if isinstance(value, bool):
+                pv.type = ParameterType.PARAMETER_BOOL
+                pv.bool_value = value
+            elif isinstance(value, int):
+                pv.type = ParameterType.PARAMETER_INTEGER
+                pv.integer_value = value
+            elif isinstance(value, float):
+                pv.type = ParameterType.PARAMETER_DOUBLE
+                pv.double_value = value
+            else:
+                pv.type = ParameterType.PARAMETER_STRING
+                pv.string_value = str(value)
+
+            param = Parameter()
+            param.name = name
+            param.value = pv
+
+            request = SetParameters.Request()
+            request.parameters = [param]
+            response = await self._call_service_async(
+                client, request, f"param_set (world={world})"
+            )
+            results = getattr(response, "results", [])
+            return bool(results and getattr(results[0], "successful", False))
+        except Exception as e:  # noqa: BLE001 - never block, never fabricate
+            self.logger.warning(f"param_set best-effort failed for '{name}': {e}")
+            return False
+
     def shutdown(self) -> None:
         """
         Shutdown adapter and cleanup resources.

@@ -1169,6 +1169,121 @@ class GazeboBridgeNode:
             model=model, points=points, world=world
         )
 
+    # Sensors + parameters (P2):
+
+    async def list_sensors(self, world: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        List sensors in the world (async passthrough).
+
+        Args:
+            world: Target world name (default: self.world)
+
+        Returns:
+            List of sensor descriptor dicts (name/type/model/topic/frame_id/
+            active/specs/health).
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.list_sensors(world=world)
+
+    async def sensor_snapshot(
+        self, topic: str, world: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get the latest typed sample for the sensor at ``topic`` (async passthrough).
+
+        Args:
+            topic: Sensor topic (e.g. "/imu", "/scan")
+            world: Target world name (default: self.world)
+
+        Returns:
+            A typed sample dict (shape depends on sensor type).
+
+        Raises:
+            KeyError: If no sensor publishes on ``topic``.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.sensor_snapshot(topic=topic, world=world)
+
+    async def sensor_camera_image(
+        self,
+        topic: str,
+        resolution: str = "640x480",
+        quality: int = 60,
+        world: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Get a single encoded image from the camera at ``topic`` (async passthrough).
+
+        Args:
+            topic: Camera image topic (e.g. "/camera/image_raw")
+            resolution: Target resolution "WxH" (each dim capped)
+            quality: Encoding quality hint (0-100)
+            world: Target world name (default: self.world)
+
+        Returns:
+            Dict with {"data": bytes, "format", "width", "height"}.
+
+        Raises:
+            KeyError: If ``topic`` is not a camera image topic.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.sensor_camera_image(
+            topic=topic, resolution=resolution, quality=quality, world=world
+        )
+
+    async def param_list(self, world: Optional[str] = None) -> List[str]:
+        """
+        List simulation parameter names (async passthrough).
+
+        Args:
+            world: Target world name (default: self.world)
+
+        Returns:
+            Sorted list of parameter names.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.param_list(world=world)
+
+    async def param_get(self, name: str, world: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get a single parameter's value (async passthrough).
+
+        Args:
+            name: Parameter name
+            world: Target world name (default: self.world)
+
+        Returns:
+            Dict with {"name", "type", "value"}.
+
+        Raises:
+            KeyError: If the parameter is unknown.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.param_get(name=name, world=world)
+
+    async def param_set(
+        self, name: str, value: Any, world: Optional[str] = None
+    ) -> bool:
+        """
+        Set (or create) a parameter's value (async passthrough).
+
+        Args:
+            name: Parameter name
+            value: New value (type inferred from the Python type)
+            world: Target world name (default: self.world)
+
+        Returns:
+            True if applied successfully.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.param_set(name=name, value=value, world=world)
+
     # Joint state reading:
 
     def get_joint_states(

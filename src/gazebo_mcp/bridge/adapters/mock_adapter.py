@@ -11,6 +11,8 @@ end-to-end "spawn cube → query pose → step → remove" acceptance against a 
 All behaviour is deterministic (no RNG, no wall-clock).
 """
 
+import struct
+import zlib
 from typing import Optional, List, Dict, Any
 
 from gazebo_mcp.bridge.gazebo_interface import (
@@ -25,6 +27,100 @@ from gazebo_mcp.utils.logger import get_logger
 _logger = get_logger("mock_adapter")
 
 _DEFAULT_STEP_SIZE = 0.001  # seconds per physics step (matches gz default)
+
+# P2: FIXED timestamp constant for ALL mock sensor snapshots so they are fully
+# reproducible (NOT datetime.utcnow() — non-deterministic + deprecated).
+_FIXED_TIMESTAMP = "2026-01-01T00:00:00Z"
+
+# P2: ceiling on each image dimension for the mock camera (matches the tool
+# layer's MAX_IMAGE_DIM); huge resolutions are capped, never rejected here.
+MAX_IMAGE_DIM = 4096
+
+# P2: the four deterministic mock sensor descriptors. Reuses the legacy
+# _get_mock_sensors() content (sensor_tools.py) and folds in a "health" field
+# so list_sensors subsumes monitor_sensor_health at the tool layer.
+_MOCK_SENSORS: List[Dict[str, Any]] = [
+    {
+        "name": "lidar_front",
+        "type": "lidar",
+        "model": "turtlebot3_burger",
+        "topic": "/scan",
+        "frame_id": "base_scan",
+        "active": True,
+        "specs": {
+            "min_range": 0.12,
+            "max_range": 3.5,
+            "angle_min": -3.14,
+            "angle_max": 3.14,
+            "resolution": 360,
+        },
+        "health": "ok",
+    },
+    {
+        "name": "camera_rgb",
+        "type": "camera",
+        "model": "turtlebot3_waffle",
+        "topic": "/camera/image_raw",
+        "frame_id": "camera_link",
+        "active": True,
+        "specs": {"width": 1920, "height": 1080, "fov": 1.3962634, "format": "RGB8"},
+        "health": "ok",
+    },
+    {
+        "name": "imu_sensor",
+        "type": "imu",
+        "model": "turtlebot3_burger",
+        "topic": "/imu",
+        "frame_id": "imu_link",
+        "active": True,
+        "specs": {"update_rate": 200.0, "noise": 0.01},
+        "health": "ok",
+    },
+    {
+        "name": "gps_sensor",
+        "type": "gps",
+        "model": "drone_1",
+        "topic": "/gps/fix",
+        "frame_id": "gps_link",
+        "active": True,
+        "specs": {"horizontal_accuracy": 1.0, "vertical_accuracy": 1.5},
+        "health": "ok",
+    },
+]
+
+
+def _solid_png(width: int, height: int, rgb: tuple = (64, 128, 192)) -> bytes:
+    """
+    Hand-roll a minimal, valid solid-color RGB PNG (no Pillow dependency).
+
+    The IHDR width/height are set to the requested ``width``/``height`` so the
+    returned bytes are a real PNG of the capped dimensions. Output is fully
+    deterministic for a given (width, height, rgb).
+    """
+
+    def _chunk(tag: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    # IHDR: width, height, bit depth 8, color type 2 (truecolor RGB),
+    # compression 0, filter 0, interlace 0.
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+
+    # Raw image data: each scanline prefixed with filter byte 0, then RGB pixels.
+    row = b"\x00" + bytes(rgb) * width
+    raw = row * height
+    idat = zlib.compress(raw, 9)
+
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + _chunk(b"IHDR", ihdr)
+        + _chunk(b"IDAT", idat)
+        + _chunk(b"IEND", b"")
+    )
 
 # Mock physics uses a single constant mass for every entity so that the
 # wrench-integration acceptance is fully deterministic and asset-independent:
@@ -65,6 +161,13 @@ class MockGazeboAdapter(GazeboInterface):
         self._default_world = default_world
         self._step_size = step_size
         self._worlds: Dict[str, _MockWorld] = {}
+        # P2: deterministic in-memory parameter store, seeded with a few
+        # well-known physics/gravity defaults. param_set mutates this dict.
+        self._params: Dict[str, Dict[str, Any]] = {
+            "physics.max_step_size": {"type": "double", "value": 0.001},
+            "physics.real_time_factor": {"type": "double", "value": 1.0},
+            "gravity.z": {"type": "double", "value": -9.81},
+        }
         _logger.info("Initialized Mock Gazebo adapter", world=default_world)
 
     # -- internal helpers --
@@ -308,3 +411,155 @@ class MockGazeboAdapter(GazeboInterface):
     ) -> Optional[dict]:
         """Return the recorded ``{"mode","value"}`` target for a joint or None."""
         return self._world(world).joint_targets.get(model, {}).get(joint)
+
+    # -- sensors + parameters (P2) --
+
+    async def list_sensors(self, world: str = "default") -> List[Dict[str, Any]]:
+        """Return deep copies of the 4 deterministic mock sensor descriptors.
+
+        Each descriptor carries name/type/model/topic/frame_id/active/specs plus
+        a ``"health"`` field (always "ok" in the mock). Copies are returned so a
+        caller mutating the result cannot corrupt the module-level fixtures.
+        """
+        import copy
+
+        return [copy.deepcopy(s) for s in _MOCK_SENSORS]
+
+    async def sensor_snapshot(self, topic: str, world: str = "default") -> Dict[str, Any]:
+        """Return the deterministic typed sample for the sensor at ``topic``.
+
+        Shapes mirror the legacy ``_get_mock_sensor_data`` payloads but every
+        snapshot uses the FIXED timestamp ``_FIXED_TIMESTAMP`` so the result is
+        fully reproducible.
+
+        Raises:
+            KeyError: if no mock sensor publishes on ``topic``.
+        """
+        sensor = next((s for s in _MOCK_SENSORS if s["topic"] == topic), None)
+        if sensor is None:
+            raise KeyError(topic)
+
+        name = sensor["name"]
+        sensor_type = sensor["type"]
+
+        if sensor_type == "lidar":
+            return {
+                "type": "lidar",
+                "sensor_name": name,
+                "topic": topic,
+                "timestamp": _FIXED_TIMESTAMP,
+                "ranges": [1.5, 2.0, 1.8, 2.5, 3.0] * 72,  # 360 measurements
+                "angle_min": -3.14,
+                "angle_max": 3.14,
+                "range_min": 0.12,
+                "range_max": 3.5,
+            }
+        elif sensor_type == "camera":
+            return {
+                "type": "camera",
+                "sensor_name": name,
+                "topic": topic,
+                "timestamp": _FIXED_TIMESTAMP,
+                "width": 1920,
+                "height": 1080,
+                "encoding": "rgb8",
+                "note": "Image data not included in snapshot; use sensor_camera_image",
+            }
+        elif sensor_type == "imu":
+            return {
+                "type": "imu",
+                "sensor_name": name,
+                "topic": topic,
+                "timestamp": _FIXED_TIMESTAMP,
+                "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                "angular_velocity": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "linear_acceleration": {"x": 0.0, "y": 0.0, "z": 9.81},
+            }
+        else:  # gps
+            return {
+                "type": "gps",
+                "sensor_name": name,
+                "topic": topic,
+                "timestamp": _FIXED_TIMESTAMP,
+                "latitude": 37.7749,
+                "longitude": -122.4194,
+                "altitude": 10.0,
+                "status": "FIX",
+            }
+
+    async def sensor_camera_image(
+        self,
+        topic: str,
+        resolution: str = "640x480",
+        quality: int = 60,
+        world: str = "default",
+    ) -> Dict[str, Any]:
+        """Return a deterministic solid-color PNG for the camera topic.
+
+        Only ``/camera/image_raw`` is a valid camera topic in the mock. ``WxH``
+        is parsed from ``resolution`` and each dimension is CAPPED at
+        ``MAX_IMAGE_DIM``. ``quality`` is accepted for parity but unused (PNG is
+        lossless). Returns {"data": <png bytes>, "format": "png", "width", "height"}.
+
+        Raises:
+            KeyError: if ``topic`` is not the mock camera topic.
+            ValueError: if ``resolution`` is not in "WxH" form.
+        """
+        camera = next(
+            (s for s in _MOCK_SENSORS if s["type"] == "camera" and s["topic"] == topic),
+            None,
+        )
+        if camera is None:
+            raise KeyError(topic)
+
+        try:
+            w_str, h_str = resolution.lower().split("x")
+            width = int(w_str)
+            height = int(h_str)
+        except (ValueError, AttributeError) as e:
+            raise ValueError(
+                f"Invalid resolution '{resolution}'; expected 'WxH' (e.g. '640x480')"
+            ) from e
+
+        if width < 1 or height < 1:
+            raise ValueError(f"Invalid resolution '{resolution}'; dimensions must be >= 1")
+
+        width = min(width, MAX_IMAGE_DIM)
+        height = min(height, MAX_IMAGE_DIM)
+
+        png = _solid_png(width, height)
+        return {"data": png, "format": "png", "width": width, "height": height}
+
+    @staticmethod
+    def _infer_param_type(value: Any) -> str:
+        """Infer the param type string from a Python value.
+
+        Note: bool is checked BEFORE int because ``bool`` is a subclass of ``int``.
+        """
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, int):
+            return "integer"
+        if isinstance(value, float):
+            return "double"
+        return "string"
+
+    async def param_list(self, world: str = "default") -> List[str]:
+        """Return the sorted list of parameter names in the in-memory store."""
+        return sorted(self._params.keys())
+
+    async def param_get(self, name: str, world: str = "default") -> Dict[str, Any]:
+        """Return {"name","type","value"} for ``name``.
+
+        Raises:
+            KeyError: if ``name`` is not in the store.
+        """
+        if name not in self._params:
+            raise KeyError(name)
+        entry = self._params[name]
+        return {"name": name, "type": entry["type"], "value": entry["value"]}
+
+    async def param_set(self, name: str, value: Any, world: str = "default") -> bool:
+        """Set (or create) ``name`` = ``value``, inferring the type. Returns True."""
+        self._params[name] = {"type": self._infer_param_type(value), "value": value}
+        return True

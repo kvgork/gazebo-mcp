@@ -385,3 +385,116 @@ class GazeboInterface(ABC):
         raise NotImplementedError(
             f"command_joint_trajectory() not implemented for backend '{self.get_backend_name()}'"
         )
+
+    # --- Sensors + parameters (added in P2 of the evolution plan) ---
+    # NON-abstract with NotImplementedError defaults so existing adapters remain
+    # instantiable; backends implement them incrementally. The mock backend
+    # serves deterministic fixtures; the modern backend reads the live graph
+    # (gz topic / scene info + gz parameter services); classic raises.
+
+    async def list_sensors(self, world: str = "default") -> List[Dict[str, Any]]:
+        """
+        List sensors present in the world.
+
+        Args:
+            world: World name
+
+        Returns:
+            List of sensor descriptor dicts, each with at least
+            name/type/model/topic/frame_id/active/specs and a "health" field.
+        """
+        raise NotImplementedError(
+            f"list_sensors() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def sensor_snapshot(self, topic: str, world: str = "default") -> Dict[str, Any]:
+        """
+        Return the latest typed sample for the sensor publishing on ``topic``.
+
+        Args:
+            topic: The sensor's topic (e.g. "/scan", "/imu")
+            world: World name
+
+        Returns:
+            A deterministic typed sample dict (shape depends on sensor type).
+
+        Raises:
+            KeyError: If no sensor publishes on ``topic``.
+        """
+        raise NotImplementedError(
+            f"sensor_snapshot() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def sensor_camera_image(
+        self,
+        topic: str,
+        resolution: str = "640x480",
+        quality: int = 60,
+        world: str = "default",
+    ) -> Dict[str, Any]:
+        """
+        Return a single encoded image from the camera publishing on ``topic``.
+
+        Args:
+            topic: Camera image topic (e.g. "/camera/image_raw")
+            resolution: Target image resolution as "WxH" (each dim capped)
+            quality: Encoding quality hint (0-100, used for lossy formats)
+            world: World name
+
+        Returns:
+            Dict with {"data": bytes, "format": "png"|"jpeg", "width": int, "height": int}
+
+        Raises:
+            KeyError: If ``topic`` is not a camera image topic.
+        """
+        raise NotImplementedError(
+            f"sensor_camera_image() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def param_list(self, world: str = "default") -> List[str]:
+        """
+        List available simulation parameter names.
+
+        Args:
+            world: World name
+
+        Returns:
+            Sorted list of parameter names.
+        """
+        raise NotImplementedError(
+            f"param_list() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def param_get(self, name: str, world: str = "default") -> Dict[str, Any]:
+        """
+        Get a single parameter's value.
+
+        Args:
+            name: Parameter name
+            world: World name
+
+        Returns:
+            Dict with {"name", "type", "value"}.
+
+        Raises:
+            KeyError: If the parameter is unknown.
+        """
+        raise NotImplementedError(
+            f"param_get() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def param_set(self, name: str, value: Any, world: str = "default") -> bool:
+        """
+        Set (or create) a parameter's value.
+
+        Args:
+            name: Parameter name
+            value: New value (type inferred from the Python type)
+            world: World name
+
+        Returns:
+            True if applied successfully.
+        """
+        raise NotImplementedError(
+            f"param_set() not implemented for backend '{self.get_backend_name()}'"
+        )
