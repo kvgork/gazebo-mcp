@@ -519,3 +519,52 @@ class ClassicGazeboAdapter(GazeboInterface):
             if isinstance(e, (GazeboNotRunningError, GazeboTimeoutError)):
                 raise
             raise GazeboServiceError("reset_world", str(e)) from e
+
+    # --- Actuation (P1): not supported on Classic Gazebo ---
+    # Classic is deprecated; the wrench-topic + joint-command surfaces are
+    # Modern-only. These raise NotImplementedError rather than silently no-op.
+
+    async def apply_wrench_topic(
+        self,
+        entity: str,
+        link: str = "",
+        force: tuple = (0.0, 0.0, 0.0),
+        torque: tuple = (0.0, 0.0, 0.0),
+        duration: float = 0.0,
+        persistent: bool = False,
+        world: str = "default",
+    ) -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "apply_wrench_topic() not implemented for backend 'classic'"
+        )
+
+    async def clear_wrench(self, entity: str, world: str = "default") -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "clear_wrench() not implemented for backend 'classic'"
+        )
+
+    async def command_joint(
+        self,
+        model: str,
+        joint: str,
+        mode: str,
+        value: float,
+        world: str = "default",
+    ) -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "command_joint() not implemented for backend 'classic'"
+        )
+
+    async def command_joint_trajectory(
+        self,
+        model: str,
+        points: list,
+        world: str = "default",
+    ) -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "command_joint_trajectory() not implemented for backend 'classic'"
+        )

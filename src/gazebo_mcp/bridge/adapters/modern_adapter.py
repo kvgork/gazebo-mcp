@@ -63,6 +63,11 @@ class ModernGazeboAdapter(GazeboInterface):
         self._pose_info_subs: Dict[str, Any] = {}
         self._entity_states: Dict[str, Dict[str, Any]] = {}
 
+        # Actuation publishers (P1), cached per fully-qualified topic name.
+        # Keys are topic strings (e.g. "/world/default/wrench",
+        # "/model/jetank/joint/arm_base_to_long_joint/cmd_pos").
+        self._publishers: Dict[str, Any] = {}
+
         self.logger.info(f"Initialized Modern Gazebo adapter for world '{default_world}'")
 
     def get_backend_name(self) -> str:
@@ -693,6 +698,183 @@ class ModernGazeboAdapter(GazeboInterface):
                 raise
             raise GazeboServiceError("reset_world", str(e)) from e
 
+    # --- Actuation: wrench topic + joint commanding (P1) ---
+    # All ros_gz_interfaces / std_msgs / trajectory_msgs imports below are LAZY
+    # (function-level) so importing this module never pulls them — required for
+    # the -e dev environment which has the message packages but no live bridge.
+    # These methods are WRITE-ONLY this slice (verified against live gz later).
+
+    def _get_publisher(self, topic: str, msg_type, qos: int = 10):
+        """Get or create (and cache) a publisher for ``topic``."""
+        if topic not in self._publishers:
+            self._publishers[topic] = self.node.create_publisher(msg_type, topic, qos)
+            self.logger.debug(f"Created publisher for topic '{topic}'")
+        return self._publishers[topic]
+
+    async def apply_wrench_topic(
+        self,
+        entity: str,
+        link: str = "",
+        force: tuple = (0.0, 0.0, 0.0),
+        torque: tuple = (0.0, 0.0, 0.0),
+        duration: float = 0.0,
+        persistent: bool = False,
+        world: str = "default",
+    ) -> bool:
+        """
+        Apply a wrench by publishing ``ros_gz_interfaces/msg/EntityWrench`` to
+        ``/world/<world>/wrench`` (the Harmonic wrench-system topic).
+
+        Supersedes the legacy service-based ``apply_wrench``. The gz wrench
+        system / launch handles timed (``duration``) vs persistent application;
+        we publish a single EntityWrench message.
+
+        Args:
+            entity: Entity name (set on ``entity.name``)
+            link: Link name within the entity ("" = base/canonical link)
+            force: (fx, fy, fz) in Newtons (world frame)
+            torque: (tx, ty, tz) in Newton-metres (world frame)
+            duration: Duration in seconds (handled downstream by gz)
+            persistent: If True the wrench persists until cleared
+            world: Target world name
+
+        Returns:
+            True if the message was published.
+        """
+        from ros_gz_interfaces.msg import EntityWrench, Entity
+        from geometry_msgs.msg import Wrench, Vector3
+
+        topic = f"/world/{world}/wrench"
+        pub = self._get_publisher(topic, EntityWrench)
+
+        msg = EntityWrench()
+        msg.entity = Entity()
+        msg.entity.name = entity
+        msg.entity.type = Entity.LINK if link else Entity.MODEL
+        msg.wrench = Wrench(
+            force=Vector3(x=float(force[0]), y=float(force[1]), z=float(force[2])),
+            torque=Vector3(x=float(torque[0]), y=float(torque[1]), z=float(torque[2])),
+        )
+        pub.publish(msg)
+        self.logger.debug(
+            f"Published EntityWrench to '{topic}' for entity '{entity}' "
+            f"(persistent={persistent}, duration={duration})"
+        )
+        return True
+
+    async def clear_wrench(self, entity: str, world: str = "default") -> bool:
+        """
+        Clear a persistent wrench by publishing ``ros_gz_interfaces/msg/Entity``
+        to ``/world/<world>/wrench/clear``.
+
+        Args:
+            entity: Entity name to clear
+            world: Target world name
+
+        Returns:
+            True if the message was published.
+        """
+        from ros_gz_interfaces.msg import Entity
+
+        topic = f"/world/{world}/wrench/clear"
+        pub = self._get_publisher(topic, Entity)
+
+        msg = Entity()
+        msg.name = entity
+        msg.type = Entity.MODEL
+        pub.publish(msg)
+        self.logger.debug(f"Published clear-wrench Entity to '{topic}' for '{entity}'")
+        return True
+
+    async def command_joint(
+        self,
+        model: str,
+        joint: str,
+        mode: str,
+        value: float,
+        world: str = "default",
+    ) -> bool:
+        """
+        Command a single joint by publishing ``std_msgs/Float64`` to
+        ``/model/<model>/joint/<joint>/cmd_{pos|vel|force}``.
+
+        Args:
+            model: Model name owning the joint
+            joint: Joint name
+            mode: One of {"pos", "vel", "force"}
+            value: Target value
+            world: Target world name (unused for the model-scoped joint topics;
+                accepted for interface parity)
+
+        Returns:
+            True if the message was published.
+
+        Raises:
+            ValueError: If ``mode`` is not one of {"pos", "vel", "force"}.
+        """
+        suffix_by_mode = {"pos": "cmd_pos", "vel": "cmd_vel", "force": "cmd_force"}
+        if mode not in suffix_by_mode:
+            raise ValueError(
+                f"Invalid joint command mode '{mode}'; expected one of "
+                f"{sorted(suffix_by_mode)}"
+            )
+
+        from std_msgs.msg import Float64
+
+        topic = f"/model/{model}/joint/{joint}/{suffix_by_mode[mode]}"
+        pub = self._get_publisher(topic, Float64)
+
+        msg = Float64()
+        msg.data = float(value)
+        pub.publish(msg)
+        self.logger.debug(
+            f"Published Float64({value}) to '{topic}' (model='{model}', joint='{joint}')"
+        )
+        return True
+
+    async def command_joint_trajectory(
+        self,
+        model: str,
+        points: list,
+        world: str = "default",
+    ) -> bool:
+        """
+        Command a joint trajectory by publishing
+        ``trajectory_msgs/JointTrajectory`` to ``/model/<model>/joint_trajectory``.
+
+        Args:
+            model: Model name
+            points: List of {"positions": [...], "time_from_start": float} dicts
+            world: Target world name (accepted for interface parity)
+
+        Returns:
+            True if the message was published.
+        """
+        from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+
+        topic = f"/model/{model}/joint_trajectory"
+        pub = self._get_publisher(topic, JointTrajectory)
+
+        msg = JointTrajectory()
+        # joint_names may be supplied by callers via a parallel "joints" key on
+        # the first point; otherwise left empty (positions are index-aligned).
+        if points and isinstance(points[0], dict) and points[0].get("joints"):
+            msg.joint_names = list(points[0]["joints"])
+
+        for p in points:
+            jp = JointTrajectoryPoint()
+            jp.positions = [float(x) for x in p.get("positions", [])]
+            tfs = float(p.get("time_from_start", 0.0))
+            jp.time_from_start.sec = int(tfs)
+            jp.time_from_start.nanosec = int((tfs % 1) * 1_000_000_000)
+            msg.points.append(jp)
+
+        pub.publish(msg)
+        self.logger.debug(
+            f"Published JointTrajectory ({len(msg.points)} points) to '{topic}'"
+        )
+        return True
+
     async def apply_wrench(
         self,
         name: str,
@@ -703,6 +885,10 @@ class ModernGazeboAdapter(GazeboInterface):
     ) -> bool:
         """
         Apply wrench (force + torque) to a model link.
+
+        DEPRECATED (P1): superseded by ``apply_wrench_topic`` which publishes an
+        ``EntityWrench`` to ``/world/<w>/wrench``. Kept intact for back-compat
+        with existing callers/tests; do not use in new code.
 
         Uses the /world/{world}/apply_link_wrench service from ros_gz_interfaces.
 

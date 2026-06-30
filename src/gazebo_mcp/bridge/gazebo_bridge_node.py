@@ -1065,6 +1065,110 @@ class GazeboBridgeNode:
             world = self.world
         return await self.adapter.seed(value=value, world=world)
 
+    # Actuation: wrench topic + joint commanding (P1):
+
+    async def apply_wrench_topic(
+        self,
+        entity: str,
+        link: str = "",
+        force: tuple = (0.0, 0.0, 0.0),
+        torque: tuple = (0.0, 0.0, 0.0),
+        duration: float = 0.0,
+        persistent: bool = False,
+        world: Optional[str] = None,
+    ) -> bool:
+        """
+        Apply a wrench to an entity via the wrench topic (async passthrough).
+
+        Args:
+            entity: Entity (model/link) name
+            link: Link within the entity ("" = base link)
+            force: (fx, fy, fz) in Newtons
+            torque: (tx, ty, tz) in Newton-metres
+            duration: Duration in seconds (0.0 = single application)
+            persistent: If True the wrench persists until cleared
+            world: Target world name (default: self.world)
+
+        Returns:
+            True if applied/recorded successfully.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.apply_wrench_topic(
+            entity=entity,
+            link=link,
+            force=force,
+            torque=torque,
+            duration=duration,
+            persistent=persistent,
+            world=world,
+        )
+
+    async def clear_wrench(self, entity: str, world: Optional[str] = None) -> bool:
+        """
+        Clear a persistent wrench on an entity (async passthrough).
+
+        Args:
+            entity: Entity (model/link) name
+            world: Target world name (default: self.world)
+
+        Returns:
+            True if cleared successfully.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.clear_wrench(entity=entity, world=world)
+
+    async def command_joint(
+        self,
+        model: str,
+        joint: str,
+        mode: str,
+        value: float,
+        world: Optional[str] = None,
+    ) -> bool:
+        """
+        Command a single joint in pos/vel/force mode (async passthrough).
+
+        Args:
+            model: Model name owning the joint
+            joint: Joint name
+            mode: One of {"pos", "vel", "force"}
+            value: Target value
+            world: Target world name (default: self.world)
+
+        Returns:
+            True if applied/recorded successfully.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.command_joint(
+            model=model, joint=joint, mode=mode, value=value, world=world
+        )
+
+    async def command_joint_trajectory(
+        self,
+        model: str,
+        points: list,
+        world: Optional[str] = None,
+    ) -> bool:
+        """
+        Command a joint trajectory for a model (async passthrough).
+
+        Args:
+            model: Model name
+            points: List of {"positions": [...], "time_from_start": float} dicts
+            world: Target world name (default: self.world)
+
+        Returns:
+            True if applied/recorded successfully.
+        """
+        if world is None:
+            world = self.world
+        return await self.adapter.command_joint_trajectory(
+            model=model, points=points, world=world
+        )
+
     # Joint state reading:
 
     def get_joint_states(

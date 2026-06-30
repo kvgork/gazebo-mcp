@@ -26,6 +26,12 @@ _logger = get_logger("mock_adapter")
 
 _DEFAULT_STEP_SIZE = 0.001  # seconds per physics step (matches gz default)
 
+# Mock physics uses a single constant mass for every entity so that the
+# wrench-integration acceptance is fully deterministic and asset-independent:
+#   Δpos[i] = 0.5 * (force[i] / _MOCK_MASS) * (n * step_size)**2
+# With _MOCK_MASS = 1.0 and F=(10,0,0), n=100, step_size=0.001 ⇒ Δx = 0.05.
+_MOCK_MASS = 1.0  # kg (constant for all entities in the mock backend)
+
 
 class _MockWorld:
     """In-memory state for a single world."""
@@ -38,6 +44,11 @@ class _MockWorld:
         self.step_size: float = step_size
         self.rtf: float = 1.0
         self.seed_value: Optional[int] = None
+        # P1 actuation state:
+        #   wrenches[entity]      = {"force":[fx,fy,fz], "torque":[...], "persistent":bool}
+        #   joint_targets[model][joint] = {"mode":str, "value":float}
+        self.wrenches: Dict[str, dict] = {}
+        self.joint_targets: Dict[str, Dict[str, dict]] = {}
 
 
 class MockGazeboAdapter(GazeboInterface):
@@ -161,6 +172,21 @@ class MockGazeboAdapter(GazeboInterface):
             raise ValueError("steps must be >= 1")
         w = self._world(world)
         w.sim_time += steps * w.step_size
+
+        # Wrench integration (P1): constant-mass kinematics under a constant force.
+        #   Δpos[i] = 0.5 * (force[i] / _MOCK_MASS) * (n * step_size)**2
+        # One-shot wrenches are popped after integrating; persistent ones remain
+        # and re-integrate on the next step() call. list(...) so we can pop safely.
+        dt = steps * w.step_size
+        for entity, wr in list(w.wrenches.items()):
+            ent = w.entities.get(entity)
+            if ent is not None:
+                pos = ent["pose"]["position"]
+                for i in range(3):
+                    pos[i] += 0.5 * (wr["force"][i] / _MOCK_MASS) * (dt ** 2)
+            if not wr.get("persistent", False):
+                w.wrenches.pop(entity, None)
+
         return {"sim_time": w.sim_time, "steps": steps, "paused": w.paused}
 
     async def set_physics(
@@ -183,3 +209,80 @@ class MockGazeboAdapter(GazeboInterface):
     async def seed(self, value: int, world: str = "default") -> bool:
         self._world(world).seed_value = int(value)
         return True
+
+    # -- actuation: wrench + joint commanding (P1) --
+
+    async def apply_wrench_topic(
+        self,
+        entity: str,
+        link: str = "",
+        force: tuple = (0.0, 0.0, 0.0),
+        torque: tuple = (0.0, 0.0, 0.0),
+        duration: float = 0.0,
+        persistent: bool = False,
+        world: str = "default",
+    ) -> bool:
+        """Record a wrench on ``entity``; integrated lazily in ``step``."""
+        w = self._world(world)
+        w.wrenches[entity] = {
+            "force": [float(force[0]), float(force[1]), float(force[2])],
+            "torque": [float(torque[0]), float(torque[1]), float(torque[2])],
+            "persistent": bool(persistent),
+        }
+        return True
+
+    async def clear_wrench(self, entity: str, world: str = "default") -> bool:
+        """Remove any recorded wrench for ``entity`` (idempotent)."""
+        self._world(world).wrenches.pop(entity, None)
+        return True
+
+    async def command_joint(
+        self,
+        model: str,
+        joint: str,
+        mode: str,
+        value: float,
+        world: str = "default",
+    ) -> bool:
+        """
+        Record a joint target. No limit checking here — limit validation is the
+        tool layer's responsibility (against the model manifest).
+        """
+        w = self._world(world)
+        w.joint_targets.setdefault(model, {})[joint] = {
+            "mode": mode,
+            "value": float(value),
+        }
+        return True
+
+    async def command_joint_trajectory(
+        self,
+        model: str,
+        points: list,
+        world: str = "default",
+    ) -> bool:
+        """
+        Record a joint trajectory. The mock has no joint-name list, so we store
+        the LAST point dict deterministically under the reserved key
+        ``"_trajectory"`` in ``joint_targets[model]`` (readable via
+        ``get_joint_target(model, "_trajectory")``).
+        """
+        w = self._world(world)
+        targets = w.joint_targets.setdefault(model, {})
+        last = points[-1] if points else {}
+        targets["_trajectory"] = dict(last) if isinstance(last, dict) else {"value": last}
+        return True
+
+    # -- mock-only read-backs (unit-test helpers; not part of GazeboInterface) --
+
+    async def get_recorded_wrench(
+        self, entity: str, world: str = "default"
+    ) -> Optional[dict]:
+        """Return the recorded wrench dict for ``entity`` or None."""
+        return self._world(world).wrenches.get(entity)
+
+    async def get_joint_target(
+        self, model: str, joint: str, world: str = "default"
+    ) -> Optional[dict]:
+        """Return the recorded ``{"mode","value"}`` target for a joint or None."""
+        return self._world(world).joint_targets.get(model, {}).get(joint)

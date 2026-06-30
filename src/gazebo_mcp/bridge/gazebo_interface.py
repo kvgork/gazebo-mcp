@@ -281,3 +281,107 @@ class GazeboInterface(ABC):
         raise NotImplementedError(
             f"seed() not implemented for backend '{self.get_backend_name()}'"
         )
+
+    # --- Actuation: wrench + joint commanding (added in P1 of the evolution plan) ---
+    # NON-abstract with NotImplementedError defaults so existing adapters remain
+    # instantiable; backends implement them incrementally. The mock backend
+    # records and integrates them; the modern backend publishes the real topics
+    # (EntityWrench, Float64, JointTrajectory); classic raises NotImplementedError.
+
+    async def apply_wrench_topic(
+        self,
+        entity: str,
+        link: str = "",
+        force: tuple = (0.0, 0.0, 0.0),
+        torque: tuple = (0.0, 0.0, 0.0),
+        duration: float = 0.0,
+        persistent: bool = False,
+        world: str = "default",
+    ) -> bool:
+        """
+        Apply a wrench (force + torque) to an entity via the wrench topic.
+
+        Modern Gazebo (Harmonic) exposes wrench application as an
+        ``ros_gz_interfaces/msg/EntityWrench`` published to
+        ``/world/<world>/wrench`` (and a clear topic), superseding the
+        legacy service-based ``apply_wrench``.
+
+        Args:
+            entity: Entity (model/link) name to apply the wrench to
+            link: Link name within the entity ("" = base/canonical link)
+            force: (fx, fy, fz) in Newtons (world frame)
+            torque: (tx, ty, tz) in Newton-metres (world frame)
+            duration: Duration in seconds (0.0 = single application; the
+                gz wrench system / launch handles timed application)
+            persistent: If True the wrench is re-applied every step until
+                cleared; if False it is one-shot
+            world: World name
+
+        Returns:
+            True if the wrench was applied/recorded successfully.
+        """
+        raise NotImplementedError(
+            f"apply_wrench_topic() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def clear_wrench(self, entity: str, world: str = "default") -> bool:
+        """
+        Clear any persistent wrench currently applied to an entity.
+
+        Args:
+            entity: Entity (model/link) name to clear the wrench for
+            world: World name
+
+        Returns:
+            True if the clear was applied successfully.
+        """
+        raise NotImplementedError(
+            f"clear_wrench() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def command_joint(
+        self,
+        model: str,
+        joint: str,
+        mode: str,
+        value: float,
+        world: str = "default",
+    ) -> bool:
+        """
+        Command a single joint in position, velocity, or force mode.
+
+        Args:
+            model: Model name owning the joint
+            joint: Joint name
+            mode: One of {"pos", "vel", "force"}
+            value: Target value (radians/metres for pos, rad/s or m/s for vel,
+                N or N*m for force)
+            world: World name
+
+        Returns:
+            True if the command was applied/recorded successfully.
+        """
+        raise NotImplementedError(
+            f"command_joint() not implemented for backend '{self.get_backend_name()}'"
+        )
+
+    async def command_joint_trajectory(
+        self,
+        model: str,
+        points: list,
+        world: str = "default",
+    ) -> bool:
+        """
+        Command a joint trajectory for a model.
+
+        Args:
+            model: Model name
+            points: List of {"positions": [...], "time_from_start": float} dicts
+            world: World name
+
+        Returns:
+            True if the trajectory was applied/recorded successfully.
+        """
+        raise NotImplementedError(
+            f"command_joint_trajectory() not implemented for backend '{self.get_backend_name()}'"
+        )
