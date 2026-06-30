@@ -598,6 +598,21 @@ pixi run -e dev pytest tests/integration/test_p3_http.py -q
 
 **Risks.** **python-sdk #953** (progress lost over HTTP) — gated by the spike above; fallback is op-id + `world_get_op_status(op_id)` poll (same notify-then-poll honesty). Session leakage if teardown misses a subscription — assert isolation explicitly. rclpy is sync internally — keep one executor, per-session nodes.
 
+> **STATUS — P3 ✅ DONE & VERIFIED 2026-06-30** (`-e dev`, commits `4b6a24d` sessions, `7697262` unification, `d6077af` transport+resources, `3abce60` tests, `fbbbaa1` blocker-fix). Full suite **581 passed, 10 skipped, 2 pre-existing failures**. Delivered: per-session `GazeboSession` (Mcp-Session-Id); **legacy 69 unified onto the FastMCP app as native tools (88 total; lists+calls)** via the typed-signature recipe; Streamable-HTTP (`--http`, **stdio default**); `gz://sensor/{name}` resources (notify-then-poll, **bare ping** `{uri}`); session cap 64 + LRU eviction; HTTP auth-warning + localhost-default.
+>
+> **#953 SPIKE VERDICT: ✅ PASS** — `report_progress` survives Streamable-HTTP **in order** on mcp 1.27.1 (verified over real uvicorn via `message_handler` + `progress_callback`). **No op-id+poll fallback needed** — P5 may rely on streamed progress.
+>
+> **Adversarial grill 2026-06-30: 21 raw → 18 confirmed → 1 BLOCKER (now CLEARED).** BLOCKER was: per-session isolation built but not wired to tools (88/89 surfaces shared one world). FIXED (`fbbbaa1`) via a **ContextVar** in `_bridge_helper` that `get_bridge()` reads first → all 88 tools become per-session without rewriting handler bodies; lean wrappers + **async** legacy closures (`ctx: Context` injected + `asyncio.to_thread`, contextvar propagated) bind the session bridge per request. **Real lean AND legacy HTTP isolation tests now PASS** (session A's model invisible to session B). Also fixed: unbounded-session leak (cap+evict), HTTP no-auth/0.0.0.0 footgun (warning + localhost default), sync-closures-block-event-loop.
+>
+> **P3 — DEFERRED follow-ups (none block; quality/honesty/hardening):**
+> 1. **Legacy schema fidelity / validation divergence** — unified FastMCP legacy uses schemas *inferred* from generated signatures (nested `array`→bare `list`, `object`→bare `dict`, lost item typing) and FastMCP validates args via the inferred `arg_model` BEFORE the handler — so malformed input now returns a generic validation error instead of the legacy handler's rich `OperationResult` (sdk_app used `validate_input=False`). Pydantic coercion can also change values vs sdk_app's pass-through. The low-level `sdk_app` (retained) keeps the exact curated schemas + rich errors. *(#3,#10)*
+> 2. **Resource `subscribe` capability advertised `False`** — 1.27.1 `Server.get_capabilities` hardcodes `ResourcesCapability(subscribe=False)`; the handler works (round-trip verified) but a strict client can't *discover* subscribability. Needs an SDK capability override/patch. *(#11,#18)*
+> 3. **`gz://sensor/camera_rgb` resource returns metadata, no image bytes** — the one sensor where the payload matters most; wire it to `sensor_camera_image` (capped) or document. *(#13)*
+> 4. **Every uncached `resources/read` does a full `bridge.list_sensors()` round-trip** for name→topic — cache the map per session. *(#12)*
+> 5. **`report_progress` + notify-then-poll push are validated but UNUSED** — no long-running production tool emits progress yet (a P5 consumer will). *(#17)*
+> 6. **Test infra:** `httpx.ASGITransport` is unusable against `streamable_http_app()` (StreamableHTTP lifespan not booted) → HTTP tests need a real uvicorn on an ephemeral port (potential port-TOCTOU CI flakiness). *(#15)*
+> 7. **`get_session` synthesizes a one-off session for a registry-less Context** (e.g. unit-test ctx) — minor; ensure prod paths always carry the lifespan registry. *(#9)*
+
 ---
 
 ### P4 — Jetty `sim_*` (cross-sim portability, optional) *(maps §8 P4)*
