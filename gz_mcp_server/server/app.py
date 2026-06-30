@@ -35,7 +35,6 @@ can flip behaviour without an interface change.
 import base64
 import os
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Any, Optional
 
 from mcp.server.fastmcp import Context, FastMCP, Image
@@ -46,39 +45,132 @@ from gazebo_mcp.tools import param as _param
 from gazebo_mcp.tools import scene as _scene
 from gazebo_mcp.tools import sensor as _sensor
 from gazebo_mcp.tools import world as _world
-from gazebo_mcp.tools._bridge_helper import get_bridge
 from gazebo_mcp.utils.logger import get_logger
+from gz_mcp_server.server.session import GazeboSession
 
 _logger = get_logger("fastmcp_app")
 
+# Key under which the single shared/default session lives in the lifespan dict.
+# stdio (the default transport) is a single implicit session that uses it;
+# every HTTP request without an ``Mcp-Session-Id`` falls back to it too.
+_DEFAULT_SESSION_KEY = "default"
+_SESSIONS_KEY = "sessions"
 
-@dataclass
-class GazeboSession:
-    """Lifespan context: holds the shared (singleton) bridge node."""
-
-    bridge: object
+__all__ = ["GazeboSession", "app_lifespan", "build_app", "get_session"]
 
 
 @asynccontextmanager
 async def app_lifespan(server: FastMCP):
-    """Yield a GazeboSession holding the shared bridge when reachable.
+    """Initialize the per-session registry; close every session on shutdown.
 
-    Best-effort by design: a backend connection failure here must NOT abort
-    server startup — otherwise even ``tools/list`` would die when Gazebo is
-    merely not started yet. The lean tools resolve the bridge lazily via
-    ``get_bridge()`` at call time and return a structured ``OperationResult``
-    error if it is down, so startup stays resilient. Mock-safe:
-    ``GAZEBO_BACKEND=mock`` builds a node-less bridge and never touches ROS.
+    The yielded value becomes ``ctx.request_context.lifespan_context`` for every
+    tool/resource call on this server (a *per-server* singleton dict shared
+    across all MCP sessions — verified empirically on mcp 1.27.1). It holds:
+
+    - ``"sessions"``: ``dict[str(Mcp-Session-Id) -> GazeboSession]`` — populated
+      lazily by ``get_session(ctx)`` on first access per HTTP session.
+    - ``"default"``: the single shared ``GazeboSession`` used by stdio (the
+      default transport, one implicit session) and by any HTTP request that
+      carries no ``Mcp-Session-Id``.
+
+    Resilient startup (P0-B): ``GazeboSession.create()`` never raises on a down
+    backend, so ``tools/list`` works even when Gazebo is not yet up.
+
+    Teardown: the code after ``yield`` runs on the lowlevel server's lifespan
+    shutdown (the SDK enters this as an ``async with`` — see
+    ``mcp.server.lowlevel.server.Server.run``). mcp 1.27.1 exposes no per-HTTP-
+    session teardown callback into the FastMCP lifespan-context state, so we
+    close every cached session here on server shutdown (mock = no-op-safe).
     """
-    bridge = None
+    # The default/stdio session binds to the process singleton so the lean tools
+    # (which call get_bridge() directly) and this session share one world.
+    default_session = await GazeboSession.create(use_singleton=True)
+    registry: dict = {_SESSIONS_KEY: {}, _DEFAULT_SESSION_KEY: default_session}
     try:
-        bridge = get_bridge()
-    except Exception as e:  # noqa: BLE001 — startup must survive a down backend
-        _logger.warning(
-            "Bridge unavailable at startup; tools will retry lazily per call",
-            error=str(e),
-        )
-    yield GazeboSession(bridge=bridge)
+        yield registry
+    finally:
+        # Close per-session bridges first, then the shared/default one.
+        for sid, session in list(registry[_SESSIONS_KEY].items()):
+            try:
+                await session.aclose()
+            except Exception as e:  # noqa: BLE001 — best-effort teardown
+                _logger.warning("Session aclose failed", session_id=sid, error=str(e))
+        registry[_SESSIONS_KEY].clear()
+        try:
+            await default_session.aclose()
+        except Exception as e:  # noqa: BLE001 — best-effort teardown
+            _logger.warning("Default session aclose failed", error=str(e))
+
+
+def _session_id_from_ctx(ctx: Optional[Context]) -> Optional[str]:
+    """Return the ``Mcp-Session-Id`` for this request, or ``None`` for stdio.
+
+    Verified on mcp 1.27.1: over Streamable HTTP the Starlette request is at
+    ``ctx.request_context.request`` and carries the canonical session id in the
+    ``mcp-session-id`` header (it matches the client-negotiated id). Over stdio
+    / in-memory there is no Starlette request (``request is None``), so there is
+    no session id and the caller falls back to the default session.
+    """
+    if ctx is None:
+        return None
+    try:
+        request = getattr(ctx.request_context, "request", None)
+    except Exception:  # noqa: BLE001 — request_context unavailable outside a call
+        return None
+    if request is None:
+        return None
+    try:
+        return request.headers.get("mcp-session-id")
+    except Exception:  # noqa: BLE001 — defensive
+        return None
+
+
+async def get_session(ctx: Optional[Context]) -> GazeboSession:
+    """Resolve (creating + caching on first access) the request's GazeboSession.
+
+    Resolution:
+    - HTTP request with an ``Mcp-Session-Id`` → the per-session ``GazeboSession``
+      stored in ``lifespan_context["sessions"][session_id]``, created on first
+      access. Two distinct session ids therefore get isolated bridges +
+      subscriptions.
+    - stdio / no session id / no reachable lifespan registry → the single shared
+      ``lifespan_context["default"]`` session (falling back to the process
+      singleton bridge when even the registry is absent, e.g. a unit test that
+      builds a bare ``Context``).
+
+    Args:
+        ctx: The tool/resource ``Context`` for the current request (may be
+            ``None`` outside a request).
+
+    Returns:
+        The ``GazeboSession`` for this request.
+    """
+    registry = None
+    if ctx is not None:
+        try:
+            lc = ctx.request_context.lifespan_context
+            if isinstance(lc, dict) and _SESSIONS_KEY in lc:
+                registry = lc
+        except Exception:  # noqa: BLE001 — no active request context
+            registry = None
+
+    # No lifespan registry reachable (e.g. a unit-test Context, or a tool called
+    # outside the server run loop) → synthesize a one-off session over the
+    # process singleton so callers always get a usable bridge.
+    if registry is None:
+        return await GazeboSession.create()
+
+    session_id = _session_id_from_ctx(ctx)
+    if session_id is None:
+        return registry[_DEFAULT_SESSION_KEY]
+
+    sessions: dict = registry[_SESSIONS_KEY]
+    session = sessions.get(session_id)
+    if session is None:
+        session = await GazeboSession.create()
+        sessions[session_id] = session
+        _logger.info("Created per-session GazeboSession", session_id=session_id)
+    return session
 
 
 def build_app() -> FastMCP:
