@@ -1267,179 +1267,150 @@ class ModernGazeboAdapter(GazeboInterface):
             "not present in -e dev. Use the mock backend for verified images."
         )
 
-    # -- gz parameter services (P2): lazy ros_gz / rcl_interfaces imports --
+    # -- gz parameter registry (P2-real): via the `gz param` CLI --------------
+    # Harmonic exposes parameters on GZ-TRANSPORT, registry namespace
+    # `/world/<w>` (verified live 2026-07-04: `gz param -r /world/<w> -l`; the
+    # services are `/world/<w>/{list,get,set,declare}_parameter`, typed with
+    # gz.msgs — NOT the previously-guessed `/world/<w>/gz_parameters` +
+    # `rcl_interfaces` node, which never existed). We shell out to `gz param`
+    # (ign fallback), the same pattern as list_entities/set_physics. Most stock
+    # worlds DECLARE NO parameters, so param_list is honestly empty — a system/
+    # plugin must declare them. Never fabricate values.
 
-    def _param_service_base(self, world: str) -> str:
-        """Return the gz parameter-service node base for ``world``.
-
-        Gazebo exposes parameters through a parameter-service node; under ros_gz
-        these surface as ``<node>/{list,get,set}_parameters`` services typed with
-        ``rcl_interfaces/srv``. The exact node name is deployment-specific; we use
-        a conventional world-scoped base and log it.
-        """
-        return f"/world/{world}/gz_parameters"
+    def _param_registry(self, world: str) -> str:
+        return f"/world/{world}"
 
     async def param_list(self, world: str = "default") -> List[str]:
+        """List declared parameters via ``gz param -r /world/<w> -l``.
+
+        Returns the parameter names (``[]`` when the world declares none, which is
+        the norm for a stock world — honest empty, never fabricated). ``[]`` also
+        on any CLI failure.
         """
-        List parameters via the gz parameter service (DEFERRED/write-only).
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._gz_param_list, world)
 
-        Calls ``<base>/list_parameters`` (``rcl_interfaces/srv/ListParameters``).
-        The ros_gz parameter bridge is NOT wired in ``-e dev``; on any failure we
-        log and return ``[]`` (honest empty), never fabricated names.
+    def _gz_param_list(self, world: str) -> List[str]:
+        import subprocess
 
-        # TODO(P2-real): confirm the real parameter-node name on a live Harmonic
-        #   graph and verify ListParameters round-trips.
-        """
-        base = self._param_service_base(world)
-        service_name = f"{base}/list_parameters"
-        try:
-            from rcl_interfaces.srv import ListParameters
-
-            if not hasattr(self, "_param_list_clients"):
-                self._param_list_clients: Dict[str, Any] = {}
-            if world not in self._param_list_clients:
-                self._param_list_clients[world] = self.node.create_client(
-                    ListParameters, service_name
+        reg = self._param_registry(world)
+        for cli in ("gz", "ign"):
+            try:
+                result = subprocess.run(
+                    [cli, "param", "-r", reg, "-l"],
+                    capture_output=True, text=True, timeout=self.timeout + 2.0,
                 )
-            client = self._param_list_clients[world]
-
-            request = ListParameters.Request()
-            response = await self._call_service_async(
-                client, request, f"param_list (world={world})"
-            )
-            return sorted(getattr(response.result, "names", []) or [])
-        except ImportError:
-            self.logger.warning(
-                f"param_list: {service_name} not bridged (rcl_interfaces.srv."
-                "ListParameters unavailable). Returning [] (best-effort)."
-            )
-            return []
-        except Exception as e:  # noqa: BLE001 - best-effort, never block
-            self.logger.warning(f"param_list best-effort failed for '{world}': {e}")
-            return []
+                if result.returncode != 0:
+                    continue
+                if "No parameters available" in result.stdout:
+                    return []
+                names: List[str] = []
+                for line in result.stdout.splitlines():
+                    s = line.strip()
+                    # Skip blanks + the "Listing parameters, registry ..." header
+                    # + any "[type]"-style annotation lines.
+                    if not s or s.lower().startswith("listing parameters") or s.startswith("["):
+                        continue
+                    names.append(s.split()[0])
+                return sorted(names)
+            except FileNotFoundError:
+                continue
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"param_list timeout via {cli} for '{world}'")
+                continue
+            except Exception as e:  # noqa: BLE001
+                self.logger.warning(f"param_list error via {cli}: {e}")
+                continue
+        return []
 
     async def param_get(self, name: str, world: str = "default") -> Dict[str, Any]:
+        """Get one parameter via ``gz param -r /world/<w> -g -n <name>``.
+
+        Raises ``KeyError`` when the parameter is not declared / the CLI reports
+        no value (honest "unknown") — the common case on a stock world. On a hit,
+        returns ``{"name", "type", "value"}`` parsed best-effort from the CLI
+        output (found-value parsing is verified only once a param-declaring world
+        is available; the not-found path IS live-verified).
         """
-        Get one parameter via the gz parameter service (DEFERRED/write-only).
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, self._gz_param_get, name, world)
+        if result is None:
+            raise KeyError(name)
+        return result
 
-        Calls ``<base>/get_parameters`` (``rcl_interfaces/srv/GetParameters``) and
-        decodes the ``ParameterValue.type`` into a "double"/"integer"/"string"/
-        "boolean" tag matching the mock. The ros_gz parameter bridge is NOT wired
-        in ``-e dev``.
+    def _gz_param_get(self, name: str, world: str) -> Optional[Dict[str, Any]]:
+        import subprocess
 
-        Raises:
-            KeyError: if the service reports the parameter as NOT_SET / unknown,
-                or if the parameter bridge is unavailable (honest "unknown").
-
-        # TODO(P2-real): verify type decoding against a live parameter node.
-        """
-        base = self._param_service_base(world)
-        service_name = f"{base}/get_parameters"
-        try:
-            from rcl_interfaces.srv import GetParameters
-            from rcl_interfaces.msg import ParameterType
-        except ImportError as e:
-            self.logger.warning(
-                f"param_get: {service_name} not bridged (rcl_interfaces unavailable)."
-            )
-            raise KeyError(name) from e
-
-        try:
-            if not hasattr(self, "_param_get_clients"):
-                self._param_get_clients: Dict[str, Any] = {}
-            if world not in self._param_get_clients:
-                self._param_get_clients[world] = self.node.create_client(
-                    GetParameters, service_name
+        reg = self._param_registry(world)
+        for cli in ("gz", "ign"):
+            try:
+                result = subprocess.run(
+                    [cli, "param", "-r", reg, "-g", "-n", name],
+                    capture_output=True, text=True, timeout=self.timeout + 2.0,
                 )
-            client = self._param_get_clients[world]
-
-            request = GetParameters.Request()
-            request.names = [name]
-            response = await self._call_service_async(
-                client, request, f"param_get (world={world})"
-            )
-            values = getattr(response, "values", [])
-            if not values:
-                raise KeyError(name)
-            pv = values[0]
-
-            type_map = {
-                ParameterType.PARAMETER_BOOL: ("boolean", "bool_value"),
-                ParameterType.PARAMETER_INTEGER: ("integer", "integer_value"),
-                ParameterType.PARAMETER_DOUBLE: ("double", "double_value"),
-                ParameterType.PARAMETER_STRING: ("string", "string_value"),
-            }
-            if pv.type == ParameterType.PARAMETER_NOT_SET or pv.type not in type_map:
-                raise KeyError(name)
-            type_str, attr = type_map[pv.type]
-            return {"name": name, "type": type_str, "value": getattr(pv, attr)}
-        except KeyError:
-            raise
-        except Exception as e:  # noqa: BLE001 - honest "unknown" on failure
-            self.logger.warning(f"param_get best-effort failed for '{name}': {e}")
-            raise KeyError(name) from e
+                if result.returncode != 0:
+                    return None  # not declared / error -> honest KeyError
+                out = result.stdout.strip()
+                if not out or "not found" in out.lower() or "no parameter" in out.lower():
+                    return None
+                # gz param prints the value (and, with -t, the type). Return the
+                # raw string value; typed decoding is refined once a param world
+                # exists. Keep the shape the tool layer expects.
+                value = out.splitlines()[-1].strip()
+                return {"name": name, "type": "string", "value": value}
+            except FileNotFoundError:
+                continue
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"param_get timeout via {cli} for '{name}'")
+                return None
+            except Exception as e:  # noqa: BLE001
+                self.logger.warning(f"param_get error via {cli}: {e}")
+                return None
+        return None
 
     async def param_set(self, name: str, value: Any, world: str = "default") -> bool:
+        """Set one parameter via ``gz param -r /world/<w> -s -n <name> -t <type> -m <value>``.
+
+        Type inferred from the Python value (bool→bool, int→int, float→double,
+        else string). Returns True iff the CLI succeeds; False otherwise (never
+        fabricated). gz ``-s`` requires the parameter to already be declared, so
+        on a stock world this honestly returns False.
         """
-        Set one parameter via the gz parameter service (DEFERRED/write-only).
+        if isinstance(value, bool):
+            gz_type, gz_val = "bool", ("true" if value else "false")
+        elif isinstance(value, int):
+            gz_type, gz_val = "int", str(value)
+        elif isinstance(value, float):
+            gz_type, gz_val = "double", repr(value)
+        else:
+            gz_type, gz_val = "string", str(value)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, self._gz_param_set, name, gz_type, gz_val, world
+        )
 
-        Calls ``<base>/set_parameters`` (``rcl_interfaces/srv/SetParameters``),
-        packing ``value`` into a ``ParameterValue`` whose type is inferred from
-        the Python type (bool→BOOL, int→INTEGER, float→DOUBLE, else STRING). The
-        ros_gz parameter bridge is NOT wired in ``-e dev``; returns False on any
-        failure (never fabricates success).
+    def _gz_param_set(self, name: str, gz_type: str, gz_val: str, world: str) -> bool:
+        import subprocess
 
-        # TODO(P2-real): verify SetParameters result.successful on a live node.
-        """
-        base = self._param_service_base(world)
-        service_name = f"{base}/set_parameters"
-        try:
-            from rcl_interfaces.srv import SetParameters
-            from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
-        except ImportError:
-            self.logger.warning(
-                f"param_set: {service_name} not bridged (rcl_interfaces unavailable). "
-                "Returning False (no fabricated success)."
-            )
-            return False
-
-        try:
-            if not hasattr(self, "_param_set_clients"):
-                self._param_set_clients: Dict[str, Any] = {}
-            if world not in self._param_set_clients:
-                self._param_set_clients[world] = self.node.create_client(
-                    SetParameters, service_name
+        reg = self._param_registry(world)
+        for cli in ("gz", "ign"):
+            try:
+                result = subprocess.run(
+                    [cli, "param", "-r", reg, "-s", "-n", name, "-t", gz_type, "-m", gz_val],
+                    capture_output=True, text=True, timeout=self.timeout + 2.0,
                 )
-            client = self._param_set_clients[world]
-
-            pv = ParameterValue()
-            if isinstance(value, bool):
-                pv.type = ParameterType.PARAMETER_BOOL
-                pv.bool_value = value
-            elif isinstance(value, int):
-                pv.type = ParameterType.PARAMETER_INTEGER
-                pv.integer_value = value
-            elif isinstance(value, float):
-                pv.type = ParameterType.PARAMETER_DOUBLE
-                pv.double_value = value
-            else:
-                pv.type = ParameterType.PARAMETER_STRING
-                pv.string_value = str(value)
-
-            param = Parameter()
-            param.name = name
-            param.value = pv
-
-            request = SetParameters.Request()
-            request.parameters = [param]
-            response = await self._call_service_async(
-                client, request, f"param_set (world={world})"
-            )
-            results = getattr(response, "results", [])
-            return bool(results and getattr(results[0], "successful", False))
-        except Exception as e:  # noqa: BLE001 - never block, never fabricate
-            self.logger.warning(f"param_set best-effort failed for '{name}': {e}")
-            return False
+                if result.returncode != 0:
+                    continue
+                return "error" not in result.stdout.lower()
+            except FileNotFoundError:
+                continue
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"param_set timeout via {cli} for '{name}'")
+                return False
+            except Exception as e:  # noqa: BLE001
+                self.logger.warning(f"param_set error via {cli}: {e}")
+                return False
+        return False
 
     def shutdown(self) -> None:
         """
