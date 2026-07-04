@@ -55,12 +55,19 @@ async def param_get(name: str, world: str = "default") -> OperationResult:
 
 
 async def param_set(name: str, value: Any, world: str = "default") -> OperationResult:
-    """Set (or create) a parameter's value. ``data`` = {"name", "value", "world"}.
+    """Set (or create) a parameter's value.
+    ``data`` = {"name", "value", "applied", "world"}.
 
     Only scalar values are accepted: ``int`` / ``float`` / ``bool`` / ``str``.
     A non-scalar (list/dict/tuple/...) or ``None`` is rejected with
     ``error_code="INVALID_PARAM_VALUE"`` BEFORE the bridge is touched (bool is a
     valid scalar; bool-before-int type inference is preserved by the adapter).
+
+    ``data["applied"]`` reflects the bridge's return HONESTLY: the mock backend
+    applies deterministically (True); the real backend returns False when the
+    parameter isn't declared / the gz service didn't accept it. The op still
+    ``success=True`` (it ran without error) — mirrors ``world_set_physics`` —
+    so callers must check ``applied`` rather than assume a set took effect.
     """
     # bool is intentionally accepted here (it is a scalar param type); the
     # adapter's _infer_param_type checks bool BEFORE int so the type is correct.
@@ -73,9 +80,10 @@ async def param_set(name: str, value: Any, world: str = "default") -> OperationR
         )
     try:
         b = get_bridge()
-        await b.param_set(name, value, world)
+        applied = await b.param_set(name, value, world)
         return OperationResult(
-            success=True, data={"name": name, "value": value, "world": world}
+            success=True,
+            data={"name": name, "value": value, "applied": bool(applied), "world": world},
         )
     except Exception as e:  # noqa: BLE001
         return OperationResult(success=False, error=str(e), error_code=_PARAM_OP_FAILED)

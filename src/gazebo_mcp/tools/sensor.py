@@ -39,17 +39,38 @@ MAX_IMAGE_DIM = 4096
 MAX_IMAGE_B64_BYTES = 1_500_000
 
 
-async def sensor_list(sensor_type: str | None = None, world: str = "default") -> OperationResult:
+# Fields kept in a "concise" sensor descriptor (token-lean). "detailed" keeps
+# every field the bridge returns.
+_CONCISE_SENSOR_KEYS = ("name", "topic", "type", "health")
+
+
+async def sensor_list(
+    sensor_type: str | None = None,
+    world: str = "default",
+    response_format: str = "detailed",
+) -> OperationResult:
     """List sensors in the world, optionally filtered by ``sensor_type``.
 
     Each descriptor carries a ``health`` field (folding in the legacy
     ``monitor_sensor_health`` tool). ``data`` = {"sensors", "count", "world"}.
+
+    ``response_format`` controls per-descriptor verbosity (token economy for LLM
+    callers):
+      - ``"detailed"`` (default): every field the bridge returns (unchanged).
+      - ``"concise"``: trim each descriptor to
+        ``{name, topic, type, health}`` (whichever are present).
+    Any other value is treated as ``"detailed"`` (lenient — a format hint, not a
+    hard contract).
     """
     try:
         b = get_bridge()
         sensors = await b.list_sensors(world)
         if sensor_type is not None:
             sensors = [s for s in sensors if s.get("type") == sensor_type]
+        if response_format == "concise":
+            sensors = [
+                {k: s[k] for k in _CONCISE_SENSOR_KEYS if k in s} for s in sensors
+            ]
         return OperationResult(
             success=True,
             data={"sensors": sensors, "count": len(sensors), "world": world},

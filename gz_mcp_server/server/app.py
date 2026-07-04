@@ -503,11 +503,19 @@ def build_app() -> FastMCP:
     async def sensor_list(
         sensor_type: Optional[str] = None,
         world: str = "default",
+        response_format: str = "detailed",
         ctx: Optional[Context] = None,
     ) -> dict:
-        """List sensors in the world (each descriptor carries health), optionally filtered by type."""
+        """List sensors in the world (each descriptor carries health), optionally
+        filtered by type. response_format 'concise' trims each descriptor to
+        {name,topic,type,health} for token economy; 'detailed' (default) keeps all."""
         return await _with_session_bridge(
-            ctx, lambda: _to_dict(_sensor.sensor_list(sensor_type=sensor_type, world=world))
+            ctx,
+            lambda: _to_dict(
+                _sensor.sensor_list(
+                    sensor_type=sensor_type, world=world, response_format=response_format
+                )
+            ),
         )
 
     @mcp.tool()

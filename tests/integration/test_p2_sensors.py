@@ -96,6 +96,29 @@ def test_p2_sensor_list_returns_descriptors_with_health_and_camera():
     anyio.run(_run)
 
 
+def test_p2_sensor_list_concise_trims_descriptor_fields():
+    """response_format='concise' trims each descriptor to {name,topic,type,health}
+    (token economy), while 'detailed' (default) keeps the full descriptor."""
+
+    async def _run():
+        mcp = build_app()
+        async with client_session(mcp._mcp_server) as client:
+            detailed = _payload(await client.call_tool("sensor_list", {}))["data"]["sensors"]
+            concise = _payload(
+                await client.call_tool("sensor_list", {"response_format": "concise"})
+            )["data"]["sensors"]
+
+            assert len(concise) == len(detailed)
+            allowed = {"name", "topic", "type", "health"}
+            for s in concise:
+                assert set(s).issubset(allowed), s
+                assert "health" in s  # essential field retained
+            # concise must not be strictly richer than detailed (it's a trim).
+            assert sum(len(s) for s in concise) <= sum(len(s) for s in detailed)
+
+    anyio.run(_run)
+
+
 def test_p2_sensor_list_filtered_by_type_returns_only_cameras():
     """sensor_list(sensor_type="camera") -> only camera descriptors."""
 

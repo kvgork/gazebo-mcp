@@ -91,6 +91,8 @@ def test_p2_param_set_then_get_round_trips():
             assert setres["success"] is True, setres
             assert setres["data"]["name"] == "test.foo"
             assert setres["data"]["value"] == 5
+            # applied reflects the bridge honestly (mock applies deterministically).
+            assert setres["data"]["applied"] is True, setres
 
             got = _payload(await client.call_tool("param_get", {"name": "test.foo"}))
             assert got["success"] is True, got
