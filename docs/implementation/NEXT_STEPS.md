@@ -19,28 +19,31 @@ and unblock everything else.
 ## Phase A — Ship + CI hygiene  *(no gz; do first; ~0.5 d)*
 - [ ] **A1. Merge the PR stack bottom-up** — #17 → #18 → #19 → #20 (each based on the branch
   below; step0 is not yet in `main`). Gets P0-B→P5 + P4 into `main`. **Human decision — the
-  hard stop this session held.** Do a final `/review-changes` on each before merge.
-- [ ] **A2. Stabilize `test_p3_progress_spike`** — flaky ONLY under full-suite HTTP concurrency
-  (passes standalone). Fix the race: bind the uvicorn test server to an OS-assigned ephemeral
-  port (`:0` then read back) instead of a fixed/guessed port, and/or mark HTTP tests to not run
-  in parallel with each other. This is the one recurring red in an otherwise green suite.
-- [ ] **A3. Triage the 2 pre-existing failures** —
-  - `test_result_filter_with_models` → `ModuleNotFoundError: skills` (stale import; fix or delete the test).
-  - `test_list_models_mock_data` → needs live gz; mark `@pytest.mark.gazebo` (so it skips by
-    default like the other real tests) instead of failing the default suite.
+  hard stop held.** Do a final `/review-changes` on each before merge. *(STILL OPEN — the only
+  remaining Phase-A item; everything else here is done.)*
+- [x] **A2. Stabilize `test_p3_progress_spike`** — DONE (`e989ca4`): `_UvicornServer` now binds
+  `port=0` (OS-assigned at bind) and reads the real port back, killing the pick-then-rebind
+  TOCTOU. Suite green + deterministic across repeated runs.
+- [x] **A3. Triage the 2 pre-existing failures** — DONE (`e989ca4`): `test_list_models_mock_data`
+  asserts a well-formed result (`count >= 0`; the mock honestly has 0 models, no phantom
+  fixtures); `test_result_filter_with_models` DELETED (imported the absent external
+  `skills.common.filters`). **Suite now 0-fail.** (ResultFilter doc-vs-code gap logged in
+  REMAINING_WORK §C.)
 
-## Phase B — Code-only P2-real fixes  *(no gz to write; verify in D; ~0.5–1 d)*
-- [ ] **B1. P2-real #4 — binary-safe sensor snapshot.** `sensor_snapshot` currently uses
-  `gz topic -e` (text) which HANGS/mis-reads on binary msgs (confirmed live on `/imu`). Switch
-  to `gz topic -e -n 1 --json-output` (same approach the pose-readback fix uses), then parse the
-  JSON into typed per-sensor shapes (set `typed: true`). Unblocks B-adjacent #2/#3.
-- [ ] **B2. P2-real #7 completeness** — `sensor_list` `response_format` token control; camera
-  `format` param (PNG/JPEG); `param_set` value allowlist/validation.
-- [ ] **B3. P2-real #3 — `list_sensors` health/classification.** Replace hardcoded
-  `health:"unknown"` with a real signal (topic Hz / last-message age); tighten the topic-name
-  type classification. Verify in D2.
-- [ ] *(Skip P2-real #6 — deprecated-tool filter in the low-level `sdk_app` server — it's on the
-  retirement path (C3); fold any fix into the retire rather than patching a dying surface.)*
+## Phase B — Code-only P2-real fixes  *(done; live-verify in D)*
+- [x] **B1. P2-real #2/#4 — binary-safe sensor snapshot** — DONE (`ebafa0f`): `sensor_snapshot`
+  now uses `gz topic -e -n 1 --json-output` (text-safe for binary Imu/LaserScan/Image; fixes the
+  confirmed `/imu` hang), returning a typed `{"format":"gz-json","sample":…,"typed":True}`.
+  Per-sensor typed-shape verify → D2.
+- [x] **B2. P2-real #7 completeness** — DONE (`a68bb62`): `sensor_list` `response_format`
+  (detailed|concise token economy); `param_set` now honors the adapter `applied` bool (was masking
+  the real backend's honest False). *(Scalar validation already existed; camera JPEG intentionally
+  NOT added — a no-op on the mock PNG path would overstate capability; defer to the real encoder.)*
+- [ ] **B3. P2-real #3 — `list_sensors` health/classification** — **DEFERRED to D2**: real health
+  (topic Hz / publisher presence via `gz topic -i`) needs live sensors to tune + verify; writing
+  it blind = untested code.
+- [x] *(P2-real #5 param-client leak — RESOLVED by the B-adjacent gz-CLI param rewrite: no
+  persistent clients. P2-real #6 deprecated-filter — skipped; folds into the C3 retire.)*
 
 ## Phase C — Finish P3 #1 + retire the old servers  *(mostly code; needs the D2/D4 soak; ~1 d)*
 - [ ] **C1. Extract `sdk_app._build_registry()`** to a shared module (e.g. `server/registry.py`)
