@@ -53,6 +53,11 @@ serve-http = "python -m gazebo_mcp.fastmcp_server --http"
 # -------- optional feature: full Gazebo (gz) simulator + ros_gz bridge --------
 [feature.sim.dependencies]
 ros-jazzy-ros-gz = "*"
+ros-jazzy-ros2launch = ">=0.26.11,<0.27"
+ros-jazzy-ros2run = ">=0.32.8,<0.33"
+ros-jazzy-ros2service = ">=0.32.8,<0.33"
+ros-jazzy-ros2interface = ">=0.32.8,<0.33"
+ros-jazzy-ros2node = ">=0.32.8,<0.33"
 
 # -------- optional feature: dev/test tooling --------
 [feature.dev.dependencies]

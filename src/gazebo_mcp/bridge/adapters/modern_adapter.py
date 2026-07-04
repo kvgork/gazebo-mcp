@@ -1002,13 +1002,14 @@ class ModernGazeboAdapter(GazeboInterface):
         world: str = "default",
     ) -> bool:
         """
-        Set physics step size and/or real-time factor at runtime (best-effort).
+        Set physics step size and/or real-time factor at runtime.
 
-        Modern Gazebo exposes physics tuning via the ``/world/{world}/set_physics``
-        service (gz.msgs.Physics). The ros_gz_bridge does not always expose this
-        as a ROS 2 service, so this is best-effort: if the bridged service is
-        unavailable we log a warning and return True rather than failing the
-        caller (the provisioned world's max_step_size/rtf already match config).
+        Applies via the NATIVE gz-transport ``/world/{world}/set_physics`` service
+        (``gz.msgs.Physics`` -> ``gz.msgs.Boolean``) by shelling out to the ``gz``
+        CLI (``ign`` fallback) — the same pattern as ``list_entities``.
+        ``ros_gz_interfaces`` has NO ``SetPhysics`` srv (verified 2026-07-04), so
+        there is no ROS-service path; we do NOT pretend success when the gz
+        service is unreachable.
 
         Args:
             step_size: Physics step size in seconds (optional)
@@ -1016,68 +1017,79 @@ class ModernGazeboAdapter(GazeboInterface):
             world: Target world name
 
         Returns:
-            True (best-effort).
+            True iff the gz service accepted the change; False if nothing was
+            requested, or the gz service was unreachable (HONEST — the tool layer
+            surfaces ``applied=False`` rather than a fabricated True).
         """
         if step_size is not None and step_size <= 0:
             raise ValueError("step_size must be positive")
         if rtf is not None and rtf <= 0:
             raise ValueError("rtf must be positive")
+        if step_size is None and rtf is None:
+            return False  # nothing requested -> nothing applied (honest)
 
-        service_name = f"/world/{world}/set_physics"
-        try:
-            from ros_gz_interfaces.srv import SetPhysics  # type: ignore
+        fields = []
+        if step_size is not None:
+            fields.append(f"max_step_size: {float(step_size)}")
+        if rtf is not None:
+            fields.append(f"real_time_factor: {float(rtf)}")
+        req = ", ".join(fields)
 
-            if not hasattr(self, "_set_physics_clients"):
-                self._set_physics_clients: Dict[str, Any] = {}
-            if world not in self._set_physics_clients:
-                self._set_physics_clients[world] = self.node.create_client(
-                    SetPhysics, service_name
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._gz_set_physics, world, req)
+
+    def _gz_set_physics(self, world: str, req: str) -> bool:
+        """Apply physics via the gz ``set_physics`` service. True iff accepted."""
+        import subprocess
+
+        service = f"/world/{world}/set_physics"
+        for cli in ("gz", "ign"):
+            try:
+                result = subprocess.run(
+                    [cli, "service", "-s", service,
+                     "--reqtype", "gz.msgs.Physics",
+                     "--reptype", "gz.msgs.Boolean",
+                     "--timeout", "3000", "--req", req],
+                    capture_output=True, text=True, timeout=self.timeout + 2.0,
                 )
-            client = self._set_physics_clients[world]
-
-            request = SetPhysics.Request()
-            if step_size is not None:
-                request.physics.max_step_size = float(step_size)
-            if rtf is not None:
-                request.physics.real_time_factor = float(rtf)
-
-            response = await self._call_service_async(
-                client, request, f"set_physics (world={world})"
-            )
-            return bool(getattr(response, "success", True))
-
-        except ImportError:
-            self.logger.warning(
-                f"set_physics: {service_name} not bridged (ros_gz_interfaces.srv.SetPhysics "
-                "unavailable). Skipping runtime physics update (best-effort)."
-            )
-            return True
-        except Exception as e:  # noqa: BLE001 - best-effort, never block the caller
-            self.logger.warning(f"set_physics best-effort failed for '{world}': {e}")
-            return True
+                if result.returncode != 0:
+                    continue
+                # gz prints "data: true" on success.
+                return "true" in result.stdout.lower()
+            except FileNotFoundError:
+                continue  # this CLI absent — try the next
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"set_physics timeout via {cli} for '{world}'")
+                continue
+            except Exception as e:  # noqa: BLE001
+                self.logger.warning(f"set_physics error via {cli}: {e}")
+                continue
+        self.logger.warning(f"set_physics: gz service {service} unreachable — NOT applied")
+        return False
 
     async def seed(self, value: int, world: str = "default") -> bool:
         """
         Set the simulation random seed (best-effort / no-op-with-log).
 
-        Modern Gazebo (Harmonic) has no standard runtime "set seed" service; the
-        seed is normally fixed at world-launch time. We log the request and
-        return True so reproducibility plumbing works end-to-end without
-        blocking. A real seed wire-up belongs at provision time.
+        Modern Gazebo (Harmonic) has no standard runtime "set seed" service
+        (verified 2026-07-04 — only server/playback/world control services
+        exist); the seed is fixed at world-launch time. We log the request and
+        return False — HONEST: nothing was applied at runtime. A real seed
+        wire-up belongs at provision time (pass it into the world SDF/launch).
 
         Args:
             value: Seed value
             world: Target world name
 
         Returns:
-            True (best-effort).
+            False — runtime seed is not applied (no gz runtime seed service).
         """
-        self.logger.info(
+        self.logger.warning(
             f"seed({value}) requested for world '{world}': Modern Gazebo has no "
-            "runtime seed service; seed should be set at world-launch time "
-            "(best-effort no-op)."
+            "runtime seed service; seed must be set at world-launch time. "
+            "Returning applied=False (no runtime effect)."
         )
-        return True
+        return False
 
     # --- Sensors + parameters (P2) ---
     # WRITE-ONLY this slice: written against the real graph but NOT live-run in

@@ -149,3 +149,10 @@ def test_p0b_real_spawn_step_pose(live_modern_adapter):
         assert pos[2] == pytest.approx(0.5, abs=0.1), state
 
     anyio.run(_run)
+
+
+# NOTE: set_physics (genuine gz-service apply) and seed (honest no-op False) were
+# verified live 2026-07-04 via the manual probe (preal-artifacts/) and are covered
+# for regression by the mock suite's honesty contract. A live pytest for them is
+# intentionally omitted: driving a `gz service` subprocess from inside pytest's
+# asyncio/anyio loop deadlocked here, and the behaviour is already verified.
