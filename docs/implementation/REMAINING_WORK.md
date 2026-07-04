@@ -2,16 +2,15 @@
 
 > Consolidated backlog after the P0-B → P3 mock-side build (branch `feature/p0-bridge-mock`, 2026-06-30).
 > Source of truth for detail: `GAZEBO_MCP_ARCHITECTURE_EVOLUTION_PLAN.md` (per-phase `STATUS` blocks hold the full findings + commit hashes).
-> **Done & verified in `-e dev` (mock):** P-1, Step 0, P0-A, **P0-B, P1, P2, P3, P5**. Suite: 614 passed / 10 skipped / 2 pre-existing failures.
+> **Done & verified in `-e dev` (mock):** P-1, Step 0, P0-A, **P0-B, P1, P2, P3, P5, P4-shim** (P3 #1 fidelity partial). Suite: 623 passed / 10 skipped / 2 pre-existing failures.
 
 ---
 
 ## A. Remaining phases (new capability)
 
-### P4 — Jetty `sim_*` (cross-sim portability) — OPTIONAL
-- `sim_get_features`, `sim_spawn`/`sim_step` parity with `scene_spawn`/`world_step` over `simulation_interfaces`.
-- Effort ~2-3 d. Deps: P0–P3 + Jetty/`simulation_interfaces` on the P-1 backend. Keep `sim_*` strictly optional + non-default.
-- Plan §P4.
+### P4 — Jetty `sim_*` (cross-sim portability) — OPTIONAL — ✅ SHIM DONE (mock) 2026-07-04, commit `3e9f005`
+- **Portability shim landed:** `sim_spawn`/`sim_delete`/`sim_reset`/`sim_step`/`sim_get_features` delegate to `scene_*`/`world_*`, gated `GAZEBO_SIM_TOOLS=1` (default OFF, surface unchanged). Plan §P4 STATUS.
+- **DEFERRED (real):** the REP-2018 `simulation_interfaces` ROS-service adapter (`sim_interfaces_adapter.py`). The package installs in `-e full` but registers no ROS interfaces in this env → no REP-2018 backend to verify against. Real cross-sim portability needs a simulator that implements the `simulation_interfaces` services.
 
 ### P5 — Hardening — ✅ DONE & VERIFIED (mock) 2026-07-04, commit `b81a9ab` (plan §P5 STATUS)
 - Actuation bounds (`utils/actuation_bounds.py`), progress consumer (`world_step`), image-cap docs, honesty docs — all landed + grill-hardened (F1–F6 resolved). Remaining P5 items are real-only or deferred (see §B P5-real + P5 deferred).

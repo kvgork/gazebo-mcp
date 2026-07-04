@@ -640,6 +640,8 @@ GAZEBO_BACKEND=mock pixi run -e dev pytest tests/integration/test_p4_sim.py -q  
 
 **Risks.** `simulation_interfaces` maturity on the target Gazebo release; keep `sim_*` strictly optional and non-default.
 
+> **STATUS — P4 SHIM ✅ DONE & VERIFIED (mock) 2026-07-04** (`-e dev`, commit `3e9f005`). Thin `sim_spawn`/`sim_delete`/`sim_reset`/`sim_step`/`sim_get_features` lean tools (`src/gazebo_mcp/tools/sim.py`) that DELEGATE to the existing `scene_*`/`world_*` tools (byte-identical) — a REP-2018 verb-set **portability surface**, not new capability. **Gated `GAZEBO_SIM_TOOLS=1` (default OFF):** default surface unchanged at 88 tools; 93 with the flag. 7 mock tests (`test_p4_sim.py`: gating off/on, features report, spawn-parity, step, delete, reset); full suite 623 passed / 10 skipped / 2 pre-existing. **The real REP-2018 `simulation_interfaces` ROS-service adapter (`sim_interfaces_adapter.py`) is DEFERRED** — that package ships in `-e full` but registers no ROS interfaces here, so there is no REP-2018 backend to verify against; `sim_get_features.real_adapter` reports this. Optional feature `gz-transport` not added (sensor-latency only, out of scope).
+
 ---
 
 ### P5 — Hardening *(maps §8 P5)*
