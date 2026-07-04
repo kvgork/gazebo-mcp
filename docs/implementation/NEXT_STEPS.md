@@ -45,13 +45,15 @@ and unblock everything else.
 - [x] *(P2-real #5 param-client leak — RESOLVED by the B-adjacent gz-CLI param rewrite: no
   persistent clients. P2-real #6 deprecated-filter — skipped; folds into the C3 retire.)*
 
-## Phase C — Finish P3 #1 + retire the old servers  *(mostly code; needs the D2/D4 soak; ~1 d)*
-- [ ] **C1. Extract `sdk_app._build_registry()`** to a shared module (e.g. `server/registry.py`)
-  so `legacy_mount` no longer depends on the retiring `sdk_app`.
-- [ ] **C2. HTTP soak** — run the unified `--http` server under sustained multi-session load;
-  confirm session isolation + no leak (piggyback on D4's live run, or do it against mock).
-- [ ] **C3. Retire** hand-rolled `server.py` + the low-level `sdk_app` server entrypoint (keep
-  the extracted registry). Remove the rollback note in `REMAINING_WORK.md` §C.
+## Phase C — Finish P3 #1 + retire the old servers  *(DONE 2026-07-04)*
+- [x] **C1. Extract registry** (`846bfa0`) — `gz_mcp_server/server/registry.py:build_registry()`;
+  `legacy_mount` + parity test decoupled from the retiring `sdk_app`.
+- [x] **C2. HTTP soak** (`da2519c`) — `test_p3_http_soak.py`: 72 sessions (12 concurrent x 6
+  rounds > 64 cap), per-session isolation + LRU eviction, mock backend. Passes.
+- [x] **C3. Retire** (`2d85c29`) — deleted `server.py` + `sdk_server.py` +
+  `gz_mcp_server/server/{server,sdk_app}.py`; `gazebo-mcp-server`/`serve` repointed to the
+  unified `fastmcp_server:main` (name kept); `gazebo-mcp-sdk`/`serve-sdk` removed; parity test
+  repurposed to registry-integrity + unified-app name-parity. Suite 628 pass / 0 fail.
   - Residual P3 #1 (FastMCP couples advertised-schema ↔ validation; object-props stay bare
     `dict`) is a documented intrinsic 1.27.1 constraint — **won't-fix**, not blocking.
 
