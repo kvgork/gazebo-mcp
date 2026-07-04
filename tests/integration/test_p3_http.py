@@ -99,13 +99,11 @@ def _force_mock_backend(monkeypatch):
     bh._connection_manager = None
 
 
-def _free_port() -> int:
-    """Grab an ephemeral free TCP port on localhost."""
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
+# NOTE: no pre-picked _free_port() — that grabbed a port, closed the socket, then
+# let uvicorn rebind it later, leaving a TOCTOU window where a concurrent test
+# (or process) could claim the port in between. That race is what made the HTTP
+# tests / #953 spike flake under full-suite concurrency. _UvicornServer now binds
+# port=0 (OS assigns at bind time) and reads the real port back after startup.
 
 
 class _UvicornServer:
@@ -118,10 +116,11 @@ class _UvicornServer:
     """
 
     def __init__(self, app):
-        self.port = _free_port()
-        config = uvicorn.Config(
-            app, host="127.0.0.1", port=self.port, log_level="error"
-        )
+        # port=0 -> the OS assigns a free port when uvicorn actually binds, so
+        # there is no gap between selection and bind (no TOCTOU). The real port
+        # is discovered in __enter__ once the server is up.
+        self.port = None
+        config = uvicorn.Config(app, host="127.0.0.1", port=0, log_level="error")
         self.server = uvicorn.Server(config)
         self.thread = threading.Thread(target=self.server.run, daemon=True)
 
@@ -133,7 +132,9 @@ class _UvicornServer:
         self.thread.start()
         deadline = time.time() + 10.0
         while time.time() < deadline:
-            if self.server.started:
+            # Wait for BOTH started and the bound socket, then read the real port.
+            if self.server.started and getattr(self.server, "servers", None):
+                self.port = self.server.servers[0].sockets[0].getsockname()[1]
                 return self
             time.sleep(0.02)
         raise RuntimeError("uvicorn server did not start within 10s")
