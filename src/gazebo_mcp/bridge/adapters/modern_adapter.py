@@ -57,11 +57,10 @@ class ModernGazeboAdapter(GazeboInterface):
         self._set_pose_clients: Dict[str, Any] = {}
         self._control_clients: Dict[str, Any] = {}
 
-        # Entity state cache (for list_entities and get_entity_state)
-        # Modern Gazebo doesn't have a direct "get state" service like Classic
-        # We'll need to subscribe to /world/{world}/pose/info topic
-        self._pose_info_subs: Dict[str, Any] = {}
-        self._entity_states: Dict[str, Dict[str, Any]] = {}
+        # Pose readback (P0-B-real): read the NAME-CARRYING gz-transport Pose_V
+        # directly (see get_entity_state / _read_pose_via_gz). The earlier
+        # ros_gz TFMessage-bridge + child_frame_id cache is gone — that bridge
+        # emits empty frame names in the installed ros_gz version.
 
         # Actuation publishers (P1), cached per fully-qualified topic name.
         # Keys are topic strings (e.g. "/world/default/wrench",
@@ -123,58 +122,6 @@ class ModernGazeboAdapter(GazeboInterface):
             )
             self.logger.debug(f"Created control client for world '{world}': {service_name}")
         return self._control_clients[world]
-
-    def _ensure_pose_info_subscriber(self, world: str):
-        """
-        Ensure a pose-info subscriber is created for the given world.
-
-        Subscribes to ``/world/{world}/pose/info`` using ``tf2_msgs/msg/TFMessage``.
-        The ros_gz_bridge maps Gazebo's ``gz.msgs.Pose_V`` on that topic to a
-        TFMessage where each entity is a ``TransformStamped``:
-            - ``child_frame_id``  -> entity (model/link) name
-            - ``transform.translation`` -> position (x, y, z)
-            - ``transform.rotation``     -> orientation quaternion (x, y, z, w)
-
-        The callback parses every transform and caches it in
-        ``self._entity_states[world][child_frame_id]`` as
-        ``{"pose": {"position": [...], "orientation": [...]}}``.
-
-        The ``tf2_msgs`` import is LAZY (function-level) so importing this module
-        never pulls ``tf2_msgs`` at module load — required for the ``-e dev``
-        environment which has no tf2/ros_gz packages.
-        """
-        if world not in self._pose_info_subs:
-            from tf2_msgs.msg import TFMessage
-
-            topic_name = f'/world/{world}/pose/info'
-
-            def callback(msg, _world=world):
-                if _world not in self._entity_states:
-                    self._entity_states[_world] = {}
-                for tf in msg.transforms:
-                    t = tf.transform.translation
-                    r = tf.transform.rotation
-                    self._entity_states[_world][tf.child_frame_id] = {
-                        "pose": {
-                            "position": [t.x, t.y, t.z],
-                            "orientation": [r.x, r.y, r.z, r.w],
-                        }
-                    }
-
-            try:
-                self._pose_info_subs[world] = self.node.create_subscription(
-                    TFMessage,
-                    topic_name,
-                    callback,
-                    10,
-                )
-                self.logger.debug(
-                    f"Created pose info subscriber for world '{world}' on {topic_name}"
-                )
-            except Exception as e:
-                self.logger.warning(
-                    f"Could not create pose subscriber for world '{world}': {e}"
-                )
 
     # Helper conversion methods
 
@@ -348,59 +295,96 @@ class ModernGazeboAdapter(GazeboInterface):
         """
         Get entity state (pose) from Modern Gazebo.
 
-        Modern Gazebo has no direct "get state" service. State is published on
-        ``/world/{world}/pose/info`` (bridged as ``tf2_msgs/msg/TFMessage``).
-        This method ensures the subscriber exists, spins the node briefly so a
-        fresh sample can arrive, then reads the cached pose for ``name``.
+        Reads the NAME-CARRYING gz-transport ``Pose_V`` on
+        ``/world/{world}/pose/info`` directly (``gz topic -e --json-output``),
+        NOT the ros_gz ``TFMessage`` bridge: that bridge emits empty
+        ``frame_id``/``child_frame_id`` in the installed ros_gz version, so a
+        ``child_frame_id``-keyed cache can never resolve a model (verified live
+        2026-07-04). The gz-level ``Pose_V`` carries each entity's ``name``, so
+        we match ``name`` there. The subprocess read runs off the event-loop
+        thread.
 
         Twist is not published on the pose-info topic, so it is returned as
         zeros — P0 only fixes pose readback (twist lands with a velocity topic
         subscription in a later slice).
 
         Args:
-            name: Entity name (matches the TransformStamped child_frame_id)
+            name: Entity name (matches the Pose_V entry ``name``; use the
+                top-level model name).
             world: Target world name
 
         Returns:
             Dictionary with entity state (name, pose, twist)
 
         Raises:
-            ModelNotFoundError: If entity not found after the brief wait
+            ModelNotFoundError: If entity not present in pose/info.
         """
-        import rclpy
-
-        # Ensure pose subscriber is set up.
-        self._ensure_pose_info_subscriber(world)
-
-        def _cached():
-            states = self._entity_states.get(world, {})
-            return states.get(name)
-
-        # Spin briefly (off the event-loop thread) to let a pose sample arrive.
-        # Poll the cache between short spins so we return as soon as data lands.
         loop = asyncio.get_event_loop()
-
-        def _spin_until_present():
-            deadline = time.monotonic() + self.timeout
-            while time.monotonic() < deadline:
-                if _cached() is not None:
-                    return
-                rclpy.spin_once(self.node, timeout_sec=0.05)
-
-        await loop.run_in_executor(None, _spin_until_present)
-
-        state = _cached()
-        if state is None:
+        pose = await loop.run_in_executor(None, self._read_pose_via_gz, name, world)
+        if pose is None:
             raise ModelNotFoundError(name)
 
         return {
             "name": name,
-            "pose": state.get("pose", {}),
-            "twist": state.get(
-                "twist",
-                {"linear": [0.0, 0.0, 0.0], "angular": [0.0, 0.0, 0.0]},
-            ),
+            "pose": pose,
+            "twist": {"linear": [0.0, 0.0, 0.0], "angular": [0.0, 0.0, 0.0]},
         }
+
+    def _read_pose_via_gz(self, name: str, world: str) -> Optional[Dict[str, Any]]:
+        """Read one entity's pose from the name-carrying gz-transport ``Pose_V``.
+
+        Shells out to ``gz topic -e -n 1 --json-output -t /world/{world}/pose/info``
+        (falls back to ``ign``), then returns ``{"position": [x,y,z],
+        "orientation": [x,y,z,w]}`` for the ``Pose_V`` entry whose ``name``
+        matches, or ``None`` if the topic is unreadable / ``name`` is absent.
+
+        gz JSON OMITS proto-default (0.0) fields, so every component defaults to
+        0.0 — an identity quaternion serializes as ``{"w": 1}`` and reads back as
+        ``[0,0,0,1]``. Blocks for one publish cycle (bounded by the subprocess
+        timeout); the world must be publishing pose/info (it does whenever
+        running or after a step).
+        """
+        import json
+        import subprocess
+
+        topic = f"/world/{world}/pose/info"
+        for cli in ("gz", "ign"):
+            try:
+                result = subprocess.run(
+                    [cli, "topic", "-e", "-n", "1", "--json-output", "-t", topic],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout + 2.0,
+                )
+                if result.returncode != 0 or not result.stdout.strip():
+                    continue
+                data = json.loads(result.stdout)
+                poses = data.get("pose", []) if isinstance(data, dict) else data
+                for p in poses:
+                    if p.get("name") == name:
+                        pos = p.get("position") or {}
+                        ori = p.get("orientation") or {}
+                        return {
+                            "position": [
+                                pos.get("x", 0.0), pos.get("y", 0.0), pos.get("z", 0.0),
+                            ],
+                            "orientation": [
+                                ori.get("x", 0.0), ori.get("y", 0.0),
+                                ori.get("z", 0.0), ori.get("w", 0.0),
+                            ],
+                        }
+                return None  # topic read OK, but `name` not present in pose/info
+            except FileNotFoundError:
+                continue  # this CLI not installed — try the next
+            except subprocess.TimeoutExpired:
+                self.logger.warning(
+                    f"Timeout reading pose via {cli} for '{name}' in world '{world}'"
+                )
+                continue
+            except Exception as e:  # noqa: BLE001 — JSON/parse/other; try next CLI
+                self.logger.warning(f"Error reading pose via {cli}: {e}")
+                continue
+        return None
 
     async def set_entity_state(
         self,
