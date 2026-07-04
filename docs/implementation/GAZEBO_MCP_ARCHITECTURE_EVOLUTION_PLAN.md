@@ -540,6 +540,8 @@ pixi run -e full pytest -m gazebo tests/integration/test_p2_sensors.py
 >
 > **Adversarial grill 2026-06-30: 23 raw → 21 confirmed → 0 blockers. FIXED now (8b95458):** synthetic-frame marker (+text content block); honest `health` (reflects `active`); `param_set` scalar validation (`INVALID_PARAM_VALUE`); camera `INVALID_RESOLUTION` on ≤0 dims; visible deprecation warnings + fake-streamer guard; honest `typed` flag + corrected "typed sample" docstrings; dim-cap/b64-guard comments.
 >
+> **P2-real progress 2026-07-04 (commit `7f71c4a`):** param transport CORRECTED — Harmonic params are gz-transport, registry `/world/<w>` (verified live: `gz param -r /world/<w> -l`); rewired `param_list/get/set` to the `gz param` CLI (was the nonexistent `/world/<w>/gz_parameters` + `rcl_interfaces` path). param get/set ROUND-TRIP + sensor live-verify still pending: stock worlds declare no params, and camera worlds hang **headless** (rendering-engine/GPU gap). See REMAINING_WORK §B P2-real.
+>
 > **P2-real — DEFERRED follow-ups (need live ros_gz/gz; none block the mock-side merge):**
 > 1. **Param transport likely wrong** — modern `param_*` calls `rcl_interfaces` services at a **guessed** node path `/world/<w>/gz_parameters`; Harmonic params are **gz-transport** (`gz.msgs.ParameterValue`), not auto-bridged to ROS. Verify against a live graph; route via `gz service`/`gz param` CLI or gate with a clear `PARAM_BACKEND_UNAVAILABLE` (currently `param_get` masks unavailability as `UNKNOWN_PARAM`). *(#2,#18)*
 > 2. **Modern `sensor_snapshot` returns raw `gz-text`**, not the typed dict the mock provides — parse the `gz topic -e` echo into typed per-sensor shapes (now honestly marked `typed:false` + TODO). *(#1,#5)*
