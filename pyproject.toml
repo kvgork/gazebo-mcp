@@ -61,11 +61,10 @@ Repository = "https://github.com/kvgork/gazebo-mcp"
 Issues = "https://github.com/kvgork/gazebo-mcp/issues"
 
 [project.scripts]
-gazebo-mcp-server = "gazebo_mcp.server:main"
-# Step-0 migration target: MCP SDK low-level server (parallel to the legacy server above).
-gazebo-mcp-sdk = "gazebo_mcp.sdk_server:main"
-# P0-B: FastMCP app serving the 9 lean world_*/scene_* tools (coexists with the
-# legacy low-level server above; single-server unification lands in P3).
+# Unified FastMCP app is the sole server (P*-real C3 retired the hand-rolled +
+# low-level servers). The primary `gazebo-mcp-server` name is preserved but now
+# points at the unified server; `gazebo-mcp-fastmcp` is a kept alias.
+gazebo-mcp-server = "gazebo_mcp.fastmcp_server:main"
 gazebo-mcp-fastmcp = "gazebo_mcp.fastmcp_server:main"
 
 [tool.setuptools]

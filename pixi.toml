@@ -39,13 +39,12 @@ GAZEBO_BACKEND = "modern"
 GAZEBO_WORLD_NAME = "empty"
 
 [tasks]
-# Launch the MCP server over stdio (what an MCP client spawns).
-serve = "python -m gazebo_mcp.server"
-# Same, via the installed console script.
+# Launch the unified MCP server over stdio (what an MCP client spawns). C3
+# retired the hand-rolled + low-level servers; `serve` now runs the unified app.
+serve = "python -m gazebo_mcp.fastmcp_server"
+# Same, via the installed console script (repointed to the unified server).
 server = "gazebo-mcp-server"
-# Step-0 migration target: SDK low-level server over stdio (parallel to the legacy server).
-serve-sdk = "python -m gazebo_mcp.sdk_server"
-# P0-B: FastMCP app over stdio serving the 9 lean world_*/scene_* tools.
+# Unified FastMCP app over stdio (explicit alias of `serve`).
 serve-fastmcp = "python -m gazebo_mcp.fastmcp_server"
 # P3: same unified FastMCP app over Streamable HTTP (opt-in; default port 8931).
 serve-http = "python -m gazebo_mcp.fastmcp_server --http"
