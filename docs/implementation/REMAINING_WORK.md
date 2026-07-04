@@ -53,7 +53,7 @@
 7. Completeness: lean `sensor_list` dropped `response_format` token control; camera fixed PNG (no `format`); `param_set` no allowlist.
 
 ### P3 deferred (plan §P3 STATUS — 7 items; blocker already CLEARED)
-1. **Legacy schema fidelity / validation divergence** — unified FastMCP legacy uses inferred schemas (nested array/object lose item typing) + FastMCP validates before the handler → generic errors instead of rich `OperationResult`. `sdk_app` retained keeps exact curated schemas. *(highest-value P3 follow-up)*
+1. **Legacy schema fidelity / validation divergence** — ⏳ PARTIALLY RESOLVED 2026-07-04. **Array `items` typing RESTORED** (`legacy_mount._hint_for` now builds `list[item]`; `tools/list` advertises `items:{type:...}` again — test `test_p3_schema_fidelity.py`). **Residual (intrinsic FastMCP 1.27.1 constraint, documented won't-fix):** `object` params stay bare `dict` (no nested `properties`), and FastMCP derives BOTH the advertised schema AND pre-handler validation from ONE inferred `arg_model` — so a curated-schema `tools/list` and lenient handler-produced `OperationResult` errors on bad *type* cannot coexist for a native tool. Chosen trade-off: fidelity + standard JSON-RPC validation errors. **Retire of `server.py`/`sdk_app.py` still DEFERRED** — `sdk_app._build_registry()` is a LIVE dependency of `legacy_mount` (registry source of truth), so retire = extract `_build_registry` to a shared module + remove the standalone low-level server entrypoint, gated on the §C HTTP soak. Not an autonomous deletion.
 2. Resource `subscribe` capability advertised `False` (1.27.1 hardcodes it) — handler works; needs an SDK capability override for client discovery.
 3. `gz://sensor/camera_rgb` resource returns metadata, no image bytes — wire to `sensor_camera_image`.
 4. Every uncached `resources/read` does a full `bridge.list_sensors()` — cache name→topic per session.
@@ -67,7 +67,7 @@
 ---
 
 ## C. Cross-cutting / hygiene
-- **Single-server unification is DONE** (P3): FastMCP app serves 88 tools (19 lean + 69 legacy), stdio+HTTP, per-session isolation. Old `server.py` (hand-rolled) + `sdk_app.py` (low-level) retained as rollback — **schedule their removal** once the schema-fidelity divergence (P3 #1) is resolved and HTTP soak-tested.
+- **Single-server unification is DONE** (P3): FastMCP app serves 88 tools (19 lean + 69 legacy), stdio+HTTP, per-session isolation. Old `server.py` (hand-rolled) + `sdk_app.py` (low-level) retained as rollback. Schema-fidelity divergence (P3 #1) now **partially resolved** (array items restored; object-props + validation-location are a documented FastMCP-1.27.1 constraint). **Removal still blocked on:** (a) extracting `sdk_app._build_registry()` (a live `legacy_mount` dependency) to a shared module, and (b) an HTTP soak test. Removal is a gated refactor, not a deletion.
 - **Dual-transport window:** stdio remains CI/default transport; no removal date for stdio. Decide HTTP-default flip criteria after a soak.
 - **HTTP security:** transport is unauthenticated (localhost default + warning). Add auth/proxy guidance before any non-loopback deployment.
 - 2 pre-existing test failures unrelated to this work: `test_list_models_mock_data` (needs live gz), `test_result_filter_with_models` (`ModuleNotFoundError: skills`). Triage separately.

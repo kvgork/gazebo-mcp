@@ -86,8 +86,21 @@ def _hint_for(pschema: Dict[str, Any]) -> Any:
     Edge cases handled:
     - ``enum`` -> ``typing.Literal[...vals]`` (takes precedence over ``type`` so
       an enumerated ``string`` becomes a ``Literal`` of its allowed values).
-    - ``string``/``integer``/``number``/``boolean``/``array``/``object`` -> the
-      mapped primitive/container.
+    - ``array`` WITH ``items`` -> ``list[<item hint>]`` (recursive). FastMCP then
+      infers an ``items`` schema, so the advertised ``tools/list`` schema matches
+      the curated one (P3 #1 fidelity). ``array`` without ``items`` -> bare
+      ``list``. NOTE: giving arrays an item type also tightens ``tools/call``
+      validation to that item type — this is an accepted trade-off: FastMCP 1.27.1
+      derives BOTH the advertised schema AND the pre-handler validation from the
+      same inferred ``arg_model``, so schema fidelity and lenient
+      handler-produced errors cannot both be had for a native tool (see the
+      module note). We favour fidelity (better LLM tool-calling) + standard
+      JSON-RPC validation errors over the legacy rich-OperationResult-on-bad-type.
+    - ``object`` -> bare ``dict`` (kept intentionally loose: synthesizing a typed
+      model per object param would over-constrain free-form dicts like ``origin``
+      for marginal list-schema gain; object ``properties`` fidelity is the
+      documented residual of P3 #1).
+    - other ``string``/``integer``/``number``/``boolean`` -> mapped primitive.
     - missing ``type`` (e.g. a free-form ``value`` param) or an unrecognized /
       list-valued ``type`` -> ``typing.Any``.
     """
@@ -95,6 +108,13 @@ def _hint_for(pschema: Dict[str, Any]) -> Any:
     if enum:
         return Literal[tuple(enum)]
     jt = pschema.get("type")
+    if jt == "array":
+        items = pschema.get("items")
+        if isinstance(items, dict):
+            # Recursive: items:{type:string} -> list[str]; items:{type:object}
+            # -> list[dict]; items with no/opaque type -> list[Any] (bare array).
+            return list[_hint_for(items)]
+        return list
     if isinstance(jt, str):
         return _JSON_TO_HINT.get(jt, Any)
     return Any
