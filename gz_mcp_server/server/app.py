@@ -26,6 +26,7 @@ advanced-sensor tools: ``"1"`` mounts all 69 (back-compat); ``"0"`` mounts the
 """
 
 import base64
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Awaitable, Callable, Optional
 
@@ -36,6 +37,7 @@ from gazebo_mcp.tools import actuate as _actuate
 from gazebo_mcp.tools import param as _param
 from gazebo_mcp.tools import scene as _scene
 from gazebo_mcp.tools import sensor as _sensor
+from gazebo_mcp.tools import sim as _sim
 from gazebo_mcp.tools import world as _world
 from gazebo_mcp.tools._bridge_helper import (
     get_bridge_for_ctx,
@@ -264,6 +266,12 @@ def build_app() -> FastMCP:
     The ``GAZEBO_LEGACY_TOOLS`` env var (default ``"1"``) gates only the
     deprecated 8 advanced-sensor tools: legacy is always mounted; ``"0"`` simply
     excludes those 8 (P2 #17).
+
+    The ``GAZEBO_SIM_TOOLS`` env var (default ``"0"``, OPTIONAL/non-default —
+    P4) additionally mounts 5 ``sim_*`` tools (a thin REP-2018
+    ``simulation_interfaces`` portability shim routed to the scene_*/world_*
+    tools above) when set to ``"1"``. Absent/``"0"`` leaves the default tool
+    surface unchanged.
     """
     mcp = FastMCP("gazebo-mcp", lifespan=app_lifespan)
 
@@ -577,6 +585,73 @@ def build_app() -> FastMCP:
             ctx, lambda: _to_dict(_param.param_set(name=name, value=value, world=world))
         )
 
+    # -------------------------------- sim_* --------------------------------
+    # P4 (OPTIONAL, non-default): a thin REP-2018 `simulation_interfaces`
+    # portability shim routed to the scene_*/world_* tools above. Gated behind
+    # GAZEBO_SIM_TOOLS so the default tool surface (list_tools count) is
+    # UNCHANGED unless an operator opts in.
+    sim_tools_enabled = os.getenv("GAZEBO_SIM_TOOLS", "0") == "1"
+    if sim_tools_enabled:
+
+        @mcp.tool()
+        async def sim_spawn(
+            name: str,
+            sdf: str,
+            x: float = 0.0,
+            y: float = 0.0,
+            z: float = 0.0,
+            qx: float = 0.0,
+            qy: float = 0.0,
+            qz: float = 0.0,
+            qw: float = 1.0,
+            world: str = "default",
+            ctx: Optional[Context] = None,
+        ) -> dict:
+            """Spawn an entity — REP-2018 shim over ``scene_spawn``."""
+            return await _with_session_bridge(
+                ctx,
+                lambda: _to_dict(
+                    _sim.sim_spawn(
+                        name=name, sdf=sdf, x=x, y=y, z=z, qx=qx, qy=qy, qz=qz, qw=qw,
+                        world=world,
+                    )
+                ),
+            )
+
+        @mcp.tool()
+        async def sim_delete(
+            name: str, world: str = "default", ctx: Optional[Context] = None
+        ) -> dict:
+            """Delete an entity — REP-2018 shim over ``scene_remove``."""
+            return await _with_session_bridge(
+                ctx, lambda: _to_dict(_sim.sim_delete(name=name, world=world))
+            )
+
+        @mcp.tool()
+        async def sim_reset(world: str = "default", ctx: Optional[Context] = None) -> dict:
+            """Reset the world — REP-2018 shim over the bridge's ``reset_world``."""
+            return await _with_session_bridge(
+                ctx, lambda: _to_dict(_sim.sim_reset(world=world))
+            )
+
+        @mcp.tool()
+        async def sim_step(
+            steps: int = 1, world: str = "default", ctx: Optional[Context] = None
+        ) -> dict:
+            """Advance the simulation — REP-2018 shim over ``world_step``."""
+            return await _with_session_bridge(
+                ctx, lambda: _to_dict(_sim.sim_step(steps=steps, world=world))
+            )
+
+        @mcp.tool()
+        async def sim_get_features(
+            world: str = "default", ctx: Optional[Context] = None
+        ) -> dict:
+            """Static REP-2018 ``simulation_interfaces`` capability report."""
+            return await _with_session_bridge(
+                ctx, lambda: _to_dict(_sim.sim_get_features(world=world))
+            )
+
     # P3 unification: mount the curated legacy tools as native FastMCP tools on
     # this same app (lists AND calls). Honors GAZEBO_LEGACY_TOOLS for the
     # deprecated-8 exclusion; lean tools above win on any name collision.
@@ -586,10 +661,12 @@ def build_app() -> FastMCP:
     # notify-then-poll subscribe/updated(bare ping)/read wiring.
     register_sensor_resources(mcp)
 
+    sim_count = 5 if sim_tools_enabled else 0
     _logger.info(
         "Unified FastMCP app built (lean + legacy)",
         lean_count=19,
+        sim_count=sim_count,
         legacy_count=legacy_count,
-        total=19 + legacy_count,
+        total=19 + sim_count + legacy_count,
     )
     return mcp
