@@ -49,7 +49,7 @@
 5. PosePublisher `child_frame_id` vs `frame_id` naming.
 6. Publisher cache keyed by topic only (ignores msg type); QoS depth 10 volatile.
 7. vel/force joints unbounded (only `pos` limit-checked) → P5 `actuation_bounds`.
-8. Trajectory `time_from_start` monotonicity / wrench frame+units / `link` not exposed to MCP.
+8. Trajectory `time_from_start` monotonicity — **DONE 2026-07-04 (E4)**: `actuate_joint_trajectory` now rejects negative / non-numeric / non-strictly-increasing `time_from_start` with `INVALID_TRAJECTORY` (mock-verified, 4 cases). Remaining #8 bits (wrench frame+units, `link` not exposed to MCP) still open.
 9. Two divergent force paths (legacy service `apply_wrench` vs new topic `actuate_wrench`) — reconcile/deprecate.
 10. Mock fidelity caps (documented): m=1.0, torque/twist not integrated, last-write-wins single wrench.
 

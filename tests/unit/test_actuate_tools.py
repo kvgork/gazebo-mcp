@@ -280,6 +280,17 @@ def test_actuate_joint_invalid_mode_rejected():
         [{"time_from_start": 1.0}],          # missing positions
         [{"positions": "0.5"}],              # positions not a list
         [{"positions": [0.0]}, "oops"],      # second element not a dict
+        # time_from_start monotonicity (P1-real #8):
+        [{"positions": [0.0], "time_from_start": -1.0}],   # negative time
+        [{"positions": [0.0], "time_from_start": "x"}],    # non-numeric time
+        [                                                   # equal (not strictly increasing)
+            {"positions": [0.0], "time_from_start": 1.0},
+            {"positions": [0.5], "time_from_start": 1.0},
+        ],
+        [                                                   # decreasing time
+            {"positions": [0.0], "time_from_start": 2.0},
+            {"positions": [0.5], "time_from_start": 1.0},
+        ],
     ],
 )
 def test_actuate_joint_trajectory_malformed_rejected(bad_points):

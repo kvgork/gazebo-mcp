@@ -287,9 +287,13 @@ async def actuate_joint_trajectory(
     ``points`` is a list of ``{"positions": [...], "time_from_start": float}``
     dicts. No manifest range check is performed on trajectory waypoints (the
     contract validates only single ``actuate_joint`` pos commands), but the
-    SHAPE of ``points`` is validated before the bridge is touched:
+    SHAPE + TIMING of ``points`` is validated before the bridge is touched:
       - non-empty list ...........................-> else INVALID_TRAJECTORY
       - each element a dict with a list ``positions`` -> else INVALID_TRAJECTORY
+      - ``time_from_start`` (when present) is a non-negative number and STRICTLY
+        INCREASING across waypoints -> else INVALID_TRAJECTORY (P1-real #8: a
+        non-monotonic/negative time makes the trajectory ill-defined; the real
+        ros2_control action rejects it, so we reject up front on every backend).
     """
     try:
         # Trajectory-shape validation BEFORE any bridge call. The mock path would
@@ -304,6 +308,7 @@ async def actuate_joint_trajectory(
                     'Pass e.g. [{"positions": [0.0, 0.5], "time_from_start": 1.0}]',
                 ],
             )
+        prev_t = None
         for idx, p in enumerate(points):
             if not isinstance(p, dict) or not isinstance(p.get("positions"), list):
                 return OperationResult(
@@ -318,6 +323,33 @@ async def actuate_joint_trajectory(
                         '"time_from_start": float}',
                     ],
                 )
+            # time_from_start monotonicity (P1-real #8). Optional per point, but
+            # when present must be a non-negative, strictly-increasing number.
+            t = p.get("time_from_start")
+            if t is not None:
+                if isinstance(t, bool) or not isinstance(t, (int, float)) or t < 0:
+                    return OperationResult(
+                        success=False,
+                        error=(
+                            f"trajectory point {idx} time_from_start must be a "
+                            f"non-negative number, got {t!r}"
+                        ),
+                        error_code="INVALID_TRAJECTORY",
+                        suggestions=["Use non-negative seconds, e.g. 0.5, 1.0, 1.5"],
+                    )
+                if prev_t is not None and t <= prev_t:
+                    return OperationResult(
+                        success=False,
+                        error=(
+                            f"trajectory time_from_start must strictly increase: "
+                            f"point {idx} has {t} <= previous {prev_t}"
+                        ),
+                        error_code="INVALID_TRAJECTORY",
+                        suggestions=[
+                            "Order waypoints by strictly increasing time_from_start",
+                        ],
+                    )
+                prev_t = t
 
         b = get_bridge()
         ok = await b.command_joint_trajectory(model, points, world)
