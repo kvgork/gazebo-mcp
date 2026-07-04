@@ -18,7 +18,7 @@ migrates to FastMCP when its resources/Context/Streamable-HTTP features land (P3
 
 import json
 import time
-from typing import Any, Dict, List, Tuple, Callable
+from typing import Any, Dict, List
 
 import mcp.types as types
 from mcp.server.lowlevel import Server
@@ -26,35 +26,11 @@ from mcp.server.lowlevel import Server
 from gazebo_mcp.utils import OperationResult
 from gazebo_mcp.utils.logger import get_logger
 from gazebo_mcp.utils.metrics import get_metrics_collector
-from gz_mcp_server.server import adapters as _adapters_pkg
+# The curated tool registry now lives in the shared `registry` module (C1) so
+# the surviving unified app doesn't depend on this retiring low-level server.
+from gz_mcp_server.server.registry import build_registry as _build_registry
 
 _logger = get_logger("sdk_server")
-
-
-def _build_registry() -> Tuple[List[types.Tool], Dict[str, Callable]]:
-    """Collect curated Tool definitions + handlers from every adapter.
-
-    Returns the same (name, description, inputSchema) surface the legacy
-    ``GazeboMCPServer`` exposes — built from the adapters' hand-written schemas.
-    """
-    tools: List[types.Tool] = []
-    handlers: Dict[str, Callable] = {}
-    for module_name in _adapters_pkg.__all__:
-        adapter = getattr(_adapters_pkg, module_name)
-        for mcp_tool in adapter.get_tools():
-            tools.append(
-                types.Tool(
-                    name=mcp_tool.name,
-                    description=mcp_tool.description,
-                    inputSchema={
-                        "type": "object",
-                        "properties": mcp_tool.parameters.get("properties", {}),
-                        "required": mcp_tool.parameters.get("required", []),
-                    },
-                )
-            )
-            handlers[mcp_tool.name] = mcp_tool.handler
-    return tools, handlers
 
 
 def build_server() -> Server:

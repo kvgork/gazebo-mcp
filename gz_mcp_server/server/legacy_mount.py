@@ -46,7 +46,7 @@ from gazebo_mcp.tools._bridge_helper import (
 from gazebo_mcp.utils import OperationResult
 from gazebo_mcp.utils.logger import get_logger
 from gazebo_mcp.utils.metrics import get_metrics_collector
-from gz_mcp_server.server import sdk_app
+from gz_mcp_server.server import registry as _registry
 
 _logger = get_logger("legacy_mount")
 
@@ -284,7 +284,7 @@ def register_legacy_tools(mcp) -> int:
 
     exclude_deprecated = os.getenv("GAZEBO_LEGACY_TOOLS", "1") == "0"
 
-    tools, handlers = sdk_app._build_registry()
+    tools, handlers = _registry.build_registry()
 
     # Names already registered (the lean tools) — lean wins on collision.
     existing = set(mcp._tool_manager._tools.keys())

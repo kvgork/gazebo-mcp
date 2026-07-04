@@ -20,7 +20,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from mcp.shared.memory import create_connected_server_and_client_session as client_session
 
-from gz_mcp_server.server.sdk_app import build_server, _build_registry
+from gz_mcp_server.server.sdk_app import build_server
+from gz_mcp_server.server.registry import build_registry as _build_registry
 from gz_mcp_server.server.server import GazeboMCPServer
 
 EXPECTED_TOOL_COUNT = 69
