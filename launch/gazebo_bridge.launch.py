@@ -43,8 +43,13 @@ def launch_bridge(context, *args, **kwargs):
         # Control world service (pause, unpause, reset)
         f'/world/{world_name}/control@ros_gz_interfaces/srv/ControlWorld',
 
-        # Pose information topic (Gazebo -> ROS2)
-        f'/world/{world_name}/pose/info[ros_gz_interfaces/msg/ParamVec',
+        # Pose information topic (Gazebo -> ROS2). gz publishes gz.msgs.Pose_V
+        # here; the ros_gz_bridge standard mapping is tf2_msgs/msg/TFMessage,
+        # which is exactly what ModernGazeboAdapter._ensure_pose_info_subscriber
+        # subscribes to (parses transforms[].child_frame_id + transform). The
+        # earlier ros_gz_interfaces/msg/ParamVec mapping was wrong — the adapter's
+        # TFMessage subscriber received nothing, so pose readback silently failed.
+        f'/world/{world_name}/pose/info[tf2_msgs/msg/TFMessage',
 
         # Clock topic (Gazebo -> ROS2)
         '/clock[rosgraph_msgs/msg/Clock',

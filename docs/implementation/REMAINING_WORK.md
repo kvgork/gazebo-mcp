@@ -24,6 +24,12 @@
 
 **Next real step (was "gating first step"):** run the modern-backend MCP server (or the modern adapter directly) against a live headless Harmonic world with the `ros_gz_bridge` up, do a spawn→step→pose round-trip (P0-B-real core), then burn down the per-phase findings below. The `ros_gz_interfaces` services (SpawnEntity/DeleteEntity/SetEntityPose/ControlWorld) the modern adapter calls need the bridge running — decide OWN-mode (WorldProvisioner) vs ATTACH-mode bring-up first.
 
+> **Live-attempt findings 2026-07-04 (bring-up probed, round-trip not completed):**
+> 1. **FIXED — `gazebo_bridge.launch.py` pose/info mapping was wrong.** gz `/world/{w}/pose/info` publishes `gz.msgs.Pose_V` (confirmed via `gz topic -i`); the adapter subscribes as `tf2_msgs/msg/TFMessage` — but the launch bridged it as `ros_gz_interfaces/msg/ParamVec`, so pose readback silently got nothing. Changed to `tf2_msgs/msg/TFMessage` (commit below). Addresses P0-B-real #4/#5.
+> 2. **ENV PREREQ — pixi `-e full` ros2 CLI is incomplete.** Only `ros2cli`/`ros2pkg`/`ros2topic` extensions install; **no `ros2 launch`/`run`/`service`/`interface`**. So the repo's documented `ros2 launch gazebo_mcp gazebo_bridge.launch.py` bring-up CANNOT run in this env as-is. Either add the missing `ros-jazzy-ros2cli`-family packages to the `sim`/`full` pixi feature, or bring up via the direct binaries (`gz sim -s`, `.pixi/envs/full/lib/ros_gz_bridge/parameter_bridge`) + a rclpy driver. `rclpy` and the `parameter_bridge` binary ARE present.
+> 3. **VERIFY NEXT — service bridging syntax.** The launch bridges the 4 services with topic-`@`-syntax (`/world/{w}/create@ros_gz_interfaces/srv/SpawnEntity`); `parameter_bridge` service-bridging via CLI args is unconfirmed here (couldn't `ros2 service list` — missing CLI). Confirm the 4 services actually appear on the ROS side (via `rclpy` `get_service_names_and_types()`) before trusting the round-trip; may need a YAML `--bridge-service` config instead.
+> A full round-trip additionally needs an executor-spinning driver (mirroring the bridge node's background executor + `_run_async`), since the adapter's service-call futures require a spinning `self.node`.
+
 ### P0-B-real (plan §P0 STATUS — 6 items)
 1. modern pose cache keyed only by `child_frame_id` → cross-model link-name collisions; key by `(parent, child)` / filter to world-scoped models.
 2. `set_physics`/`seed` honesty: gz uses gz-transport service (not `rcl_interfaces.SetPhysics`); currently `return True` no-op. Shell out to `gz service` or report `applied=False`.
