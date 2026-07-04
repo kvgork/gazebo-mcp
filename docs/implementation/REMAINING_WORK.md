@@ -2,7 +2,7 @@
 
 > Consolidated backlog after the P0-B → P3 mock-side build (branch `feature/p0-bridge-mock`, 2026-06-30).
 > Source of truth for detail: `GAZEBO_MCP_ARCHITECTURE_EVOLUTION_PLAN.md` (per-phase `STATUS` blocks hold the full findings + commit hashes).
-> **Done & verified in `-e dev` (mock):** P-1, Step 0, P0-A, **P0-B, P1, P2, P3**. Suite: 581 passed / 10 skipped / 2 pre-existing failures.
+> **Done & verified in `-e dev` (mock):** P-1, Step 0, P0-A, **P0-B, P1, P2, P3, P5**. Suite: 614 passed / 10 skipped / 2 pre-existing failures.
 
 ---
 
@@ -13,12 +13,8 @@
 - Effort ~2-3 d. Deps: P0–P3 + Jetty/`simulation_interfaces` on the P-1 backend. Keep `sim_*` strictly optional + non-default.
 - Plan §P4.
 
-### P5 — Hardening
-- `src/gazebo_mcp/utils/actuation_bounds.py` — magnitude/duration/joint-limit/rate caps (over-limit wrench clamped or rejected under `strict_bounds`; persistent wrench requires clear; rate flood throttled).
-- Image caps (already partly enforced at the tool layer — finalize + document).
-- **Progress consumer:** #953 spike PASSED (streamed progress works over HTTP on 1.27.1) → wire `report_progress` into a long-running tool (e.g. `world_step(N)`, fleet ops). No op-id+poll fallback needed.
-- Docs (notify-then-poll honesty, CPU-only physics, GUI-gap deprecations).
-- Effort ~3-5 d. Plan §P5.
+### P5 — Hardening — ✅ DONE & VERIFIED (mock) 2026-07-04, commit `b81a9ab` (plan §P5 STATUS)
+- Actuation bounds (`utils/actuation_bounds.py`), progress consumer (`world_step`), image-cap docs, honesty docs — all landed + grill-hardened (F1–F6 resolved). Remaining P5 items are real-only or deferred (see §B P5-real + P5 deferred).
 
 ---
 

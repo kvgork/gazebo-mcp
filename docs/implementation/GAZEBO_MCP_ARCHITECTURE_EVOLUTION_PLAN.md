@@ -672,6 +672,12 @@ pixi run -e dev pytest tests/unit/ -q
 
 **Risks.** Bounds defaults too tight/loose for a given robot — make them `GazeboConfig`-overridable, document defaults. Long-op progress depends on the P3 #953 spike (push vs poll).
 
+> **STATUS — P5 MOCK SIDE ✅ DONE & VERIFIED 2026-07-04** (`-e dev`, commit `b81a9ab`). Full suite **614 passed, 10 skipped, 2 pre-existing failures**. Delivered: `utils/actuation_bounds.py` (BoundsConfig+from_config None-safe; `enforce_wrench` vector-magnitude clamp/strict-raise; `enforce_joint` pos/vel/effort clamp; `PersistentWrenchRegistry` cap; injectable-clock `RateLimiter`) enforced INSIDE `GazeboBridgeNode` **before every `self.adapter.*` actuation call** (mock/modern/classic + all 88 tools + direct calls bounded identically); 7 `GAZEBO_*` env-overridable fields on bridge `GazeboConfig`; `ActuationBoundsExceeded` (error_code `ACTUATION_BOUNDS_EXCEEDED`) surfaced by `actuate_*` tools. `world_step` progress consumer reports from **inside a single native `adapter.step`** (optional `progress_cb`) — physics identical with/without a listener (#953 relied on, no op-id+poll). Image caps already enforced at the tool layer (P2) — documented, not re-done.
+>
+> **Grill (3 attacker lenses, all resolved):** F1 non-finite (NaN/inf) wrench/joint now rejected (had bypassed the non-strict magnitude clamp — `nan<=cap` is False); F2 non-finite trajectory positions rejected (finite out-of-range clamp **DEFERRED** — trajectory format carries no joint names, see REMAINING_WORK); F3 `delete_entity` frees the persistent-wrench slot (was leaking → permanent cap denial); F4 registry slot rolled back on adapter failure/False; F5 progress no longer chunks physics (chunking made the mock's non-composable from-rest integration depend on whether a progressToken was attached — observability mutating state); F6 `GAZEBO_RATE_LIMIT_HZ<=0` disables instead of crashing startup. Rate cap is **wrench-topic only** (per-model joint rate-limiting would wrongly throttle legitimate multi-joint control) — documented.
+>
+> Real ros_gz/Harmonic actuation-bounds behaviour **written but NOT live-verified** (no `-e full`; joint pos backstop at the bridge needs `limits` injected, which only the tool layer does today). Per-waypoint trajectory position/velocity clamping deferred.
+
 ---
 
 ## 6. Backward-compatibility & deprecation plan
