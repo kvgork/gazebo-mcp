@@ -19,9 +19,11 @@
 ---
 
 ## B. P*-real track — live-gz verification (the big cross-cutting gap)
-**All real (`-m gazebo`) acceptance is DEFERRED** — needs `pixi install -e full` (`ros-jazzy-ros-gz`) + a running **Gazebo Harmonic** process + (for P1) `gz_ros2_control` + the **JETANK SDF**. System `gz` = Harmonic 8.14.0 is present; the `sim`/`full` pixi envs are NOT installed. The mock side is fully verified; the real adapter code is written but never live-run.
+**All real (`-m gazebo`) acceptance is DEFERRED** — the real adapter code is written but the full MCP-adapter round-trip has not been live-run. The mock side is fully verified.
 
-**Gating first step:** `pixi install -e full`, bring up the provisioned Harmonic world, then run the per-phase `-m gazebo` acceptance and fix the deferred findings below.
+> **ENV GATE CLEARED 2026-07-04.** `pixi install -e full` **succeeds** here; the `full` env has `ros2`, `xacro`, and `ros_gz*` (ros_gz_sim/bridge/interfaces). **Headless Gazebo Harmonic RUNS** in this environment — `gz sim -s -r empty.sdf` comes up with live topics (`/world/empty/pose/info`, `/clock`, …) and services (`/world/empty/control`). So live verification is no longer env-blocked; it is now a matter of wiring the ros_gz bridge + running the modern-backend server against the live world (a multi-hour deep-integration task).
+
+**Next real step (was "gating first step"):** run the modern-backend MCP server (or the modern adapter directly) against a live headless Harmonic world with the `ros_gz_bridge` up, do a spawn→step→pose round-trip (P0-B-real core), then burn down the per-phase findings below. The `ros_gz_interfaces` services (SpawnEntity/DeleteEntity/SetEntityPose/ControlWorld) the modern adapter calls need the bridge running — decide OWN-mode (WorldProvisioner) vs ATTACH-mode bring-up first.
 
 ### P0-B-real (plan §P0 STATUS — 6 items)
 1. modern pose cache keyed only by `child_frame_id` → cross-model link-name collisions; key by `(parent, child)` / filter to world-scoped models.
@@ -32,7 +34,7 @@
 6. detection AUTO→MOCK silent fallback masks "gz not started" in prod — loud-WARN / opt-in gate.
 
 ### P1-real (plan §P1 STATUS — blocker + items)
-1. **No spawnable JETANK SDF** — convert `~/workspaces/jetank/.../urdf/*.xacro` → urdf → `gz sdf`, swap `ignition-*`→`gz_ros2_control`, add `models/jetank/*.sdf`. **Blocks real P1 acceptance.** (Manifest at `src/gazebo_mcp/data/jetank_manifest.json` is ready.)
+1. **No spawnable JETANK SDF — blocker SHARPENED 2026-07-04.** `xacro ~/workspaces/jetank/src/jetank_description/urdf/jetank.xacro` → urdf **works** (489 lines, needs `source ~/workspaces/jetank/install/setup.bash`). BUT `gz sdf -p jetank.urdf` **fails (exit 255) and models only 1 of 21 links**: 7 links have **no `<inertial>` block** (`arm_bearing_link` + all 6 wheels), so `urdf2sdf` drops each and its entire joint subtree. **Root fix is UPSTREAM in `jetank_description`** — add `<inertial>` (real mass/inertia) to those 7 links; NOT a gazebo-mcp change, and mass properties must not be fabricated. Only after that does `gz sdf` yield a spawnable `models/jetank/*.sdf` (then swap any `ignition-*`→`gz_ros2_control`). Artifacts: `.agent-state/20260704-p5-hardening/preal-artifacts/` (jetank.urdf, partial jetank.sdf, sdf.err). Manifest `src/gazebo_mcp/data/jetank_manifest.json` is ready. **Still blocks real P1 acceptance.**
 2. `duration`/`persistent` not implemented on the real wrench path (`EntityWrench` topic is persistent-until-cleared) — implement non-persistent as a scheduled `clear_wrench`.
 3. `command_joint` `vel`/`force` modes have no consumer — add `gz-sim-joint-controller-system` + bridge lines, or reject until provisioned.
 4. No controller-spawner / `gz_ros2_control` config wired in the launch.
