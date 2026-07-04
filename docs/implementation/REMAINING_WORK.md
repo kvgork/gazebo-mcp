@@ -56,10 +56,10 @@
 ### P2-real (plan §P2 STATUS — 7 items)
 1. ~~**Param transport likely wrong**~~ — **FIXED 2026-07-04** (commit `7f71c4a`). Confirmed live: Harmonic params ARE gz-transport, registry namespace `/world/<w>` (services `/world/<w>/{list,get,set,declare}_parameter`, `gz.msgs` types), and `gz param -r /world/<w> -l` works (stock world → "No parameters available"). Rewired `param_list/get/set` to shell out to `gz param` (subprocess, timeout-bounded, honest `[]`/KeyError/False). NOTE: full get/set ROUND-TRIP is still unverified — needs a world/system that DECLARES parameters (stock worlds declare none); the registry+transport+list path is verified.
    > **Live env caveat 2026-07-04:** heavy repeated `gz sim` SIGKILLs this session degraded gz-transport startup (new `gz sim` began hanging), and the camera worlds hang **headless** (camera sensors need a rendering engine / GPU-display, absent here). So (a) sensor live-verify (items 2–4) and (b) the param get/set round-trip could not be completed this session — the param fix is mock-green + registry-verified, sensor items remain live-deferred pending a rendering-capable host (or a non-rendering sensor: contact/imu).
-2. Modern `sensor_snapshot` returns raw `gz-text` (marked `typed:false`) — parse `gz topic -e` echo into typed per-sensor shapes.
-3. `list_sensors` type-classification = topic-name substring guess; real health hardcoded `"unknown"`.
-4. `gz topic -e` `text=True` for binary msgs.
-5. Param-service clients never destroyed (leak).
+2. Modern `sensor_snapshot` returns raw `gz-text` (marked `typed:false`) — parse `gz topic -e` echo into typed per-sensor shapes. *(live-partial 2026-07-04: `sensors.sdf` publishes non-render sensor topics `/imu` `/altimeter` `/magnetometer` — good for verifying `list_sensors` classification without a GPU — but `sensor_snapshot` HUNG on the binary IMU topic, confirming #4 below. Needs the #4 fix before a clean snapshot verify.)*
+3. `list_sensors` type-classification = topic-name substring guess; real health hardcoded `"unknown"`. *(verify against `sensors.sdf` once #4 unblocks snapshot.)*
+4. **`gz topic -e` `text=True` for binary msgs — CONFIRMED live 2026-07-04:** `sensor_snapshot` on the binary `/imu` topic hangs/mis-reads. Use `--json-output` (as the pose readback fix does) or request the correct echo mode for binary messages.
+5. ~~Param-service clients never destroyed (leak)~~ — **RESOLVED 2026-07-04** (commit `7f71c4a`): the `gz param` CLI rewrite creates NO persistent service clients (subprocess per call), so there is nothing to leak; `shutdown()` no longer references any `_param_*_clients` (verified — the dicts are gone).
 6. Legacy 69-tool `sdk_app` surface still advertises the 8 deprecated tools regardless of flag — filter in `_build_registry` when `GAZEBO_LEGACY_TOOLS=0`.
 7. Completeness: lean `sensor_list` dropped `response_format` token control; camera fixed PNG (no `format`); `param_set` no allowlist.
 
