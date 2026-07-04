@@ -43,16 +43,25 @@ def launch_bridge(context, *args, **kwargs):
         # Control world service (pause, unpause, reset)
         f'/world/{world_name}/control@ros_gz_interfaces/srv/ControlWorld',
 
-        # Pose information topic (Gazebo -> ROS2). gz publishes gz.msgs.Pose_V
-        # here; the ros_gz_bridge standard mapping is tf2_msgs/msg/TFMessage,
-        # which is exactly what ModernGazeboAdapter._ensure_pose_info_subscriber
-        # subscribes to (parses transforms[].child_frame_id + transform). The
-        # earlier ros_gz_interfaces/msg/ParamVec mapping was wrong — the adapter's
-        # TFMessage subscriber received nothing, so pose readback silently failed.
-        f'/world/{world_name}/pose/info[tf2_msgs/msg/TFMessage',
+        # Pose information topic (Gazebo -> ROS2). FULL topic syntax is
+        # `topic@ROS_type[GZ_type`; the `@ROS_type` before the `[` direction
+        # symbol is REQUIRED. The earlier `pose/info[ros_gz_interfaces/msg/ParamVec`
+        # was doubly wrong: (a) no `@ROS_type`, so parameter_bridge treated the
+        # WHOLE argv as malformed, printed usage, and exited — bridging NOTHING,
+        # incl. the 4 services above; (b) ParamVec is not what the adapter reads.
+        # gz publishes gz.msgs.Pose_V here; the ros_gz mapping to
+        # tf2_msgs/msg/TFMessage is what ModernGazeboAdapter subscribes to.
+        # VERIFIED 2026-07-04: with this corrected syntax the 4 services bridge
+        # and live spawn+step succeed.
+        # KNOWN GAP (P0-B-real): the Pose_V->TFMessage bridge in this ros_gz
+        # version emits EMPTY frame_id/child_frame_id, so the adapter's
+        # child_frame_id-keyed pose cache can't resolve a model — pose readback
+        # needs a redesign (bridge Pose_V preserving `name`, or read gz-transport
+        # directly). Tracked in REMAINING_WORK Section B (P0-B-real).
+        f'/world/{world_name}/pose/info@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V',
 
-        # Clock topic (Gazebo -> ROS2)
-        '/clock[rosgraph_msgs/msg/Clock',
+        # Clock topic (Gazebo -> ROS2) — same full `@ROS_type[GZ_type` form.
+        '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
     ]
 
     # Create ros_gz_bridge node
