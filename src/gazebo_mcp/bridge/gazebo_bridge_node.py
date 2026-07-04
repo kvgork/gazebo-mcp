@@ -12,6 +12,7 @@ This is a CRITICAL component - it provides the actual Gazebo integration.
 REFACTORED (Phase 1B): Now uses adapter pattern for dual Gazebo support.
 """
 
+import math
 import time
 import asyncio
 import queue
@@ -26,6 +27,7 @@ from .factory import GazeboAdapterFactory
 from .gazebo_interface import GazeboInterface, EntityPose, EntityTwist
 
 from ..utils.exceptions import (
+    ActuationBoundsExceeded,
     GazeboNotRunningError,
     GazeboTimeoutError,
     ModelNotFoundError,
@@ -33,6 +35,13 @@ from ..utils.exceptions import (
     ModelDeleteError,
     ROS2ServiceError,
     ROS2TopicError
+)
+from ..utils.actuation_bounds import (
+    BoundsConfig,
+    PersistentWrenchRegistry,
+    RateLimiter,
+    enforce_wrench,
+    enforce_joint,
 )
 from ..utils.logger import get_logger
 from ..utils.converters import pose_to_dict, dict_to_pose
@@ -125,6 +134,17 @@ class GazeboBridgeNode:
 
         # Stash config (may be None for pure dependency-injection in tests).
         self.config = config
+
+        # Actuation-bounds backstop (P5 hardening — SAFETY-CRITICAL). Enforced
+        # inside the actuation methods BEFORE every self.adapter.* call so mock /
+        # modern / classic backends, all lean + legacy tools, and direct bridge
+        # calls are bounded identically. from_config tolerates self.config is None
+        # (-> defaults) so DI/test construction stays safe.
+        self._bounds = BoundsConfig.from_config(self.config)
+        self._wrench_registry = PersistentWrenchRegistry(
+            self._bounds.max_persistent_wrenches
+        )
+        self._rate_limiter = RateLimiter(self._bounds.rate_limit_hz)
 
         # World provisioner (P0-B): only when this bridge OWNS its world.
         # Lazy import keeps WorldProvisioner (and its template path resolution)
@@ -453,6 +473,13 @@ class GazeboBridgeNode:
 
                 if success:
                     self.logger.log_model_event("deleted", name, world=world)
+                    # F3 (P5 hardening): free any persistent-wrench registry
+                    # slot held by this entity — otherwise a deleted entity
+                    # permanently occupies a slot under max_persistent_wrenches
+                    # even though it no longer exists. Only on a SUCCESSFUL
+                    # delete: if delete failed the entity (and its wrench)
+                    # still exist, so the slot must stay held.
+                    self._wrench_registry.clear(name, world)
                     return True
                 else:
                     raise ModelDeleteError(name, "Adapter returned False")
@@ -989,6 +1016,11 @@ class GazeboBridgeNode:
         if world is None:
             world = self.world
 
+        # Actuation-bounds backstop BEFORE the adapter call. Placed OUTSIDE the
+        # try/except so a strict-mode ActuationBoundsExceeded propagates instead
+        # of being swallowed into a False return (non-strict clamps in place).
+        force, torque = enforce_wrench(force, torque, duration, False, self._bounds)
+
         if not hasattr(self.adapter, "apply_wrench"):
             self.logger.warning("Adapter does not support apply_wrench")
             return False
@@ -1009,7 +1041,9 @@ class GazeboBridgeNode:
 
     # Simulation timing / physics control (P0-B):
 
-    async def step(self, steps: int = 1, world: Optional[str] = None) -> Dict[str, Any]:
+    async def step(
+        self, steps: int = 1, world: Optional[str] = None, progress_cb=None
+    ) -> Dict[str, Any]:
         """
         Advance the simulation by a fixed number of physics steps.
 
@@ -1019,13 +1053,17 @@ class GazeboBridgeNode:
         Args:
             steps: Number of physics steps to advance (>= 1)
             world: Target world name (default: self.world)
+            progress_cb: Optional async ``(done, total) -> None`` callback for
+                cosmetic progress reporting (P5 hardening, F5). Passed straight
+                through to the adapter; it must NEVER change the resulting
+                physics — see ``mock_adapter.step`` for the contract.
 
         Returns:
             Dict with at least 'sim_time' and 'steps'.
         """
         if world is None:
             world = self.world
-        return await self.adapter.step(steps=steps, world=world)
+        return await self.adapter.step(steps=steps, world=world, progress_cb=progress_cb)
 
     async def set_physics(
         self,
@@ -1090,19 +1128,59 @@ class GazeboBridgeNode:
             world: Target world name (default: self.world)
 
         Returns:
-            True if applied/recorded successfully.
+            True if applied/recorded successfully; False if rate-throttled
+            (non-strict). In strict mode an over-limit wrench or a throttled call
+            raises ActuationBoundsExceeded instead.
         """
         if world is None:
             world = self.world
-        return await self.adapter.apply_wrench_topic(
-            entity=entity,
-            link=link,
-            force=force,
-            torque=torque,
-            duration=duration,
-            persistent=persistent,
-            world=world,
-        )
+
+        # Actuation-bounds backstop BEFORE the adapter call (SAFETY-CRITICAL):
+        # 1) per-entity rate limit — throttled => return False (non-strict) or
+        #    raise (strict) so a flood cannot reach the adapter.
+        if not self._rate_limiter.allow(entity):
+            if self._bounds.strict_bounds:
+                raise ActuationBoundsExceeded(
+                    f"wrench on '{entity}' throttled "
+                    f"(> {self._bounds.rate_limit_hz} Hz)",
+                    details={"kind": "rate_limit", "entity": entity},
+                )
+            self.logger.warning("Wrench rate-limited (throttled)", entity=entity)
+            return False
+
+        # 2) magnitude caps (clamp in place, or raise in strict mode).
+        force, torque = enforce_wrench(force, torque, duration, persistent, self._bounds)
+
+        # 3) persistent-wrench cap — registering a NEW (entity, world) beyond the
+        #    cap raises ActuationBoundsExceeded (requires an explicit clear first).
+        #    Registered BEFORE the adapter call so an over-cap wrench is rejected
+        #    pre-apply.
+        if persistent:
+            self._wrench_registry.register(entity, world)
+
+        # F4 (P5 hardening): if the adapter call raises, OR returns False (the
+        # wrench did not actually take effect), roll back the slot just
+        # registered above — otherwise a failed persistent-wrench attempt
+        # permanently leaks a cap slot that can never be cleared (clear_wrench
+        # has nothing to clear on the backend, but the registry still thinks
+        # it is active).
+        try:
+            ok = await self.adapter.apply_wrench_topic(
+                entity=entity,
+                link=link,
+                force=force,
+                torque=torque,
+                duration=duration,
+                persistent=persistent,
+                world=world,
+            )
+        except Exception:
+            if persistent:
+                self._wrench_registry.clear(entity, world)
+            raise
+        if persistent and not ok:
+            self._wrench_registry.clear(entity, world)
+        return ok
 
     async def clear_wrench(self, entity: str, world: Optional[str] = None) -> bool:
         """
@@ -1117,6 +1195,9 @@ class GazeboBridgeNode:
         """
         if world is None:
             world = self.world
+        # Free the persistent-wrench registry slot so a later persistent wrench
+        # can take its place under the cap (no-op if never registered).
+        self._wrench_registry.clear(entity, world)
         return await self.adapter.clear_wrench(entity=entity, world=world)
 
     async def command_joint(
@@ -1126,6 +1207,8 @@ class GazeboBridgeNode:
         mode: str,
         value: float,
         world: Optional[str] = None,
+        *,
+        limits: Optional[Tuple[float, float]] = None,
     ) -> bool:
         """
         Command a single joint in pos/vel/force mode (async passthrough).
@@ -1136,12 +1219,23 @@ class GazeboBridgeNode:
             mode: One of {"pos", "vel", "force"}
             value: Target value
             world: Target world name (default: self.world)
+            limits: Optional ``(lower, upper)`` positional limits for the
+                actuation-bounds backstop. Keyword-only and defaulted to None so
+                existing callers (e.g. the tool layer, which enforces manifest
+                pos limits itself) are unaffected; when supplied, a pos command
+                is clamped to (or, in strict mode, rejected against) this range.
 
         Returns:
-            True if applied/recorded successfully.
+            True if applied/recorded successfully. In strict mode an over-limit
+            value raises ActuationBoundsExceeded.
         """
         if world is None:
             world = self.world
+        # Actuation-bounds backstop BEFORE the adapter call (SAFETY-CRITICAL):
+        # vel-mode -> ±max_joint_velocity, force/effort -> ±max_joint_effort,
+        # pos -> clamp to `limits` when provided. Clamps in place, or raises in
+        # strict mode.
+        value = enforce_joint(model, joint, mode, value, limits, self._bounds)
         return await self.adapter.command_joint(
             model=model, joint=joint, mode=mode, value=value, world=world
         )
@@ -1162,9 +1256,36 @@ class GazeboBridgeNode:
 
         Returns:
             True if applied/recorded successfully.
+
+        Raises:
+            ActuationBoundsExceeded: If any waypoint position is non-finite
+                (NaN/inf).
+
+        Bounds coverage (P5 hardening, F2 — partial+honest): ONLY non-finite
+        (NaN/inf) waypoint positions are rejected here, in BOTH strict and
+        non-strict mode — a non-finite command has no finite magnitude to
+        clamp and would otherwise reach the adapter unbounded. Per-waypoint
+        position/velocity LIMIT clamping against the model manifest is
+        DEFERRED: the trajectory ``positions`` list carries no joint names, so
+        a waypoint value cannot be mapped to a specific joint's manifest
+        limits at this layer. See REMAINING_WORK.md.
         """
         if world is None:
             world = self.world
+        for point_idx, point in enumerate(points):
+            positions = point.get("positions", []) if isinstance(point, dict) else []
+            for pos_idx, v in enumerate(positions):
+                if not math.isfinite(float(v)):
+                    raise ActuationBoundsExceeded(
+                        "trajectory contains a non-finite position",
+                        details={
+                            "kind": "trajectory_position",
+                            "model": model,
+                            "point_index": point_idx,
+                            "position_index": pos_idx,
+                            "value": v,
+                        },
+                    )
         return await self.adapter.command_joint_trajectory(
             model=model, points=points, world=world
         )

@@ -65,6 +65,9 @@
 6. `httpx.ASGITransport` unusable vs `streamable_http_app()` → HTTP tests need real uvicorn (port-TOCTOU CI flakiness).
 7. `get_session` synthesizes a one-off session for registry-less Context (unit-test) — ensure prod always carries the registry.
 
+### P5 deferred (grill-fixes pass, 2026-07-04)
+1. **Trajectory waypoint position/velocity limit clamping** — `command_joint_trajectory` rejects only non-finite (NaN/inf) waypoint positions; finite out-of-range positions are unbounded at BOTH the tool and bridge layers (the trajectory format carries no joint names, so a waypoint value cannot be mapped to a specific joint's manifest limits). Proper fix: add `joint_names` to the trajectory contract + per-waypoint manifest-limit clamping.
+
 ---
 
 ## C. Cross-cutting / hygiene

@@ -953,7 +953,9 @@ class ModernGazeboAdapter(GazeboInterface):
 
     # --- Simulation timing / physics control (P0-B) ---
 
-    async def step(self, steps: int = 1, world: str = "default") -> Dict[str, Any]:
+    async def step(
+        self, steps: int = 1, world: str = "default", progress_cb=None
+    ) -> Dict[str, Any]:
         """
         Advance the simulation by a fixed number of physics steps.
 
@@ -965,6 +967,11 @@ class ModernGazeboAdapter(GazeboInterface):
         Args:
             steps: Number of physics steps to advance (>= 1)
             world: Target world name
+            progress_cb: Accepted for interface parity with the mock adapter
+                (P5 hardening, F5) but IGNORED here — genuine per-physics-step
+                progress on the real backend is deferred (ControlWorld steps
+                all ``steps`` ticks in one service call; there is no
+                intermediate hook to report from).
 
         Returns:
             Dict with 'steps' executed and a best-effort 'sim_time'.

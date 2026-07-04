@@ -18,14 +18,21 @@ from gazebo_mcp.utils import OperationResult
 _WORLD_OP_FAILED = "WORLD_OP_FAILED"
 
 
-async def world_step(steps: int = 1, world: str = "default") -> OperationResult:
+async def world_step(
+    steps: int = 1, world: str = "default", progress_cb=None
+) -> OperationResult:
     """Advance the simulation by ``steps`` physics steps.
+
+    ``progress_cb`` (P5 hardening, F5): optional async ``(done, total) ->
+    None`` callback for cosmetic progress reporting, passed straight through
+    to the bridge/adapter. It never changes the physics — the returned payload
+    is always the adapter's native single-call result (no steps overwrite).
 
     Returns OperationResult(data={"sim_time": float, "steps": int, ...}).
     """
     try:
         b = get_bridge()
-        result = await b.step(steps=steps, world=world)
+        result = await b.step(steps=steps, world=world, progress_cb=progress_cb)
         return OperationResult(success=True, data=result)
     except Exception as e:  # noqa: BLE001 — surface as structured failure
         return OperationResult(success=False, error=str(e), error_code=_WORLD_OP_FAILED)

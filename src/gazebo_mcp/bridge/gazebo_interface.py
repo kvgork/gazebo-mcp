@@ -231,13 +231,20 @@ class GazeboInterface(ABC):
     # The mock backend implements all three; real backends land them in the
     # sim-env slice (map to /control multi_step, /set_physics, and reset seed).
 
-    async def step(self, steps: int = 1, world: str = "default") -> Dict[str, Any]:
+    async def step(
+        self, steps: int = 1, world: str = "default", progress_cb=None
+    ) -> Dict[str, Any]:
         """
         Advance the simulation by a fixed number of steps.
 
         Args:
             steps: Number of physics steps to advance (>= 1)
             world: World name
+            progress_cb: Optional async ``(done, total) -> None`` callback for
+                cosmetic progress reporting (P5 hardening). Implementations
+                that support it MUST NOT let its presence change the resulting
+                physics; implementations that don't support it should accept
+                and ignore it.
 
         Returns:
             Dict with at least 'sim_time' (float) after stepping and 'steps' executed.

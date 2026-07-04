@@ -22,8 +22,17 @@ from .operation_result import (
     operation_timeout_error,
 )
 
+from .actuation_bounds import (
+    BoundsConfig,
+    enforce_wrench,
+    enforce_joint,
+    PersistentWrenchRegistry,
+    RateLimiter,
+)
+
 from .exceptions import (
     GazeboMCPError,
+    ActuationBoundsExceeded,
     ROS2Error,
     ROS2NotConnectedError,
     ROS2ConnectionLostError,
@@ -66,8 +75,15 @@ __all__ = [
     "gazebo_not_running_error",
     "invalid_parameter_error",
     "operation_timeout_error",
+    # Actuation bounds (P5 safety-critical backstop)
+    "BoundsConfig",
+    "enforce_wrench",
+    "enforce_joint",
+    "PersistentWrenchRegistry",
+    "RateLimiter",
     # Exceptions
     "GazeboMCPError",
+    "ActuationBoundsExceeded",
     "ROS2Error",
     "ROS2NotConnectedError",
     "ROS2ConnectionLostError",

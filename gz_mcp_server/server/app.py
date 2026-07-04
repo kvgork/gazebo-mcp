@@ -49,6 +49,14 @@ from gz_mcp_server.server.session import GazeboSession
 
 _logger = get_logger("fastmcp_app")
 
+# world_step progress streaming (P5, FIX-F5). When a client supplies a
+# progressToken (ctx present) and asks for MORE than 1 step, a progress_cb is
+# passed all the way down to the adapter's SINGLE native step() call, which
+# reports an evenly-spaced cosmetic ramp from INSIDE that one call — the sim is
+# NEVER chunked at this layer (chunking previously made the final pose depend
+# on whether a progressToken was present; see mock_adapter.step's docstring).
+# steps <= 1 (or ctx is None, e.g. stdio, or no token) => progress_cb is None.
+
 # Key under which the single shared/default session lives in the lifespan dict.
 # stdio (the default transport) is a single implicit session that uses it;
 # every HTTP request without an ``Mcp-Session-Id`` falls back to it too.
@@ -92,6 +100,26 @@ async def _with_session_bridge(
 async def _to_dict(result_coro: Awaitable[Any]) -> dict:
     """Await a lean-tool delegate coroutine and return its ``OperationResult`` dict."""
     return (await result_coro).to_dict()
+
+
+def _has_progress_token(ctx: Optional[Context]) -> bool:
+    """True iff the current request carries a ``progressToken`` (a listener).
+
+    ``Context.report_progress`` is a no-op without a token (verified in mcp
+    1.27.1: it reads ``request_context.meta.progressToken`` and returns early
+    when absent). So when there is no token we gain nothing by wiring a
+    ``progress_cb`` into the adapter call — skipping it there keeps the
+    no-listener path byte-identical to the pre-P5 single-shot behaviour (and
+    avoids paying the callback overhead for a report_progress that is a no-op
+    anyway).
+    """
+    if ctx is None:
+        return False
+    try:
+        meta = ctx.request_context.meta
+    except Exception:  # noqa: BLE001 — no active request context (unit Context)
+        return False
+    return bool(meta is not None and getattr(meta, "progressToken", None) is not None)
 
 
 @asynccontextmanager
@@ -245,10 +273,38 @@ def build_app() -> FastMCP:
     async def world_step(
         steps: int = 1, world: str = "default", ctx: Optional[Context] = None
     ) -> dict:
-        """Advance the simulation by N physics steps."""
-        return await _with_session_bridge(
-            ctx, lambda: _to_dict(_world.world_step(steps=steps, world=world))
-        )
+        """Advance the simulation by N physics steps.
+
+        FIX-F5 (P5 hardening): physics is ALWAYS a single native adapter call —
+        it is never chunked. A prior chunked-stepping design advanced the sim in
+        fixed-size slices to emit incremental progress, but that made the FINAL
+        POSE depend on whether a progressToken was present (chunking is not
+        composable with the mock's from-rest integration — see
+        ``mock_adapter.step``'s docstring). Progress is now reported from
+        INSIDE the single adapter call instead (an evenly-spaced cosmetic ramp
+        for the mock backend; a no-op for backends that don't support it yet),
+        so the result is physics-IDENTICAL regardless of whether a listener is
+        attached. ``report_progress`` is best-effort: a progress failure never
+        fails the tool.
+        """
+
+        async def _run() -> dict:
+            progress_cb = None
+            if ctx is not None and steps > 1 and _has_progress_token(ctx):
+
+                async def progress_cb(done, total):  # noqa: F811 - inner def
+                    try:
+                        await ctx.report_progress(progress=done, total=total)
+                    except Exception as e:  # noqa: BLE001 — progress is advisory
+                        _logger.debug(
+                            "world_step progress report failed", error=str(e)
+                        )
+
+            return await _to_dict(
+                _world.world_step(steps=steps, world=world, progress_cb=progress_cb)
+            )
+
+        return await _with_session_bridge(ctx, _run)
 
     @mcp.tool()
     async def world_set_physics(

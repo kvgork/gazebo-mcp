@@ -175,6 +175,27 @@ export GAZEBO_WORLD_NAME=default
 export GAZEBO_TIMEOUT=5.0
 ```
 
+**Actuation safety bounds (P5 hardening).** All actuation is clamped at a single
+bridge-level chokepoint (identical across mock/modern/classic). Defaults and
+overrides:
+
+```bash
+export GAZEBO_MAX_FORCE_N=1000          # force magnitude cap (N)
+export GAZEBO_MAX_TORQUE_NM=500         # torque magnitude cap (N·m)
+export GAZEBO_MAX_JOINT_VELOCITY=10     # vel-mode joint cap (rad/s or m/s)
+export GAZEBO_MAX_JOINT_EFFORT=500      # force/effort-mode joint cap (N·m or N)
+export GAZEBO_MAX_PERSISTENT_WRENCHES=8 # max simultaneous persistent wrenches
+export GAZEBO_RATE_LIMIT_HZ=50          # per-entity rate cap (Hz); <=0 disables
+export GAZEBO_STRICT_BOUNDS=0           # 0 = clamp (default); 1 = reject over-limit
+```
+
+By default over-limit commands are **clamped** (vectors scaled, direction
+preserved); with `GAZEBO_STRICT_BOUNDS=1` they are **rejected** with
+`ACTUATION_BOUNDS_EXCEEDED`. Persistent wrenches require an explicit clear before
+a new one can take a slot. See [`docs/guides/p5-hardening.md`](docs/guides/p5-hardening.md)
+for full details, plus the notify-then-poll sensor model, CPU-only physics,
+image caps, and live-Gazebo acceptance requirements.
+
 **Configuration Priority:**
 1. Environment variables (highest)
 2. Default values in code (lowest)

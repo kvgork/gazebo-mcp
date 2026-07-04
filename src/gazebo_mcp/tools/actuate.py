@@ -39,6 +39,7 @@ from pathlib import Path
 from gazebo_mcp.bridge.config import GazeboConfig
 from gazebo_mcp.tools._bridge_helper import get_bridge
 from gazebo_mcp.utils import OperationResult
+from gazebo_mcp.utils.exceptions import ActuationBoundsExceeded
 from gazebo_mcp.utils.logger import get_logger
 
 _logger = get_logger("actuate_tools")
@@ -172,6 +173,11 @@ async def actuate_wrench(
                 "world": world,
             },
         )
+    except ActuationBoundsExceeded as e:
+        # Surface the specific safety-bound error_code (strict-mode over-limit, or
+        # the always-on persistent-wrench cap) instead of the generic
+        # ACTUATE_OP_FAILED, so clients can distinguish a bounds rejection.
+        return OperationResult(success=False, error=str(e), error_code=e.error_code)
     except Exception as e:  # noqa: BLE001
         return OperationResult(success=False, error=str(e), error_code=_ACTUATE_OP_FAILED)
 
@@ -184,6 +190,11 @@ async def actuate_clear_wrench(entity: str, world: str = "default") -> Operation
         return OperationResult(
             success=True, data={"entity": entity, "cleared": ok, "world": world}
         )
+    except ActuationBoundsExceeded as e:
+        # Surface the specific safety-bound error_code (strict-mode over-limit, or
+        # the always-on persistent-wrench cap) instead of the generic
+        # ACTUATE_OP_FAILED, so clients can distinguish a bounds rejection.
+        return OperationResult(success=False, error=str(e), error_code=e.error_code)
     except Exception as e:  # noqa: BLE001
         return OperationResult(success=False, error=str(e), error_code=_ACTUATE_OP_FAILED)
 
@@ -257,6 +268,11 @@ async def actuate_joint(
                 "world": world,
             },
         )
+    except ActuationBoundsExceeded as e:
+        # Surface the specific safety-bound error_code (strict-mode over-limit, or
+        # the always-on persistent-wrench cap) instead of the generic
+        # ACTUATE_OP_FAILED, so clients can distinguish a bounds rejection.
+        return OperationResult(success=False, error=str(e), error_code=e.error_code)
     except Exception as e:  # noqa: BLE001
         return OperationResult(success=False, error=str(e), error_code=_ACTUATE_OP_FAILED)
 
@@ -314,5 +330,10 @@ async def actuate_joint_trajectory(
                 "world": world,
             },
         )
+    except ActuationBoundsExceeded as e:
+        # Surface the specific safety-bound error_code (strict-mode over-limit, or
+        # the always-on persistent-wrench cap) instead of the generic
+        # ACTUATE_OP_FAILED, so clients can distinguish a bounds rejection.
+        return OperationResult(success=False, error=str(e), error_code=e.error_code)
     except Exception as e:  # noqa: BLE001
         return OperationResult(success=False, error=str(e), error_code=_ACTUATE_OP_FAILED)

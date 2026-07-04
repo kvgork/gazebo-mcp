@@ -267,7 +267,9 @@ class MockGazeboAdapter(GazeboInterface):
 
     # -- physics/timing control (P0 additions) --
 
-    async def step(self, steps: int = 1, world: str = "default") -> Dict[str, Any]:
+    async def step(
+        self, steps: int = 1, world: str = "default", progress_cb=None
+    ) -> Dict[str, Any]:
         """Advance mock time and integrate recorded wrenches.
 
         HONESTY NOTE — this is a KINEMATIC LINEAR-FORCE APPROXIMATION, not real
@@ -281,6 +283,18 @@ class MockGazeboAdapter(GazeboInterface):
             regardless of the spawned SDF's inertial properties.
         Callers/tests must treat the resulting pose as a deterministic fixture,
         not a physical prediction.
+
+        ``progress_cb`` (P5 hardening, FIX-F5): an optional async
+        ``(done: int, total: int) -> None`` callback for COSMETIC progress
+        reporting ONLY. It is invoked strictly AFTER the physics below has
+        already been computed in the single, non-composable shot described
+        above — it never chunks or otherwise influences the integration, so
+        the resulting pose is IDENTICAL whether or not a ``progress_cb`` is
+        supplied (a prior chunked-stepping approach broke this: it made the
+        final pose depend on whether a progress listener was attached, which
+        is exactly the observability-mutating-state bug F5 fixes). When
+        supplied, an evenly-spaced ramp of up to 10 reports is emitted; the
+        LAST report always reports ``(steps, steps)``.
         """
         if steps < 1:
             raise ValueError("steps must be >= 1")
@@ -300,6 +314,14 @@ class MockGazeboAdapter(GazeboInterface):
                     pos[i] += 0.5 * (wr["force"][i] / _MOCK_MASS) * (dt ** 2)
             if not wr.get("persistent", False):
                 w.wrenches.pop(entity, None)
+
+        # FIX-F5 (P5 hardening): cosmetic-only progress ramp, reported AFTER the
+        # physics above has already run to completion. DO NOT move this above
+        # the integration or chunk the integration itself — see the docstring.
+        if progress_cb is not None:
+            ramp = min(steps, 10)
+            for k in range(1, ramp + 1):
+                await progress_cb(round(k * steps / ramp), steps)
 
         return {"sim_time": w.sim_time, "steps": steps, "paused": w.paused}
 

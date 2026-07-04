@@ -46,6 +46,25 @@ class GazeboMCPError(Exception):
         }
 
 
+# Actuation Bounds Exception (P5 hardening — safety-critical backstop):
+
+class ActuationBoundsExceeded(GazeboMCPError):
+    """An actuation command exceeded a configured safety bound.
+
+    Raised by the bridge-level actuation-bounds backstop when
+    ``strict_bounds`` is enabled (non-strict mode clamps instead), or whenever a
+    NEW persistent wrench would exceed the simultaneous-persistent-wrench cap.
+
+    Note: ``GazeboMCPError.__init__`` takes no ``details`` argument, so the
+    optional ``details`` payload is stored on the instance rather than forwarded
+    to the base initialiser.
+    """
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        self.details = details or {}
+        super().__init__(message, error_code="ACTUATION_BOUNDS_EXCEEDED")
+
+
 # ROS2 Connection Exceptions:
 
 class ROS2Error(GazeboMCPError):
