@@ -1186,57 +1186,63 @@ class ModernGazeboAdapter(GazeboInterface):
 
     async def sensor_snapshot(self, topic: str, world: str = "default") -> Dict[str, Any]:
         """
-        Read the latest sample on ``topic`` via a one-shot ``gz topic -e -n 1``
-        (best-effort, DEFERRED/write-only).
+        Read the latest sample on ``topic`` via a one-shot
+        ``gz topic -e -n 1 --json-output``.
 
-        Shells out to ``gz topic -e -n 1 -t <topic>`` (matching the CLI style of
-        ``list_entities``) and returns the RAW text echo under ``"raw"`` along
-        with the topic/format and ``"typed": False`` (so callers know this is
-        NOT the typed per-sensor dict the mock backend returns). Full typed
-        parsing into per-sensor-type dicts (matching the mock shapes) is NOT
-        wired here — that belongs to a real ros_gz subscription feeding a
-        latest-sample cache.
+        Uses ``--json-output`` (NOT the plain-text echo): the plain-text
+        ``gz topic -e`` hangs / mis-decodes on BINARY messages (Imu / LaserScan /
+        Image), confirmed live 2026-07-04. JSON output is text-safe and parses
+        into a structured per-field dict, so ``typed`` is True (the ``sample`` is
+        the message's fields, not an opaque blob). Falls back to a raw-text echo
+        (``typed: False``) only if the JSON cannot be parsed. Runs off the
+        event-loop thread (subprocess), matching ``get_entity_state``.
 
         Raises:
             KeyError: if the one-shot read yields nothing (treated as "no sensor
                 publishing on this topic").
-
-        # TODO(P2-real): subscribe via sensor_msgs (LaserScan/Imu/NavSatFix) and
-        #   cache the latest sample; parse into the typed mock-equivalent shapes
-        #   (and flip "typed" to True once the typed payload is produced).
         """
+        loop = asyncio.get_event_loop()
+        sample = await loop.run_in_executor(None, self._gz_snapshot, topic)
+        if sample is None:
+            # Nothing came back: honestly signal "unknown/no sensor on this topic".
+            raise KeyError(topic)
+        return sample
+
+    def _gz_snapshot(self, topic: str) -> Optional[Dict[str, Any]]:
+        """One-shot ``gz topic -e -n 1 --json-output`` read of ``topic``.
+
+        Returns a typed ``{"topic","format":"gz-json","sample":<dict>,"typed":True}``
+        on success, a raw-text fallback (``typed:False``) if JSON parsing fails,
+        or ``None`` if nothing was read (topic silent / absent).
+        """
+        import json
         import subprocess
 
         for cli in ("gz", "ign"):
             try:
                 result = subprocess.run(
-                    [cli, "topic", "-e", "-n", "1", "-t", topic],
+                    [cli, "topic", "-e", "-n", "1", "--json-output", "-t", topic],
                     capture_output=True,
                     text=True,
-                    timeout=self.timeout,
+                    timeout=self.timeout + 2.0,
                 )
             except FileNotFoundError:
-                continue
+                continue  # this CLI absent — try the next
             except subprocess.TimeoutExpired:
-                self.logger.warning(
-                    f"Timeout reading one-shot sample on '{topic}' via {cli}"
-                )
-                continue
+                self.logger.warning(f"Timeout reading one-shot sample on '{topic}' via {cli}")
+                return None
             except Exception as e:  # noqa: BLE001 - best-effort read
                 self.logger.warning(f"Error reading '{topic}' via {cli}: {e}")
                 continue
 
             if result.returncode == 0 and result.stdout.strip():
-                return {
-                    "topic": topic,
-                    "format": "gz-text",
-                    "raw": result.stdout,
-                    # Raw gz-text echo, NOT the typed mock-equivalent dict.
-                    "typed": False,
-                }
-
-        # Nothing came back: honestly signal "unknown/no sensor on this topic".
-        raise KeyError(topic)
+                try:
+                    data = json.loads(result.stdout)
+                except Exception:  # noqa: BLE001 - non-JSON echo: honest raw fallback
+                    return {"topic": topic, "format": "gz-text", "raw": result.stdout,
+                            "typed": False}
+                return {"topic": topic, "format": "gz-json", "sample": data, "typed": True}
+        return None
 
     async def sensor_camera_image(
         self,
