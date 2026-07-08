@@ -95,8 +95,16 @@ and unblock everything else.
   (`apply_wrench` service vs `actuate_wrench` topic); trajectory `time_from_start` monotonicity.
 
 ## Phase F — Optional
-- [ ] **P4 real** REP-2018 `simulation_interfaces` adapter — needs a simulator that implements
-  those ROS services (none here; the package ships no registered interfaces in `-e full`).
+- [x] **P4 real** REP-2018 `simulation_interfaces` adapter — **DONE 2026-07-08.** The blocker
+  ("no REP-2018 backend here") was WRONG: `ros_gz_sim`'s **gzserver component**
+  (`libgzserver_component.so`) provides the full `simulation_interfaces` service set under
+  `/gz_server` (spawn/delete/get_entities/get_entity_state/set_entity_state/step/reset/
+  set_simulation_state/get_simulator_features). Wrote `bridge/adapters/sim_interfaces_adapter.py`
+  (`SimInterfacesAdapter(GazeboInterface)` — a REP-2018 CLIENT) and live-verified the full
+  portable lifecycle against it (`tests/integration/test_p4_real_sim_interfaces.py`). Gazebo-
+  specific ops (wrench/joint/sensor/param) stay honest NotImplementedError (REP-2018 doesn't
+  define them). **Follow-up (not done):** wire it into bridge backend-selection
+  (`GAZEBO_BACKEND=sim_interfaces`) + point the `sim_*` tools at it instead of the scene_*/world_* shim.
 - [x] **P5 deferred** — per-waypoint trajectory position/velocity clamping — **DONE 2026-07-05**:
   `actuate_joint_trajectory` gained an optional `joint_names` arg + per-waypoint manifest-limit
   enforcement (tool rejects out-of-range; bridge `command_joint_trajectory(..., limits=)` clamps

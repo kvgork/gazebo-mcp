@@ -8,9 +8,9 @@
 
 ## A. Remaining phases (new capability)
 
-### P4 — Jetty `sim_*` (cross-sim portability) — OPTIONAL — ✅ SHIM DONE (mock) 2026-07-04, commit `3e9f005`
+### P4 — Jetty `sim_*` (cross-sim portability) — OPTIONAL — ✅ SHIM DONE (mock) 2026-07-04, commit `3e9f005` — ✅ REAL ADAPTER DONE 2026-07-08
 - **Portability shim landed:** `sim_spawn`/`sim_delete`/`sim_reset`/`sim_step`/`sim_get_features` delegate to `scene_*`/`world_*`, gated `GAZEBO_SIM_TOOLS=1` (default OFF, surface unchanged). Plan §P4 STATUS.
-- **DEFERRED (real):** the REP-2018 `simulation_interfaces` ROS-service adapter (`sim_interfaces_adapter.py`). The package installs in `-e full` but registers no ROS interfaces in this env → no REP-2018 backend to verify against. Real cross-sim portability needs a simulator that implements the `simulation_interfaces` services.
+- **✅ REAL ADAPTER DONE 2026-07-08** (`bridge/adapters/sim_interfaces_adapter.py`). The "no REP-2018 backend here" blocker was WRONG: `ros_gz_sim`'s **gzserver component** (`libgzserver_component.so`, launched via `ros2 launch ros_gz_sim gz_server.launch.py ... use_composition:=True create_own_container:=True`) provides the full `simulation_interfaces` service set under `/gz_server`. `SimInterfacesAdapter(GazeboInterface)` is a REP-2018 **client** mapping spawn/delete/get_entity_state/set_entity_state/list/reset/step/pause/unpause/get_world_properties → the standard services (gz-specific wrench/joint/sensor/param stay honest NotImplementedError — REP-2018 doesn't define them). Live-verified full lifecycle in `tests/integration/test_p4_real_sim_interfaces.py` (spawn→step→get/set state→delete→not-found→reset against real gz). Two backend quirks handled: a missing entity returns `RESULT_OPERATION_FAILED`+"not found" (not `RESULT_NOT_FOUND`); queued commands (spawn/set/delete) apply on the next `step` when paused. **Follow-up (not done):** wire into bridge backend-selection (`GAZEBO_BACKEND=sim_interfaces`) so `sim_*` tools route to it instead of the scene_*/world_* shim.
 
 ### P5 — Hardening — ✅ DONE & VERIFIED (mock) 2026-07-04, commit `b81a9ab` (plan §P5 STATUS)
 - Actuation bounds (`utils/actuation_bounds.py`), progress consumer (`world_step`), image-cap docs, honesty docs — all landed + grill-hardened (F1–F6 resolved). Remaining P5 items are real-only or deferred (see §B P5-real + P5 deferred).

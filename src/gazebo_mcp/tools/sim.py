@@ -10,10 +10,14 @@ against the ``simulation_interfaces`` verb set — spawn/delete/reset/step/
 get_state — can call these instead of the gz-specific ``scene_*``/``world_*``
 names), NOT a new capability.
 
-The REAL ``simulation_interfaces`` ROS adapter (a service-based
-``sim_interfaces_adapter.py`` implementing the actual REP-2018 ROS services) is
-DEFERRED: that package's ROS interfaces are not registered in this environment.
-``sim_get_features`` reports that explicitly via ``real_adapter``.
+The REAL ``simulation_interfaces`` ROS adapter now EXISTS:
+``bridge/adapters/sim_interfaces_adapter.py`` (``SimInterfacesAdapter``) is a
+REP-2018 client that drives any ``simulation_interfaces`` backend, live-verified
+against the ``ros_gz_sim`` gzserver component (P4-real DONE 2026-07-08; see
+``tests/integration/test_p4_real_sim_interfaces.py``). It is not yet wired into
+default bridge backend-selection, so these shim tools still route to
+scene_*/world_*. ``sim_get_features`` reports the adapter status via
+``real_adapter``.
 
 Strictly optional / non-default: these functions are always importable, but the
 FastMCP app (``gz_mcp_server.server.app``) only registers them as ``@mcp.tool``
@@ -81,8 +85,11 @@ async def sim_get_features(world: str = "default") -> OperationResult:
     Reports the REP-2018 ``simulation_interfaces`` operations this shim
     supports (routed to existing scene_*/world_* tools) and the currently
     configured backend name (best-effort; ``"unknown"`` if unavailable). The
-    real ``simulation_interfaces`` ROS-service adapter is deferred (not
-    implemented by the gz backend in this environment).
+    real ``simulation_interfaces`` ROS-service adapter
+    (``bridge/adapters/sim_interfaces_adapter.py``) now EXISTS and is
+    live-verified against the ``ros_gz_sim`` gzserver component backend
+    (see ``tests/integration/test_p4_real_sim_interfaces.py``); it is not yet
+    wired into default bridge backend-selection.
 
     Non-throwing and safe even with no world/backend reachable.
     """
@@ -102,8 +109,9 @@ async def sim_get_features(world: str = "default") -> OperationResult:
             "supported_ops": ["spawn", "delete", "reset", "step", "get_state"],
             "backend": backend,
             "real_adapter": (
-                "deferred — simulation_interfaces ROS services not implemented "
-                "by the gz backend here"
+                "available — SimInterfacesAdapter (REP-2018 client) live-verified "
+                "against the ros_gz_sim gzserver component (/gz_server services); "
+                "not yet wired into default backend-selection"
             ),
             "world": world,
         },

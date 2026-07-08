@@ -118,7 +118,11 @@ def test_p4_sim_get_features():
             assert "spawn" in data["supported_ops"]
             assert "step" in data["supported_ops"]
             assert data["backend"] in ("mock",)
-            assert "deferred" in data["real_adapter"]
+            # The REP-2018 SimInterfacesAdapter now exists + is live-verified
+            # (P4-real DONE 2026-07-08); it is reported as available but not yet
+            # wired into default backend-selection.
+            assert "available" in data["real_adapter"]
+            assert "SimInterfacesAdapter" in data["real_adapter"]
             assert data["world"] == "default"
 
     anyio.run(_run)
