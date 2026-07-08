@@ -57,24 +57,31 @@ and unblock everything else.
   - Residual P3 #1 (FastMCP couples advertised-schema ↔ validation; object-props stay bare
     `dict`) is a documented intrinsic 1.27.1 constraint — **won't-fix**, not blocking.
 
-## Phase D — Live P*-real verification  *(needs ONE clean session; ~1–2 d)*
+## Phase D — Live P*-real verification  *(mostly DONE 2026-07-08 on a fresh GPU host)*
 > **Env prereqs (do NOT reuse a session that has churned gz):** a FRESH host (stale gz-transport
 > state from repeated SIGKILLs wedges `gz sim` startup); a GPU **or** software-GL so camera
-> sensors render headless (camera worlds hang without it — non-render sensors like `/imu`
-> `/altimeter` in `sensors.sdf` work regardless). Bring up via the now-working
-> `ros2 launch gazebo_mcp gazebo_bridge.launch.py world_name:=<w>` (P*-real #1). Use SIGTERM,
-> never SIGKILL, on gz. **Never `pkill -f "python -c"`** (kills the agent harness).
-- [ ] **D1.** Re-run the P0-B-real acceptance test on the fresh host (regression guard) —
-  `pixi run -e full pytest --with-gazebo -m gazebo tests/integration/test_p0b_real_roundtrip.py`.
-- [ ] **D2. Sensors** (after B1/B3): verify `list_sensors` classification+health against
-  `sensors.sdf` (non-render) and a camera world (render); verify `sensor_snapshot` typed shapes
-  on `/imu` + `sensor_camera_image` on the camera.
-- [ ] **D3. Param round-trip:** resolve the `gz.msgs.Parameter` proto shape, declare a param via
-  `/world/<w>/declare_parameter`, then verify adapter `param_list`/`get`/`set` round-trip live
-  (transport + registry + list already verified; only the declared-param get/set remains).
+> sensors render headless. **RENDER BLOCKER CLEARED 2026-07-08:** on an RTX 3080 host, headless
+> EGL rendering works — `gz sim -s -r --headless-rendering --render-engine-api-backend egl
+> camera_sensor.sdf` publishes real images (`/camera` 320×240). Non-render sensors (`/imu`
+> `/altimeter` in `sensors.sdf`) work regardless. Use SIGTERM, never SIGKILL, on gz. **Never
+> `pkill -f "python -c"`** (kills the agent harness).
+- [x] **D1.** P0-B-real acceptance re-run on the fresh host — **PASS** (`~15s`), regression guard holds.
+- [x] **D2. Sensors** — **DONE 2026-07-08** (`tests/integration/test_p2_real_sensors.py`, 3 tests):
+  `list_sensors` classifies live `/imu` (non-render `sensors.sdf`) + `/camera` (EGL render
+  `camera_sensor.sdf`); `sensor_snapshot` returns TYPED gz-json samples for the binary Imu AND
+  camera Image (B1 live-verified). `sensor_camera_image` (PNG re-encode) stays honestly DEFERRED
+  (needs an image codec) — asserted to raise. **B3 gap documented live:** the substring classifier
+  does not recognise altimeter/magnetometer/air_pressure (real health/Hz still unwired).
+- [x] **D3. Param round-trip** — **DONE 2026-07-08** (`tests/integration/test_p2_real_params.py`,
+  2 tests). Declares params via the `declare_parameter` service (`gz.msgs.Parameter.value` is a
+  `google.protobuf.Any` — text form `value { [type.googleapis.com/gz.msgs.Double] { data: 2.5 } }`),
+  then round-trips `param_list`/`get`/`set` across Double/String/Boolean/Int32. **Found + fixed 2
+  live bugs:** `param_set` used `-t double -m 7.25` but `gz param -s` wants `-t gz.msgs.Double -m
+  'data: 7.25'`; `param_get` returned the trailing `----` separator instead of the `data:` line
+  (and now handles proto3 default-omission for false/zero). Undeclared → honest KeyError.
 - [ ] **D4. P3-real:** run the unified server `--http` in modern mode against live gz; verify
-  per-session isolation + `gz://sensor/{name}` resources over the REAL backend.
-- [ ] Add each as a `@pytest.mark.gazebo` test (skips by default) so they become permanent.
+  per-session isolation + `gz://sensor/{name}` resources over the REAL backend. *(Only remaining D item.)*
+- [x] Each landed as a `@pytest.mark.gazebo` test (skips by default) so they are permanent.
 
 ## Phase E — P1-real  *(BLOCKED on upstream; ~2–3 d after)*
 - [ ] **E1. UPSTREAM (external, robot owner):** add `<inertial>` (real mass/inertia) to the 7

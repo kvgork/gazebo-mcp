@@ -1364,14 +1364,34 @@ class ModernGazeboAdapter(GazeboInterface):
                 )
                 if result.returncode != 0:
                     return None  # not declared / error -> honest KeyError
-                out = result.stdout.strip()
-                if not out or "not found" in out.lower() or "no parameter" in out.lower():
+                out = result.stdout
+                if not out.strip() or "not found" in out.lower() or "no parameter" in out.lower():
                     return None
-                # gz param prints the value (and, with -t, the type). Return the
-                # raw string value; typed decoding is refined once a param world
-                # exists. Keep the shape the tool layer expects.
-                value = out.splitlines()[-1].strip()
-                return {"name": name, "type": "string", "value": value}
+                # gz param -g output (verified live 2026-07-08):
+                #   Parameter type [gz_msgs.Double]
+                #   ------------------------------------------------
+                #   data: 7.25
+                #   ------------------------------------------------
+                # The value is the ``data:`` line (NOT splitlines()[-1], which is
+                # the trailing ``----`` separator — the old bug). Proto3 text
+                # format OMITS ``data:`` for a default/false value, so its absence
+                # means the type's default. Type is on the ``Parameter type [..]``
+                # line.
+                gz_type: Optional[str] = None
+                data_val: Optional[str] = None
+                for line in out.splitlines():
+                    s = line.strip()
+                    if s.startswith("Parameter type ["):
+                        gz_type = s[len("Parameter type ["):].rstrip("]")
+                    elif s.startswith("data:"):
+                        data_val = s[len("data:"):].strip()
+                if gz_type is None:
+                    return None  # not a recognizable param response
+                return {
+                    "name": name,
+                    "type": gz_type,
+                    "value": self._decode_param_value(gz_type, data_val),
+                }
             except FileNotFoundError:
                 continue
             except subprocess.TimeoutExpired:
@@ -1383,25 +1403,63 @@ class ModernGazeboAdapter(GazeboInterface):
         return None
 
     async def param_set(self, name: str, value: Any, world: str = "default") -> bool:
-        """Set one parameter via ``gz param -r /world/<w> -s -n <name> -t <type> -m <value>``.
+        """Set one parameter via ``gz param -r /world/<w> -s -n <name> -t <type> -m <msg>``.
 
-        Type inferred from the Python value (bool→bool, int→int, float→double,
-        else string). Returns True iff the CLI succeeds; False otherwise (never
-        fabricated). gz ``-s`` requires the parameter to already be declared, so
-        on a stock world this honestly returns False.
+        ``gz param -s`` (verified live 2026-07-08) takes ``-t`` = the gz MESSAGE
+        TYPE (``gz.msgs.Double`` / ``Int32`` / ``Boolean`` / ``StringMsg``) and
+        ``-m`` = a PROTO TEXT-FORMAT body (``data: <val>``) — NOT a bare value.
+        The previous ``-t double -m 7.25`` form was rejected by the CLI
+        (``Could not create a message of type [double]`` / ``Expected identifier,
+        got: 7.25``), so set never actually worked on a live registry. Type is
+        inferred from the Python value. Returns True iff the CLI reports success;
+        False otherwise (never fabricated). gz ``-s`` requires the parameter to
+        already be declared (by a world/system), so on a stock world this
+        honestly returns False.
         """
-        if isinstance(value, bool):
-            gz_type, gz_val = "bool", ("true" if value else "false")
-        elif isinstance(value, int):
-            gz_type, gz_val = "int", str(value)
-        elif isinstance(value, float):
-            gz_type, gz_val = "double", repr(value)
-        else:
-            gz_type, gz_val = "string", str(value)
+        gz_type, gz_msg = self._param_set_encoding(value)
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
-            None, self._gz_param_set, name, gz_type, gz_val, world
+            None, self._gz_param_set, name, gz_type, gz_msg, world
         )
+
+    @staticmethod
+    def _param_set_encoding(value: Any) -> tuple:
+        """Map a Python value to ``(gz message type, proto-text body)`` for
+        ``gz param -s -t <type> -m <body>``. The proto3 field is ``data``."""
+        if isinstance(value, bool):
+            return "gz.msgs.Boolean", f"data: {'true' if value else 'false'}"
+        if isinstance(value, int):
+            return "gz.msgs.Int32", f"data: {value}"
+        if isinstance(value, float):
+            return "gz.msgs.Double", f"data: {value!r}"
+        s = str(value).replace("\\", "\\\\").replace('"', '\\"')
+        return "gz.msgs.StringMsg", f'data: "{s}"'
+
+    @staticmethod
+    def _decode_param_value(gz_type: str, data_val: Optional[str]) -> Any:
+        """Decode a ``gz param -g`` ``data:`` value into a typed Python value by
+        the reported gz message type. ``data_val is None`` means proto3 omitted
+        the field (a default / false value) -> return the type's zero value."""
+        base = (gz_type or "").replace("gz_msgs.", "").replace("gz.msgs.", "")
+        if base == "Boolean":
+            return (data_val or "false").strip().lower() == "true"
+        if base in ("Int32", "Int64", "UInt32", "UInt64"):
+            try:
+                return int(data_val) if data_val else 0
+            except ValueError:
+                return data_val
+        if base in ("Double", "Float"):
+            try:
+                return float(data_val) if data_val else 0.0
+            except ValueError:
+                return data_val
+        # StringMsg / unknown -> string; strip surrounding quotes + unescape.
+        if data_val is None:
+            return ""
+        v = data_val
+        if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+            v = v[1:-1]
+        return v.replace('\\"', '"').replace("\\\\", "\\")
 
     def _gz_param_set(self, name: str, gz_type: str, gz_val: str, world: str) -> bool:
         import subprocess
@@ -1413,9 +1471,11 @@ class ModernGazeboAdapter(GazeboInterface):
                     [cli, "param", "-r", reg, "-s", "-n", name, "-t", gz_type, "-m", gz_val],
                     capture_output=True, text=True, timeout=self.timeout + 2.0,
                 )
-                if result.returncode != 0:
+                combined = (result.stdout + result.stderr).lower()
+                if result.returncode != 0 or "could not" in combined or "error" in combined:
                     continue
-                return "error" not in result.stdout.lower()
+                # Positive confirmation from the CLI ("Parameter successfully set!").
+                return "successfully set" in combined
             except FileNotFoundError:
                 continue
             except subprocess.TimeoutExpired:
