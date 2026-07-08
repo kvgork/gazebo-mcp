@@ -487,13 +487,21 @@ def build_app() -> FastMCP:
         model: str,
         points: list,
         world: str = "default",
+        joint_names: Optional[list] = None,
         ctx: Optional[Context] = None,
     ) -> dict:
-        """Command a joint trajectory ([{positions, time_from_start}, ...]) for a model."""
+        """Command a joint trajectory ([{positions, time_from_start}, ...]) for a model.
+
+        Pass ``joint_names`` (index-aligned to each waypoint's ``positions``) to
+        enforce per-waypoint manifest limits; without it only shape + timing are
+        validated.
+        """
         return await _with_session_bridge(
             ctx,
             lambda: _to_dict(
-                _actuate.actuate_joint_trajectory(model=model, points=points, world=world)
+                _actuate.actuate_joint_trajectory(
+                    model=model, points=points, world=world, joint_names=joint_names
+                )
             ),
         )
 

@@ -41,6 +41,7 @@ from gazebo_mcp.utils.actuation_bounds import (
     BoundsConfig,
     enforce_wrench,
     enforce_joint,
+    enforce_trajectory,
     PersistentWrenchRegistry,
     RateLimiter,
 )
@@ -162,6 +163,63 @@ def test_enforce_joint_strict_raises():
         enforce_joint("m", "j", "vel", 100.0, None, b)
     with pytest.raises(ActuationBoundsExceeded):
         enforce_joint("m", "j", "pos", 2.0, (-1.0, 1.0), b)
+
+
+# --- enforce_trajectory (P5-deferred #1) ---
+
+def test_enforce_trajectory_no_limits_passthrough_finite():
+    """limits=None -> positions returned unchanged (only non-finite is rejected)."""
+    b = BoundsConfig()
+    points = [
+        {"positions": [0.0, 99.0], "time_from_start": 0.0},
+        {"positions": [-50.0, 5.0], "time_from_start": 1.0},
+    ]
+    out = enforce_trajectory("m", points, None, b)
+    assert [p["positions"] for p in out] == [[0.0, 99.0], [-50.0, 5.0]]
+    # time_from_start (and any other key) preserved verbatim.
+    assert out[1]["time_from_start"] == 1.0
+
+
+def test_enforce_trajectory_clamps_per_joint_nonstrict():
+    """Each finite position is clamped to its aligned (lower,upper); None => no clamp."""
+    b = BoundsConfig()  # non-strict
+    limits = [(-1.0, 1.0), None, (0.0, 0.02)]
+    points = [{"positions": [2.0, 12345.0, -0.5]}]
+    out = enforce_trajectory("m", points, limits, b)
+    assert out[0]["positions"] == pytest.approx([1.0, 12345.0, 0.0])
+
+
+def test_enforce_trajectory_does_not_mutate_input():
+    """The input points list + dicts are not mutated (a new list is returned)."""
+    b = BoundsConfig()
+    points = [{"positions": [2.0], "time_from_start": 0.5}]
+    out = enforce_trajectory("m", points, [(-1.0, 1.0)], b)
+    assert points[0]["positions"] == [2.0]      # original untouched
+    assert out[0]["positions"] == pytest.approx([1.0])
+    assert out is not points
+
+
+def test_enforce_trajectory_strict_raises_on_overlimit():
+    b = BoundsConfig(strict_bounds=True)
+    with pytest.raises(ActuationBoundsExceeded):
+        enforce_trajectory("m", [{"positions": [2.0]}], [(-1.0, 1.0)], b, joint_names=["j"])
+
+
+def test_enforce_trajectory_nonfinite_raises_regardless_of_strict():
+    """NaN/inf positions raise in BOTH modes, with or without limits."""
+    for strict in (False, True):
+        b = BoundsConfig(strict_bounds=strict)
+        with pytest.raises(ActuationBoundsExceeded):
+            enforce_trajectory("m", [{"positions": [float("nan")]}], None, b)
+        with pytest.raises(ActuationBoundsExceeded):
+            enforce_trajectory("m", [{"positions": [float("inf")]}], [(-1.0, 1.0)], b)
+
+
+def test_enforce_trajectory_ragged_limits_only_clamp_covered_indices():
+    """A positions row longer than limits leaves the uncovered indices unclamped."""
+    b = BoundsConfig()
+    out = enforce_trajectory("m", [{"positions": [5.0, 5.0]}], [(-1.0, 1.0)], b)
+    assert out[0]["positions"] == pytest.approx([1.0, 5.0])
 
 
 def test_persistent_wrench_registry_cap_and_clear():
@@ -305,6 +363,73 @@ def test_bridge_command_joint_strict_raises():
         with pytest.raises(ActuationBoundsExceeded):
             await bridge.command_joint("m", "jv", "vel", 100.0)
         assert await bridge.adapter.get_joint_target("m", "jv") is None
+
+    anyio.run(_run)
+
+
+def test_bridge_command_joint_trajectory_clamps_with_limits_nonstrict():
+    """A direct-bridge trajectory with per-position limits reaches the adapter
+    CLAMPED (non-strict). The mock stores the last point under ``_trajectory``."""
+
+    async def _run():
+        bridge = _bridge(_cfg())  # non-strict, rate limiting off
+        points = [{"positions": [2.0, -5.0], "time_from_start": 1.0}]
+        assert await bridge.command_joint_trajectory(
+            "m", points, limits=[(-1.0, 1.0), (-1.0, 1.0)]
+        ) is True
+        stored = await bridge.adapter.get_joint_target("m", "_trajectory")
+        assert stored["positions"] == pytest.approx([1.0, -1.0])
+        assert stored["time_from_start"] == 1.0
+        # Caller's input list is not mutated by the clamp.
+        assert points[0]["positions"] == [2.0, -5.0]
+
+    anyio.run(_run)
+
+
+def test_bridge_command_joint_trajectory_strict_raises_on_overlimit():
+    """strict_bounds -> an over-limit waypoint raises before touching the adapter."""
+
+    async def _run():
+        bridge = _bridge(_cfg(strict_bounds=True))
+        with pytest.raises(ActuationBoundsExceeded):
+            await bridge.command_joint_trajectory(
+                "m", [{"positions": [2.0]}], limits=[(-1.0, 1.0)]
+            )
+        assert await bridge.adapter.get_joint_target("m", "_trajectory") is None
+
+    anyio.run(_run)
+
+
+def test_bridge_command_joint_trajectory_nonfinite_raises_without_limits():
+    """A non-finite waypoint raises even with limits=None (the always-on guard)."""
+
+    async def _run():
+        for strict in (False, True):
+            bridge = _bridge(_cfg(strict_bounds=strict))
+            with pytest.raises(ActuationBoundsExceeded):
+                await bridge.command_joint_trajectory(
+                    "m", [{"positions": [float("inf")]}]
+                )
+            assert await bridge.adapter.get_joint_target("m", "_trajectory") is None
+
+    anyio.run(_run)
+
+
+def test_bridge_command_joint_trajectory_forwards_joint_names():
+    """Review finding A regression: the bridge forwards joint_names to the adapter
+    so the real controller gets the position->joint mapping. The mock records it."""
+
+    async def _run():
+        bridge = _bridge(_cfg())
+        assert await bridge.command_joint_trajectory(
+            "m",
+            [{"positions": [0.5, -0.5], "time_from_start": 1.0}],
+            joint_names=["j0", "j1"],
+        ) is True
+        forwarded = await bridge.adapter.get_joint_target(
+            "m", "_trajectory_joint_names"
+        )
+        assert forwarded == ["j0", "j1"]
 
     anyio.run(_run)
 

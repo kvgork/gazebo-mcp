@@ -75,7 +75,35 @@
 7. `get_session` synthesizes a one-off session for registry-less Context (unit-test) — ensure prod always carries the registry.
 
 ### P5 deferred (grill-fixes pass, 2026-07-04)
-1. **Trajectory waypoint position/velocity limit clamping** — `command_joint_trajectory` rejects only non-finite (NaN/inf) waypoint positions; finite out-of-range positions are unbounded at BOTH the tool and bridge layers (the trajectory format carries no joint names, so a waypoint value cannot be mapped to a specific joint's manifest limits). Proper fix: add `joint_names` to the trajectory contract + per-waypoint manifest-limit clamping.
+1. **Trajectory waypoint position/velocity limit clamping** — ✅ **DONE 2026-07-05.**
+   `actuate_joint_trajectory` gained an optional `joint_names` arg (index-aligned to
+   each waypoint's `positions`); when supplied, each waypoint position is validated
+   against that joint's manifest `[lower, upper]` exactly like `actuate_joint`'s pos
+   guard (out-of-range -> `JOINT_LIMIT_EXCEEDED`, unknown name -> `UNKNOWN_JOINT`,
+   `positions`/`joint_names` length mismatch or bad `joint_names` -> `INVALID_TRAJECTORY`;
+   continuous/limitless joints not range-checked). The bridge
+   `command_joint_trajectory` gained a keyword-only `limits=` backstop that delegates
+   to the new `utils/actuation_bounds.enforce_trajectory` (non-finite positions raise
+   in both modes always; finite positions clamp non-strict / raise strict), mirroring
+   the single-joint `command_joint`/`enforce_joint` two-layer design. Without
+   `joint_names` the behaviour is unchanged (backward-compatible: only shape + timing
+   validated). Mock-verified (tool + bridge + primitive tests in
+   `test_actuate_tools.py` / `test_p5_bounds.py`).
+   - **Adversarial-review hardening (2026-07-08, `/grill` — 2 HIGH confirmed):**
+     (a) **`joint_names` now forwarded end-to-end** (tool → bridge → adapter). It was
+     validated but dropped before the bridge, so the modern adapter published a
+     `JointTrajectory` with empty `joint_names` → the real controller applied positions
+     by positional default order (validated mapping ≠ applied mapping — a false-safe).
+     The bridge + `ModernGazeboAdapter` + `MockGazeboAdapter` now accept `joint_names`
+     (resolving the interface/adapter signature drift); the modern adapter prefers it for
+     `msg.joint_names`. The tool also forwards the derived `limits`, arming
+     `enforce_trajectory` as a live clamp backstop on the tool path (was dead code there).
+     (b) **Non-numeric positions rejected** — a bool/numeric-string position (`[True]`,
+     `["5.0"]`) was silently skipped by the range check, then coerced by the bridge
+     (`float(True)=1.0`) to a FINITE float and driven UNBOUNDED; now → `INVALID_TRAJECTORY`.
+     Regression tests added for both. Full suite 658 pass / 11 skip / 0 fail (the lone
+     intermittent `test_953_progress_survives_streamable_http_in_order` is the known
+     full-suite HTTP-concurrency flake — passes standalone).
 
 ---
 

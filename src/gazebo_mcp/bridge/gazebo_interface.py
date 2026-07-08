@@ -377,6 +377,7 @@ class GazeboInterface(ABC):
         model: str,
         points: list,
         world: str = "default",
+        joint_names: Optional[List[str]] = None,
     ) -> bool:
         """
         Command a joint trajectory for a model.
@@ -385,6 +386,10 @@ class GazeboInterface(ABC):
             model: Model name
             points: List of {"positions": [...], "time_from_start": float} dicts
             world: World name
+            joint_names: Optional joint names index-aligned to each waypoint's
+                ``positions`` (the ``trajectory_msgs/JointTrajectory.joint_names``
+                a real controller needs to map positions -> joints). ``None``
+                leaves the mapping implicit/positional.
 
         Returns:
             True if the trajectory was applied/recorded successfully.

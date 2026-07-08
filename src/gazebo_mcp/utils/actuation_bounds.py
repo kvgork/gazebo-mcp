@@ -207,6 +207,103 @@ def enforce_joint(
     return v
 
 
+def enforce_trajectory(
+    model: str,
+    points: list,
+    limits,
+    cfg: BoundsConfig,
+    joint_names=None,
+) -> list:
+    """Bound every waypoint position in a trajectory — SAFETY-CRITICAL backstop.
+
+    The trajectory analogue of :func:`enforce_joint`'s per-command ``pos`` guard
+    (P5-deferred #1). Two guarantees applied to each waypoint's ``positions``:
+
+    - **Non-finite (NaN/inf) positions ALWAYS raise**
+      :class:`ActuationBoundsExceeded`, regardless of ``cfg.strict_bounds``: a
+      non-finite value has no finite magnitude to clamp (``nan <= upper`` is
+      False), so it would otherwise slip through non-strict clamping and reach
+      the adapter unbounded. (Same rule as ``_clamp_scalar`` / ``_clamp_vector``.)
+    - **Positional limit clamping when ``limits`` is provided**: ``limits`` is a
+      list aligned to each waypoint's ``positions`` indices — each entry a
+      ``(lower, upper)`` tuple, or ``None`` (no clamp for that index, e.g. a
+      continuous joint). A finite position outside its range is clamped in place
+      (non-strict) or raises (strict).
+
+    ``limits is None`` -> only the non-finite reject runs (the tool layer is the
+    primary per-waypoint manifest guard; this is the deeper backstop for any
+    direct-bridge caller, mirroring ``enforce_joint`` / ``command_joint``).
+
+    Returns a NEW points list with (possibly clamped) positions; the input list
+    and its point dicts are not mutated. Non-dict points and non-list
+    ``positions`` are passed through untouched (shape is the tool layer's
+    INVALID_TRAJECTORY contract, not this depth's concern). ``joint_names``
+    (optional, aligned to ``positions``) only enriches raised error details.
+    """
+    bounded_points: list = []
+    for point_idx, point in enumerate(points):
+        positions = point.get("positions") if isinstance(point, dict) else None
+        # Scan any SEQUENCE of positions (list or tuple) so the non-finite reject
+        # is not silently skipped for a tuple. A non-sequence ``positions``
+        # (scalar / str / None / missing) is malformed SHAPE — the tool layer's
+        # INVALID_TRAJECTORY contract, not this bounds backstop — so pass through.
+        if not isinstance(positions, (list, tuple)):
+            bounded_points.append(point)
+            continue
+        bounded_positions: list = []
+        for pos_idx, raw in enumerate(positions):
+            v = float(raw)
+            if not math.isfinite(v):
+                raise ActuationBoundsExceeded(
+                    "trajectory contains a non-finite position",
+                    details={
+                        "kind": "trajectory_position",
+                        "model": model,
+                        "point_index": point_idx,
+                        "position_index": pos_idx,
+                        "value": raw,
+                    },
+                )
+            lim = (
+                limits[pos_idx]
+                if (limits is not None and pos_idx < len(limits))
+                else None
+            )
+            if lim is None:
+                bounded_positions.append(v)
+                continue
+            lower, upper = float(lim[0]), float(lim[1])
+            if lower <= v <= upper:
+                bounded_positions.append(v)
+                continue
+            if cfg.strict_bounds:
+                jn = (
+                    joint_names[pos_idx]
+                    if (joint_names is not None and pos_idx < len(joint_names))
+                    else None
+                )
+                raise ActuationBoundsExceeded(
+                    f"trajectory position {v:.6g} outside limits "
+                    f"[{lower:.6g}, {upper:.6g}]",
+                    details={
+                        "kind": "trajectory_position",
+                        "model": model,
+                        "joint": jn,
+                        "point_index": point_idx,
+                        "position_index": pos_idx,
+                        "value": v,
+                        "lower": lower,
+                        "upper": upper,
+                    },
+                )
+            bounded_positions.append(max(lower, min(v, upper)))
+        # Preserve every other key (time_from_start, velocities, ...) verbatim.
+        new_point = dict(point)
+        new_point["positions"] = bounded_positions
+        bounded_points.append(new_point)
+    return bounded_points
+
+
 class PersistentWrenchRegistry:
     """Cap on simultaneously-active persistent wrenches (runaway-actuation guard).
 

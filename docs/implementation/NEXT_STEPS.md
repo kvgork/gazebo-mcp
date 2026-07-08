@@ -90,8 +90,11 @@ and unblock everything else.
 ## Phase F — Optional
 - [ ] **P4 real** REP-2018 `simulation_interfaces` adapter — needs a simulator that implements
   those ROS services (none here; the package ships no registered interfaces in `-e full`).
-- [ ] **P5 deferred** — per-waypoint trajectory position/velocity clamping (needs `joint_names`
-  added to the trajectory contract so waypoints map to manifest limits).
+- [x] **P5 deferred** — per-waypoint trajectory position/velocity clamping — **DONE 2026-07-05**:
+  `actuate_joint_trajectory` gained an optional `joint_names` arg + per-waypoint manifest-limit
+  enforcement (tool rejects out-of-range; bridge `command_joint_trajectory(..., limits=)` clamps
+  via new `enforce_trajectory`). Backward-compatible; mock-verified (suite 651 pass). See
+  REMAINING_WORK §B "P5 deferred #1".
 
 ---
 

@@ -12,7 +12,6 @@ This is a CRITICAL component - it provides the actual Gazebo integration.
 REFACTORED (Phase 1B): Now uses adapter pattern for dual Gazebo support.
 """
 
-import math
 import time
 import asyncio
 import queue
@@ -42,6 +41,7 @@ from ..utils.actuation_bounds import (
     RateLimiter,
     enforce_wrench,
     enforce_joint,
+    enforce_trajectory,
 )
 from ..utils.logger import get_logger
 from ..utils.converters import pose_to_dict, dict_to_pose
@@ -1245,6 +1245,9 @@ class GazeboBridgeNode:
         model: str,
         points: list,
         world: Optional[str] = None,
+        *,
+        limits=None,
+        joint_names=None,
     ) -> bool:
         """
         Command a joint trajectory for a model (async passthrough).
@@ -1253,41 +1256,48 @@ class GazeboBridgeNode:
             model: Model name
             points: List of {"positions": [...], "time_from_start": float} dicts
             world: Target world name (default: self.world)
+            limits: Optional per-position manifest limits for the actuation-bounds
+                backstop — a list aligned to each waypoint's ``positions`` indices,
+                each entry ``(lower, upper)`` or ``None`` (no clamp for that index,
+                e.g. a continuous joint). Keyword-only and defaulted to None so
+                existing callers (the tool layer, which enforces manifest limits
+                itself once ``joint_names`` are supplied) are unaffected; when
+                supplied, each finite waypoint position is clamped to (or, in
+                strict mode, rejected against) its joint's range.
+            joint_names: Optional joint names index-aligned to each waypoint's
+                ``positions``, forwarded verbatim to the adapter so the real
+                controller maps each position to the NAMED joint rather than by
+                positional default order. Keyword-only, default None (unchanged
+                behaviour for callers that omit it).
 
         Returns:
-            True if applied/recorded successfully.
+            True if applied/recorded successfully. In strict mode an over-limit
+            waypoint position raises ActuationBoundsExceeded.
 
         Raises:
             ActuationBoundsExceeded: If any waypoint position is non-finite
-                (NaN/inf).
+                (NaN/inf), or — in strict mode with ``limits`` supplied — outside
+                its joint's range.
 
-        Bounds coverage (P5 hardening, F2 — partial+honest): ONLY non-finite
-        (NaN/inf) waypoint positions are rejected here, in BOTH strict and
-        non-strict mode — a non-finite command has no finite magnitude to
-        clamp and would otherwise reach the adapter unbounded. Per-waypoint
-        position/velocity LIMIT clamping against the model manifest is
-        DEFERRED: the trajectory ``positions`` list carries no joint names, so
-        a waypoint value cannot be mapped to a specific joint's manifest
-        limits at this layer. See REMAINING_WORK.md.
+        Bounds coverage (P5 hardening; P5-deferred #1 — now COMPLETE for
+        waypoints): non-finite (NaN/inf) positions are rejected in BOTH strict
+        and non-strict mode; when ``limits`` is supplied each finite waypoint
+        position is clamped to its joint's manifest range (non-strict) or raises
+        (strict). Without ``limits`` only the non-finite reject runs — the tool
+        layer (``actuate_joint_trajectory`` with ``joint_names``) is the primary
+        per-waypoint manifest guard, this is the deeper backstop for any direct
+        caller. See ``utils/actuation_bounds.enforce_trajectory``.
         """
         if world is None:
             world = self.world
-        for point_idx, point in enumerate(points):
-            positions = point.get("positions", []) if isinstance(point, dict) else []
-            for pos_idx, v in enumerate(positions):
-                if not math.isfinite(float(v)):
-                    raise ActuationBoundsExceeded(
-                        "trajectory contains a non-finite position",
-                        details={
-                            "kind": "trajectory_position",
-                            "model": model,
-                            "point_index": point_idx,
-                            "position_index": pos_idx,
-                            "value": v,
-                        },
-                    )
+        # Actuation-bounds backstop BEFORE the adapter call (SAFETY-CRITICAL):
+        # reject non-finite positions always; clamp (or raise, strict) finite
+        # positions to per-joint limits when supplied. Returns clamped points.
+        points = enforce_trajectory(
+            model, points, limits, self._bounds, joint_names=joint_names
+        )
         return await self.adapter.command_joint_trajectory(
-            model=model, points=points, world=world
+            model=model, points=points, world=world, joint_names=joint_names
         )
 
     # Sensors + parameters (P2):

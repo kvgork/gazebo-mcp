@@ -33,6 +33,7 @@ The loaded manifest is cached at module level keyed by source path;
 """
 
 import json
+import math
 from importlib.resources import files as _resource_files
 from pathlib import Path
 
@@ -281,19 +282,35 @@ async def actuate_joint_trajectory(
     model: str,
     points: list,
     world: str = "default",
+    joint_names: list | None = None,
 ) -> OperationResult:
     """Command a joint trajectory for a model.
 
     ``points`` is a list of ``{"positions": [...], "time_from_start": float}``
-    dicts. No manifest range check is performed on trajectory waypoints (the
-    contract validates only single ``actuate_joint`` pos commands), but the
-    SHAPE + TIMING of ``points`` is validated before the bridge is touched:
+    dicts. The SHAPE + TIMING of ``points`` is validated before the bridge is
+    touched:
       - non-empty list ...........................-> else INVALID_TRAJECTORY
       - each element a dict with a list ``positions`` -> else INVALID_TRAJECTORY
       - ``time_from_start`` (when present) is a non-negative number and STRICTLY
         INCREASING across waypoints -> else INVALID_TRAJECTORY (P1-real #8: a
         non-monotonic/negative time makes the trajectory ill-defined; the real
         ros2_control action rejects it, so we reject up front on every backend).
+
+    ``joint_names`` (optional, index-aligned to each waypoint's ``positions``)
+    unlocks per-waypoint manifest LIMIT enforcement (P5-deferred #1) — without
+    it the positions carry no joint mapping, so range cannot be checked. When
+    supplied, each waypoint position is validated against its joint's manifest
+    ``[lower, upper]`` exactly like ``actuate_joint``'s pos guard:
+      - ``joint_names`` not a non-empty list of name strings -> INVALID_TRAJECTORY
+      - a name absent from the manifest ...................-> UNKNOWN_JOINT
+      - a waypoint's ``positions`` length != len(joint_names) -> INVALID_TRAJECTORY
+      - a position that is not a finite number (bool/str/...) -> INVALID_TRAJECTORY
+      - a finite position outside a limited joint's range -> JOINT_LIMIT_EXCEEDED
+    A continuous/limitless joint (no ``lower``/``upper``) is not range-checked.
+    When ``joint_names`` is supplied it is ALSO forwarded to the bridge/adapter,
+    so the real controller applies each position to the named joint rather than
+    by positional default order, and the derived limits arm the enforce_trajectory
+    clamp as a live safety backstop on this path.
     """
     try:
         # Trajectory-shape validation BEFORE any bridge call. The mock path would
@@ -351,8 +368,113 @@ async def actuate_joint_trajectory(
                     )
                 prev_t = t
 
+        # Per-waypoint manifest LIMIT check (P5-deferred #1), only when the caller
+        # names the joints each ``positions`` slot maps to. Mirrors actuate_joint:
+        # reject out-of-range up front. When supplied, joint_names + the derived
+        # limits are ALSO forwarded to the bridge (below) so (a) the real
+        # controller gets the correct joint->position mapping and (b) the
+        # enforce_trajectory clamp acts as a live safety backstop. BEFORE the
+        # bridge is touched.
+        if joint_names is not None:
+            if (
+                not isinstance(joint_names, list)
+                or not joint_names
+                or not all(isinstance(n, str) for n in joint_names)
+            ):
+                return OperationResult(
+                    success=False,
+                    error="joint_names must be a non-empty list of joint name strings",
+                    error_code="INVALID_TRAJECTORY",
+                    suggestions=[
+                        "Pass joint_names index-aligned to each waypoint's positions, "
+                        'e.g. ["arm_base_to_long_joint", "arm_long_to_short_joint"]',
+                    ],
+                )
+            # Every named joint must exist in the manifest (mirror actuate_joint).
+            for name in joint_names:
+                if not _joint_known(model, name):
+                    return OperationResult(
+                        success=False,
+                        error=f"joint '{name}' not found for model '{model}' in manifest",
+                        error_code="UNKNOWN_JOINT",
+                        suggestions=[
+                            "Check each joint_names entry against the model manifest",
+                            "Verify the model name is correct",
+                        ],
+                    )
+            limits = [_joint_limits(model, name) for name in joint_names]
+            for idx, p in enumerate(points):
+                positions = p["positions"]  # validated as a list above
+                if len(positions) != len(joint_names):
+                    return OperationResult(
+                        success=False,
+                        error=(
+                            f"trajectory point {idx} has {len(positions)} positions "
+                            f"but {len(joint_names)} joint_names were given"
+                        ),
+                        error_code="INVALID_TRAJECTORY",
+                        suggestions=[
+                            "positions length must match joint_names length at "
+                            "every waypoint",
+                        ],
+                    )
+                for j, value in enumerate(positions):
+                    # A position that isn't a finite real NUMBER cannot be
+                    # range-checked here. REJECT it (don't skip): a skipped
+                    # bool/numeric-string would reach the bridge, which coerces
+                    # e.g. True->1.0 / "5.0"->5.0 to a FINITE float that slips
+                    # past the non-finite-only guard and drives the joint
+                    # UNBOUNDED. A nonsense position value is INVALID_TRAJECTORY
+                    # up front. (bool is an int subclass, hence the explicit
+                    # check.) NaN/inf floats are left to the bridge's uniform
+                    # non-finite backstop, which raises in both modes.
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        return OperationResult(
+                            success=False,
+                            error=(
+                                f"trajectory point {idx} joint '{joint_names[j]}' "
+                                f"position {value!r} is not a number"
+                            ),
+                            error_code="INVALID_TRAJECTORY",
+                            suggestions=[
+                                "Every waypoint position must be a finite number",
+                            ],
+                        )
+                    lim = limits[j]
+                    if lim is None:
+                        continue  # continuous / limitless joint -> no range check
+                    fv = float(value)
+                    if not math.isfinite(fv):
+                        continue  # NaN/inf -> bridge non-finite backstop raises
+                    lower, upper = lim
+                    if fv < lower or fv > upper:
+                        return OperationResult(
+                            success=False,
+                            error=(
+                                f"trajectory point {idx} joint '{joint_names[j]}' "
+                                f"position {fv} outside limits [{lower},{upper}]"
+                            ),
+                            error_code="JOINT_LIMIT_EXCEEDED",
+                            suggestions=[
+                                f"Command a value within [{lower}, {upper}] for "
+                                f"'{joint_names[j]}'",
+                            ],
+                        )
+
         b = get_bridge()
-        ok = await b.command_joint_trajectory(model, points, world)
+        # Forward joint_names so the real controller applies each position to the
+        # named joint (not by positional default order), and forward the derived
+        # limits so enforce_trajectory is a LIVE clamp backstop on the tool path
+        # (defence-in-depth; the tool already rejected out-of-range above). When
+        # joint_names is None the trajectory carries no mapping -> both are None
+        # and behaviour is unchanged (backward-compatible).
+        ok = await b.command_joint_trajectory(
+            model,
+            points,
+            world,
+            limits=(limits if joint_names is not None else None),
+            joint_names=joint_names,
+        )
         return OperationResult(
             success=True,
             data={
@@ -360,6 +482,7 @@ async def actuate_joint_trajectory(
                 "applied": ok,
                 "num_points": len(points) if points else 0,
                 "world": world,
+                "joint_names": joint_names,
             },
         )
     except ActuationBoundsExceeded as e:

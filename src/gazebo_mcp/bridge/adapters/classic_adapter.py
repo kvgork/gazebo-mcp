@@ -563,6 +563,7 @@ class ClassicGazeboAdapter(GazeboInterface):
         model: str,
         points: list,
         world: str = "default",
+        joint_names: Optional[List[str]] = None,
     ) -> bool:
         """Not implemented for Classic Gazebo (deprecated backend)."""
         raise NotImplementedError(

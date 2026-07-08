@@ -404,17 +404,22 @@ class MockGazeboAdapter(GazeboInterface):
         model: str,
         points: list,
         world: str = "default",
+        joint_names: Optional[List[str]] = None,
     ) -> bool:
         """
-        Record a joint trajectory. The mock has no joint-name list, so we store
-        the LAST point dict deterministically under the reserved key
-        ``"_trajectory"`` in ``joint_targets[model]`` (readable via
-        ``get_joint_target(model, "_trajectory")``).
+        Record a joint trajectory. We store the LAST point dict deterministically
+        under the reserved key ``"_trajectory"`` in ``joint_targets[model]``
+        (readable via ``get_joint_target(model, "_trajectory")``). When
+        ``joint_names`` is supplied (the tool-validated position->joint mapping)
+        it is recorded verbatim under ``"_trajectory_joint_names"`` so tests can
+        assert it was forwarded end-to-end (tool -> bridge -> adapter).
         """
         w = self._world(world)
         targets = w.joint_targets.setdefault(model, {})
         last = points[-1] if points else {}
         targets["_trajectory"] = dict(last) if isinstance(last, dict) else {"value": last}
+        if joint_names is not None:
+            targets["_trajectory_joint_names"] = list(joint_names)
         return True
 
     # -- mock-only read-backs (unit-test helpers; not part of GazeboInterface) --

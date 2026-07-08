@@ -831,6 +831,7 @@ class ModernGazeboAdapter(GazeboInterface):
         model: str,
         points: list,
         world: str = "default",
+        joint_names: Optional[List[str]] = None,
     ) -> bool:
         """
         Command a joint trajectory by publishing
@@ -840,6 +841,10 @@ class ModernGazeboAdapter(GazeboInterface):
             model: Model name
             points: List of {"positions": [...], "time_from_start": float} dicts
             world: Target world name (accepted for interface parity)
+            joint_names: Joint names index-aligned to each waypoint's positions.
+                Populates ``JointTrajectory.joint_names`` so ros2_control maps
+                each position to the NAMED joint (not by positional default
+                order). Falls back to a per-point ``"joints"`` key, then empty.
 
         Returns:
             True if the message was published.
@@ -850,9 +855,12 @@ class ModernGazeboAdapter(GazeboInterface):
         pub = self._get_publisher(topic, JointTrajectory)
 
         msg = JointTrajectory()
-        # joint_names may be supplied by callers via a parallel "joints" key on
-        # the first point; otherwise left empty (positions are index-aligned).
-        if points and isinstance(points[0], dict) and points[0].get("joints"):
+        # Prefer the explicit joint_names (the tool-validated mapping); else fall
+        # back to a parallel "joints" key on the first point; else leave empty
+        # (positions are then applied by the controller's default order).
+        if joint_names:
+            msg.joint_names = list(joint_names)
+        elif points and isinstance(points[0], dict) and points[0].get("joints"):
             msg.joint_names = list(points[0]["joints"])
 
         for p in points:

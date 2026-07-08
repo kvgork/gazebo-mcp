@@ -249,6 +249,198 @@ def test_actuate_joint_trajectory_stores_num_points_and_last_point():
 
 
 # --------------------------------------------------------------------------
+# actuate_joint_trajectory + joint_names -> per-waypoint manifest limits
+# (P5-deferred #1)
+# --------------------------------------------------------------------------
+
+# jetank manifest: arm_base_to_long_joint / arm_long_to_short_joint are revolute
+# [-1.0, 1.0]; left_finger_joint is prismatic [0.0, 0.02]; the bearing joint is
+# continuous (no limits).
+_TWO_LIMITED = ["arm_base_to_long_joint", "arm_long_to_short_joint"]
+
+
+def test_trajectory_joint_names_in_range_ok_and_echoed():
+    """joint_names in range -> success, echoed in data, last point stored."""
+
+    async def _run():
+        points = [
+            {"positions": [0.0, 0.0], "time_from_start": 0.0},
+            {"positions": [0.9, -0.9], "time_from_start": 1.0},
+        ]
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank", points=points, joint_names=_TWO_LIMITED
+        )
+        assert result.success is True
+        assert result.data["joint_names"] == _TWO_LIMITED
+        last = await _adapter().get_joint_target("jetank", "_trajectory")
+        assert last == {"positions": [0.9, -0.9], "time_from_start": 1.0}
+
+    anyio.run(_run)
+
+
+def test_trajectory_joint_names_out_of_range_rejected():
+    """A finite waypoint position outside the joint range -> JOINT_LIMIT_EXCEEDED;
+    the bridge is never touched (nothing stored)."""
+
+    async def _run():
+        points = [
+            {"positions": [0.0, 0.0], "time_from_start": 0.0},
+            {"positions": [1.5, 0.0], "time_from_start": 1.0},  # 1.5 > upper 1.0
+        ]
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank", points=points, joint_names=_TWO_LIMITED
+        )
+        assert result.success is False
+        assert result.error_code == "JOINT_LIMIT_EXCEEDED"
+        assert result.data is None
+        assert await _adapter().get_joint_target("jetank", "_trajectory") is None
+
+    anyio.run(_run)
+
+
+def test_trajectory_joint_names_boundary_accepted_and_rejected():
+    """value == upper (1.0) accepted; just past it (1.0001) rejected."""
+
+    async def _run():
+        ok = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [1.0, -1.0], "time_from_start": 1.0}],
+            joint_names=_TWO_LIMITED,
+        )
+        assert ok.success is True
+
+        rejected = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [1.0001, 0.0], "time_from_start": 1.0}],
+            joint_names=_TWO_LIMITED,
+        )
+        assert rejected.success is False
+        assert rejected.error_code == "JOINT_LIMIT_EXCEEDED"
+
+    anyio.run(_run)
+
+
+def test_trajectory_joint_names_length_mismatch_rejected():
+    """positions length != joint_names length -> INVALID_TRAJECTORY."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [0.0, 0.0, 0.0], "time_from_start": 1.0}],  # 3 != 2
+            joint_names=_TWO_LIMITED,
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TRAJECTORY"
+        assert result.data is None
+
+    anyio.run(_run)
+
+
+def test_trajectory_unknown_joint_name_rejected():
+    """An unknown joint name -> UNKNOWN_JOINT; bridge untouched."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [0.0], "time_from_start": 1.0}],
+            joint_names=["no_such_joint"],
+        )
+        assert result.success is False
+        assert result.error_code == "UNKNOWN_JOINT"
+        assert result.data is None
+        assert await _adapter().get_joint_target("jetank", "_trajectory") is None
+
+    anyio.run(_run)
+
+
+@pytest.mark.parametrize("bad_names", [[], "arm_base_to_long_joint", [123]])
+def test_trajectory_joint_names_bad_type_rejected(bad_names):
+    """joint_names not a non-empty list of strings -> INVALID_TRAJECTORY."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [0.0], "time_from_start": 1.0}],
+            joint_names=bad_names,
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TRAJECTORY"
+
+    anyio.run(_run)
+
+
+def test_trajectory_joint_names_continuous_accepts_large():
+    """A continuous (limitless) joint accepts an arbitrarily large waypoint value."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [99.0], "time_from_start": 1.0}],
+            joint_names=["arm_base_to_arm_bearing_joint"],  # continuous, no limits
+        )
+        assert result.success is True
+
+    anyio.run(_run)
+
+
+def test_trajectory_without_joint_names_stays_unbounded():
+    """Backward-compat: without joint_names, an out-of-range position is accepted
+    (positions carry no joint mapping, so no range check is possible)."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [999.0], "time_from_start": 1.0}],
+        )
+        assert result.success is True
+        assert result.data["joint_names"] is None
+
+    anyio.run(_run)
+
+
+def test_trajectory_joint_names_forwarded_to_adapter():
+    """Review finding A regression: joint_names must REACH the adapter (the real
+    controller's position->joint mapping), not merely be validated and dropped.
+    The mock records the forwarded list under _trajectory_joint_names."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [0.5, -0.5], "time_from_start": 1.0}],
+            joint_names=_TWO_LIMITED,
+        )
+        assert result.success is True
+        forwarded = await _adapter().get_joint_target(
+            "jetank", "_trajectory_joint_names"
+        )
+        assert forwarded == _TWO_LIMITED
+
+    anyio.run(_run)
+
+
+@pytest.mark.parametrize("bad_pos", [True, False, "5.0", "0.01", None])
+def test_trajectory_nonnumeric_position_rejected(bad_pos):
+    """Review finding B regression: with joint_names active, a non-number position
+    (bool/str/None) is rejected INVALID_TRAJECTORY. Previously it was silently
+    skipped, then coerced by the bridge (float(True)=1.0, float("5.0")=5.0) to a
+    FINITE float and driven UNBOUNDED past the limit guard. left_finger_joint
+    limits are [0.0, 0.02]; the bridge is never touched (nothing stored)."""
+
+    async def _run():
+        result = await actuate_tools.actuate_joint_trajectory(
+            model="jetank",
+            points=[{"positions": [bad_pos], "time_from_start": 1.0}],
+            joint_names=["left_finger_joint"],
+        )
+        assert result.success is False
+        assert result.error_code == "INVALID_TRAJECTORY"
+        assert result.data is None
+        assert await _adapter().get_joint_target("jetank", "_trajectory") is None
+
+    anyio.run(_run)
+
+
+# --------------------------------------------------------------------------
 # P1 review fixes: INVALID_MODE / INVALID_TRAJECTORY / wheel-safe manifest
 # --------------------------------------------------------------------------
 
