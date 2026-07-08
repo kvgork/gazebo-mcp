@@ -51,12 +51,31 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture
 def gazebo_available():
-    """Check if Gazebo is available (without importing rclpy at module level)."""
+    """True only if a LIVE Gazebo with the ros_gz bridge is reachable — i.e. the
+    ``/world/default/create`` ROS service is present.
+
+    ``import rclpy`` alone is NOT sufficient (it is importable in ``-e full``
+    with no simulator running): the legacy tests using this fixture drive the
+    bridge against an EXTERNALLY-launched gz + ros_gz bridge on world 'default',
+    so they must SKIP (not fail) when none is up. The newer self-bring-up
+    ``@pytest.mark.gazebo`` tests (test_p0b_real / test_p2_real_* /
+    test_p4_real_*) manage their own gz and do NOT use this fixture."""
     try:
-        import rclpy
-        return True
+        import rclpy  # noqa: F401
     except (ImportError, ModuleNotFoundError):
         return False
+    import shutil
+    import subprocess
+
+    if shutil.which("ros2") is None:
+        return False
+    try:
+        r = subprocess.run(
+            ["ros2", "service", "list"], capture_output=True, text=True, timeout=10
+        )
+    except Exception:  # noqa: BLE001 - discovery failure -> treat as unavailable
+        return False
+    return "/world/default/create" in r.stdout
 
 
 @pytest.fixture
