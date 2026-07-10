@@ -1244,13 +1244,52 @@ class ModernGazeboAdapter(GazeboInterface):
                 continue
 
             if result.returncode == 0 and result.stdout.strip():
-                try:
-                    data = json.loads(result.stdout)
-                except Exception:  # noqa: BLE001 - non-JSON echo: honest raw fallback
+                data = self._parse_last_json_object(result.stdout)
+                if data is None:  # non-JSON echo: honest raw fallback
                     return {"topic": topic, "format": "gz-text", "raw": result.stdout,
                             "typed": False}
                 return {"topic": topic, "format": "gz-json", "sample": data, "typed": True}
         return None
+
+    @staticmethod
+    def _parse_last_json_object(text: str) -> Optional[Dict[str, Any]]:
+        """Return the LAST complete top-level JSON object in ``text``.
+
+        ``gz topic -e -n 1 --json-output`` normally prints exactly one object, but
+        under load / timing it can flush several buffered messages (concatenated,
+        newline-joined) before the one-shot subscription closes — verified live
+        over the HTTP per-session path 2026-07-10. A single ``json.loads`` of the
+        whole blob then fails, which previously dropped a perfectly good typed
+        sample to the ``gz-text`` raw fallback. Parse the stream object-by-object
+        and keep the most recent (``-n 1`` semantics = latest sample). Returns
+        ``None`` if nothing parses (a genuine non-JSON echo).
+        """
+        import json
+
+        text = text.strip()
+        if not text:
+            return None
+        # Fast path: exactly one object.
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+        # Slow path: a concatenated stream of objects — decode them in order and
+        # return the last complete one.
+        decoder = json.JSONDecoder()
+        idx, n, last = 0, len(text), None
+        while idx < n:
+            while idx < n and text[idx].isspace():
+                idx += 1
+            if idx >= n:
+                break
+            try:
+                obj, end = decoder.raw_decode(text, idx)
+            except json.JSONDecodeError:
+                break
+            last = obj
+            idx = end
+        return last
 
     async def sensor_camera_image(
         self,
