@@ -489,7 +489,6 @@ Basic MCP functionality works without ROS2.
 - **Complete Examples:** `examples/`
 - **Deployment Guide:** `docs/DEPLOYMENT.md`
 - **Performance Tuning:** `docs/METRICS.md`
-- **Project Status:** `PROJECT_STATUS.md`
 
 ---
 

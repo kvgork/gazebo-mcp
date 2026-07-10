@@ -233,7 +233,7 @@ fi
 
 echo ""
 echo -e "${BLUE}Additional Resources:${NC}"
-echo "  - Setup Guide: cat MCP_SETUP_GUIDE.md"
+echo "  - Setup Guide: cat docs/guides/MCP_INTEGRATION.md"
 echo "  - Demo Tests: cd demos && pytest -v"
 echo "  - MCP Docs: https://code.claude.com/docs/en/mcp"
 echo ""

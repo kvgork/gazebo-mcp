@@ -16,14 +16,27 @@ env/
 # Pixi (keep pixi.lock committed for reproducibility)
 .pixi/
 
-# Orchestration session state
-.agent-state/
-
 # Testing & coverage
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 *.cover
+
+# Type checkers & linters
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Docs build
+docs/_build/
+docs/_static/
+docs/_templates/_autogen/
+site/
+
+# Translation
+*.mo
 
 # IDE
 .vscode/
@@ -32,10 +45,12 @@ htmlcov/
 *.swo
 *~
 
-# Local
+# Local / agent state
 .claude/
 plans/
+.agent-state/
 .env
+.env.local
 log/
 
 # ROS2 build artifacts

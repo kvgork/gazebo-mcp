@@ -265,7 +265,7 @@ Only the 5 filtered results are sent to Claude, not all 1000 models!
 
 **Check if server is running:**
 ```bash
-ps aux | grep "mcp.server.server"
+ps aux | grep "gazebo_mcp.mcp_protocol.server.server"
 ```
 
 **Restart if needed:**

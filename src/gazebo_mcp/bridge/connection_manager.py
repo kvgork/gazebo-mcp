@@ -463,34 +463,3 @@ class ConnectionManager:
             pass  # Ignore errors during cleanup
 
 
-# Example usage:
-if __name__ == "__main__":
-    # Basic usage:
-    manager = ConnectionManager()
-
-    try:
-        # Connect:
-        manager.connect()
-        print(f"Connected! State: {manager.state.value}")
-
-        # Use ROS2:
-        with manager.ensure_connected():
-            node = manager.get_node()
-            print(f"Node name: {node.get_name()}")
-
-        # Disconnect:
-        manager.disconnect()
-        print(f"Disconnected! State: {manager.state.value}")
-
-    except Exception as e:
-        print(f"Error: {e}")
-
-    print("\n" + "=" * 50 + "\n")
-
-    # Context manager usage:
-    print("Context manager usage:")
-    with ConnectionManager() as manager:
-        print(f"State: {manager.state.value}")
-        node = manager.get_node()
-        print(f"Node: {node.get_name()}")
-    print("Exited context, connection closed")
