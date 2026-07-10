@@ -7,76 +7,85 @@ and _use_real_gazebo() across model_management, sensor_tools,
 simulation_tools, and world_tools.
 """
 
-import os
-import re
-import subprocess
+import contextvars
 from typing import Optional
 from gazebo_mcp.utils.exceptions import ROS2NotConnectedError
 from gazebo_mcp.utils.logger import get_logger
 from gazebo_mcp.bridge import ConnectionManager, GazeboBridgeNode
+from gazebo_mcp.bridge.config import GazeboConfig, GazeboBackend
 
 _connection_manager: Optional[ConnectionManager] = None
 _bridge_node: Optional[GazeboBridgeNode] = None
 _logger = get_logger("bridge_helper")
 
+# Per-request bridge override (P3 isolation). When set (by the HTTP layer for a
+# given Mcp-Session-Id) ``get_bridge()`` returns THIS bridge instead of the
+# process singleton, so every unchanged tool handler (lean + legacy) transparently
+# operates on the per-session world. Default ``None`` → singleton path, so stdio
+# and the existing test suite are unaffected (no contextvar is ever set there).
+_current_bridge: contextvars.ContextVar = contextvars.ContextVar(
+    "_current_bridge", default=None
+)
 
-def _detect_world_name() -> str:
+
+def set_current_bridge(bridge):
+    """Bind ``bridge`` as the current per-request bridge; return the reset token.
+
+    The token must be passed to :func:`reset_current_bridge` in a ``finally`` to
+    restore the previous value (contextvars are copied per asyncio Task and per
+    ``asyncio.to_thread`` worker, so this is safe under concurrency).
     """
-    Auto-detect the active Gazebo world name.
+    return _current_bridge.set(bridge)
 
-    Checks GAZEBO_WORLD_NAME env var first, then queries the running
-    Ignition/Gazebo instance via the gz/ign CLI.
 
-    Returns:
-        World name string, defaults to 'default' if not found.
-    """
-    # Env var takes priority
-    world_name = os.getenv("GAZEBO_WORLD_NAME")
-    if world_name:
-        return world_name
+def reset_current_bridge(token) -> None:
+    """Restore the previous per-request bridge using the token from ``set``."""
+    _current_bridge.reset(token)
 
-    # Try gz (Harmonic+) then ign (Fortress)
-    for cli in ("gz", "ign"):
-        try:
-            result = subprocess.run(
-                [cli, "service", "--list"],
-                capture_output=True,
-                text=True,
-                timeout=3.0,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                worlds = sorted(
-                    set(re.findall(r"/world/([^/\s]+)/control", result.stdout))
-                )
-                if worlds:
-                    _logger.info(f"Auto-detected Gazebo world: '{worlds[0]}'")
-                    return worlds[0]
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            continue
-        except Exception as e:
-            _logger.warning(f"World detection via {cli} failed: {e}")
 
-    _logger.warning("Could not detect world name, defaulting to 'default'")
-    return "default"
+def backend_is_mock() -> bool:
+    """Return True if the configured backend is the in-memory MOCK backend."""
+    return GazeboConfig.from_environment().backend == GazeboBackend.MOCK
 
 
 def get_bridge() -> GazeboBridgeNode:
     """
     Get or create Gazebo bridge node (singleton).
 
-    Lazy initialization with auto-connection. Auto-detects the active
-    Gazebo world name via CLI so the correct world service endpoints
-    are used regardless of what name the world was launched with.
+    Two paths:
+    - MOCK backend (``GAZEBO_BACKEND=mock``): build a node-less GazeboBridgeNode
+      whose adapter is the deterministic MockGazeboAdapter, via the factory with
+      a MOCK config and ``ros2_node=None``. No ROS2 connection / rclpy import.
+    - Otherwise: the existing ConnectionManager path (connects ROS2, raises on
+      failure).
 
     Returns:
         GazeboBridgeNode instance
 
     Raises:
-        ROS2NotConnectedError: If connection fails
+        ROS2NotConnectedError: If a real ROS2 connection is required but fails.
     """
     global _connection_manager, _bridge_node
 
+    # P3 isolation: a per-request bridge (set by the HTTP layer for an
+    # Mcp-Session-Id) wins over the process singleton, so all unchanged tool
+    # handlers operate on the per-session world. Unset (stdio/tests) → singleton.
+    b = _current_bridge.get()
+    if b is not None:
+        return b
+
     if _bridge_node is not None:
+        return _bridge_node
+
+    # Mock-safe path: no ConnectionManager, no rclpy connection.
+    if backend_is_mock():
+        config = GazeboConfig.from_environment()
+        # ros2_node=None: the MockGazeboAdapter (built by the factory's MOCK
+        # branch) ignores the node, so no ROS graph is touched.
+        _bridge_node = GazeboBridgeNode(
+            None, config=config, world=config.world_name
+        )
+        _logger.info("Created MOCK Gazebo bridge node (no ROS2 connection)")
         return _bridge_node
 
     try:
@@ -85,15 +94,84 @@ def get_bridge() -> GazeboBridgeNode:
             _connection_manager.connect(timeout=10.0)
             _logger.info("Connected to ROS2")
 
-        world_name = _detect_world_name()
-        _bridge_node = GazeboBridgeNode(_connection_manager.get_node(), world=world_name)
-        _logger.info(f"Created Gazebo bridge node for world '{world_name}'")
+        _bridge_node = GazeboBridgeNode(_connection_manager.get_node())
+        _logger.info("Created Gazebo bridge node")
 
         return _bridge_node
 
     except Exception as e:
         _logger.error(f"Failed to create bridge", error=str(e))
         raise ROS2NotConnectedError(f"Failed to connect to ROS2/Gazebo: {e}") from e
+
+
+async def get_bridge_for_ctx(ctx) -> GazeboBridgeNode:
+    """
+    Resolve the bridge for the current MCP request, Context-aware.
+
+    Two transports, two paths (verified on mcp 1.27.1):
+
+    - **HTTP (opt-in):** when ``ctx`` belongs to a request that has a per-session
+      ``GazeboSession`` (keyed by ``Mcp-Session-Id``), return *that session's*
+      bridge so two distinct HTTP sessions stay isolated. Resolved via
+      ``gz_mcp_server.server.app.get_session(ctx)``.
+    - **stdio / back-compat:** when there is no ctx, no session, or the session's
+      bridge is unavailable, fall back to the process singleton ``get_bridge()``.
+
+    The lean tools keep calling the no-arg :func:`get_bridge` (stdio singleton);
+    this helper is used by the per-session resource/HTTP layer (P3 Exec-C).
+
+    Args:
+        ctx: The FastMCP tool/resource ``Context`` (or ``None``).
+
+    Returns:
+        GazeboBridgeNode: the session's bridge if available, else the singleton.
+    """
+    if ctx is not None:
+        try:
+            # Lazy import avoids a hard cycle: app.py imports session.py which
+            # imports this module; importing app here at module load would loop.
+            from gz_mcp_server.server.app import get_session
+
+            session = await get_session(ctx)
+            if getattr(session, "bridge", None) is not None:
+                return session.bridge
+        except Exception as e:  # noqa: BLE001 — fall back to the singleton
+            _logger.debug("Per-session bridge resolution failed; using singleton",
+                          error=str(e))
+    return get_bridge()
+
+
+def build_fresh_bridge() -> GazeboBridgeNode:
+    """
+    Build a NEW, independent bridge node — NOT the process singleton.
+
+    Used for per-HTTP-session isolation (P3): each ``Mcp-Session-Id`` owns its
+    own bridge so state (spawned models, params, wrenches) does not leak between
+    sessions. In MOCK mode this is a node-less ``GazeboBridgeNode`` whose
+    ``MockGazeboAdapter`` has its own ``_worlds`` dict; in real mode it connects
+    its own ROS2 graph via a dedicated ``ConnectionManager``.
+
+    The stdio default session and the lean tools keep using the shared
+    :func:`get_bridge` singleton — only HTTP sessions get a fresh bridge.
+
+    Returns:
+        GazeboBridgeNode: a freshly constructed bridge node.
+
+    Raises:
+        ROS2NotConnectedError: If a real ROS2 connection is required but fails.
+    """
+    if backend_is_mock():
+        config = GazeboConfig.from_environment()
+        return GazeboBridgeNode(None, config=config, world=config.world_name)
+
+    # Real backend: own a dedicated ConnectionManager so aclose() can tear it
+    # down without touching the process singleton's connection.
+    manager = ConnectionManager()
+    manager.connect(timeout=10.0)
+    bridge = GazeboBridgeNode(manager.get_node())
+    # Stash the owning manager on the bridge so the session can disconnect it.
+    bridge._owning_connection_manager = manager  # type: ignore[attr-defined]
+    return bridge
 
 
 def use_real_gazebo() -> bool:

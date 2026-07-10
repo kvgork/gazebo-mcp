@@ -1,0 +1,14 @@
+{
+  "jetank": {
+    "joints": {
+      "chassis_to_arm_bearing_joint": {"type": "revolute", "lower": -1.0, "upper": 1.0, "effort": 10.0, "velocity": 1.0},
+      "arm_base_to_arm_bearing_joint": {"type": "continuous"},
+      "arm_base_to_camera_joint": {"type": "revolute", "lower": -1.0, "upper": 1.0, "effort": 10.0, "velocity": 1.0},
+      "arm_base_to_long_joint": {"type": "revolute", "lower": -1.0, "upper": 1.0, "effort": 10.0, "velocity": 1.0},
+      "arm_long_to_short_joint": {"type": "revolute", "lower": -1.0, "upper": 1.0, "effort": 10.0, "velocity": 1.0},
+      "gripper_base_to_arm_joint": {"type": "fixed"},
+      "left_finger_joint": {"type": "prismatic", "lower": 0.0, "upper": 0.02, "effort": 10.0, "velocity": 1.0},
+      "right_finger_joint": {"type": "prismatic", "lower": 0.0, "upper": 0.02, "effort": 10.0, "velocity": 1.0, "mimic": "left_finger_joint"}
+    }
+  }
+}

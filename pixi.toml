@@ -1,0 +1,83 @@
+[workspace]
+name = "gazebo-mcp"
+version = "0.2.0"
+description = "ROS2 Model Context Protocol Server for Gazebo Simulation"
+channels = [
+    "https://prefix.dev/robostack-jazzy",
+    "https://prefix.dev/conda-forge",
+]
+platforms = ["linux-64"]
+
+[dependencies]
+# Python runtime
+python = ">=3.10,<3.13"
+pip = "*"
+
+# Python libs (from conda-forge, not PyPI, so pip does not re-resolve them)
+mcp = ">=0.1.0"
+pydantic = ">=2.0.0"
+pyyaml = ">=6.0"
+
+# ROS2 Jazzy (RoboStack) — self-contained, no system /opt/ros needed
+ros-jazzy-rclpy = "*"
+ros-jazzy-ros-gz-interfaces = "*"
+ros-jazzy-geometry-msgs = "*"
+ros-jazzy-sensor-msgs = "*"
+ros-jazzy-std-srvs = "*"
+ros-jazzy-nav-msgs = "*"
+
+[pypi-dependencies]
+# Install this repo itself (editable) so `gazebo_mcp` + the
+# `gazebo-mcp-server` entry point are on PATH. Its runtime deps
+# (mcp/pydantic/pyyaml) are already satisfied by the conda packages above.
+gazebo-mcp = { path = ".", editable = true }
+
+[activation.env]
+# Defaults matching run_mcp.sh; override per-shell as needed.
+PYTHONUNBUFFERED = "1"
+GAZEBO_BACKEND = "modern"
+GAZEBO_WORLD_NAME = "empty"
+
+[tasks]
+# Launch the unified MCP server over stdio (what an MCP client spawns). C3
+# retired the hand-rolled + low-level servers; `serve` now runs the unified app.
+serve = "python -m gazebo_mcp.fastmcp_server"
+# Same, via the installed console script (repointed to the unified server).
+server = "gazebo-mcp-server"
+# Unified FastMCP app over stdio (explicit alias of `serve`).
+serve-fastmcp = "python -m gazebo_mcp.fastmcp_server"
+# P3: same unified FastMCP app over Streamable HTTP (opt-in; default port 8931).
+serve-http = "python -m gazebo_mcp.fastmcp_server --http"
+
+# -------- optional feature: full Gazebo (gz) simulator + ros_gz bridge --------
+[feature.sim.dependencies]
+ros-jazzy-ros-gz = "*"
+ros-jazzy-ros2launch = ">=0.26.11,<0.27"
+ros-jazzy-ros2run = ">=0.32.8,<0.33"
+ros-jazzy-ros2service = ">=0.32.8,<0.33"
+ros-jazzy-ros2interface = ">=0.32.8,<0.33"
+ros-jazzy-ros2node = ">=0.32.8,<0.33"
+
+# -------- optional feature: dev/test tooling --------
+[feature.dev.dependencies]
+pytest = ">=7.4.0"
+pytest-asyncio = ">=0.21.0"
+pytest-cov = ">=4.1.0"
+pytest-mock = ">=3.11.0"
+pytest-timeout = ">=2.1.0"
+ruff = ">=0.1.0"
+mypy = ">=1.5.0"
+
+[feature.dev.tasks]
+test = "pytest"
+lint = "ruff check src tests"
+
+[environments]
+# `pixi install`           -> default (server only)
+# `pixi install -e dev`    -> + test/lint tooling
+# `pixi install -e sim`    -> + full gz simulator
+# `pixi install -e full`   -> everything
+default = { solve-group = "main" }
+dev = { features = ["dev"], solve-group = "main" }
+sim = { features = ["sim"], solve-group = "main" }
+full = { features = ["sim", "dev"], solve-group = "main" }

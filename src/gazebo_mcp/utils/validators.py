@@ -393,6 +393,9 @@ def validate_positive(value: Union[int, float], name: str) -> Union[int, float]:
     if not isinstance(value, (int, float)):
         raise InvalidParameterError(name, value, "numeric value")
 
+    if math.isnan(value) or math.isinf(value):
+        raise InvalidParameterError(name, value, "finite numeric value (not NaN or Inf)")
+
     if value <= 0:
         raise InvalidParameterError(name, value, "positive value (> 0)")
 
@@ -415,6 +418,9 @@ def validate_non_negative(value: Union[int, float], name: str) -> Union[int, flo
     """
     if not isinstance(value, (int, float)):
         raise InvalidParameterError(name, value, "numeric value")
+
+    if math.isnan(value) or math.isinf(value):
+        raise InvalidParameterError(name, value, "finite numeric value (not NaN or Inf)")
 
     if value < 0:
         raise InvalidParameterError(name, value, "non-negative value (>= 0)")

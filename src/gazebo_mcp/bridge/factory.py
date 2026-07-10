@@ -9,6 +9,7 @@ from .detection import GazeboDetector
 from .gazebo_interface import GazeboInterface
 from .adapters.classic_adapter import ClassicGazeboAdapter
 from .adapters.modern_adapter import ModernGazeboAdapter
+from .adapters.mock_adapter import MockGazeboAdapter
 
 
 class GazeboAdapterFactory:
@@ -30,6 +31,11 @@ class GazeboAdapterFactory:
         self.config = config
         self.detector = GazeboDetector(node)
 
+    def _log(self, message: str) -> None:
+        """Log via the ROS node if present; no-op when node is None (e.g. MOCK)."""
+        if self.node is not None:
+            self.node.get_logger().info(message)
+
     def create_adapter(self) -> GazeboInterface:
         """
         Create appropriate Gazebo adapter.
@@ -50,14 +56,10 @@ class GazeboAdapterFactory:
         # Determine backend
         if self.config.backend == GazeboBackend.AUTO:
             backend = self.detector.detect()
-            self.node.get_logger().info(
-                f"Auto-detected Gazebo backend: {backend.value}"
-            )
+            self._log(f"Auto-detected Gazebo backend: {backend.value}")
         else:
             backend = self.config.backend
-            self.node.get_logger().info(
-                f"Using configured backend: {backend.value}"
-            )
+            self._log(f"Using configured backend: {backend.value}")
 
         # Create adapter
         if backend == GazeboBackend.CLASSIC:
@@ -70,6 +72,26 @@ class GazeboAdapterFactory:
                 self.node,
                 default_world=self.config.world_name,
                 timeout=self.config.timeout
+            )
+        elif backend == GazeboBackend.MOCK:
+            return MockGazeboAdapter(
+                self.node,
+                default_world=self.config.world_name,
+                timeout=self.config.timeout
+            )
+        elif backend == GazeboBackend.SIM_INTERFACES:
+            # REP-2018 simulation_interfaces client (ros_gz_sim gzserver component).
+            # Lazy import: sim_interfaces_adapter imports geometry_msgs /
+            # simulation_interfaces at module top, which exist only in the sim/full
+            # envs. A top-level import here would break `-e dev` (mock/CI), where
+            # those ROS packages are absent — so import it only on this branch.
+            import os
+            from .adapters.sim_interfaces_adapter import SimInterfacesAdapter
+            return SimInterfacesAdapter(
+                self.node,
+                service_ns=os.getenv("GAZEBO_SIM_INTERFACES_NS", "/gz_server"),
+                default_world=self.config.world_name,
+                timeout=self.config.timeout,
             )
         else:
             raise ValueError(f"Unknown backend: {backend}")

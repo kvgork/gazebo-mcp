@@ -2,66 +2,52 @@
 
 > **ROS2 Model Context Protocol Server for Gazebo Simulation**
 
-Enable AI assistants like Claude to control Gazebo simulations, spawn robots (TurtleBot3), coordinate multi-robot fleets, manipulate environments, generate test worlds, and gather sensor data through a standardized MCP interface.
+Enable AI assistants like Claude to control Gazebo simulations, spawn and manage models, query world and physics properties, drive robots, and gather sensor data through a standardized MCP interface.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![ROS2 Humble](https://img.shields.io/badge/ROS2-Humble-blue.svg)](https://docs.ros.org/en/humble/)
 [![Gazebo Harmonic](https://img.shields.io/badge/Gazebo-Harmonic-orange.svg)](https://gazebosim.org/)
 
-## Features (Most still planned)
+## Features
 
-### Simulation Control
-- Start, stop, pause, and reset Gazebo simulations
-- Configure physics properties (gravity, timestep, etc.)
-- Monitor simulation state
+The server exposes **27 MCP tools across 5 categories**. See [Available MCP Tools](#available-mcp-tools) for the full per-tool list.
 
-### Robot Management (TurtleBot3 Focus)
-- Spawn TurtleBot3 variants (Burger, Waffle, Waffle Pi)
-- Control robot movement via velocity commands
-- Access joint states and control
-- Load custom robot models from URDF/SDF
-
-### Multi-Robot Coordination ✨ NEW
-- **Fleet Spawning**: Create robot fleets with formation algorithms
-  - Grid formation (auto-sized NxN grids)
-  - Circle formation (robots face center)
-  - Line formation (X or Y axis aligned)
-  - Random formation (collision-free placement)
-- **Fleet Monitoring**: Track multiple robots efficiently
-  - Token-efficient response formats (95% savings with summary)
-  - Fleet statistics (active, moving, idle counts)
-  - Position and velocity tracking
-- **Fleet Command**: Coordinate multiple robots simultaneously
-  - Velocity commands (synchronized movement)
-  - Goal commands (formation initialization)
-  - Emergency stop (broadcast to all robots)
-  - Targeted or pattern-based robot selection
+### Model Management
+- Spawn models from URDF/SDF files or XML strings
+- List, delete, and query models in the simulation
+- Set model pose and velocity (teleport / set velocity)
+- Apply force and torque for physics testing
 
 ### Sensor Integration
-- Access camera images (RGB, depth)
-- Retrieve LiDAR point clouds
-- Read IMU data (acceleration, gyroscope)
-- Query GPS positions
-- Monitor contact sensors
+- List sensors with filtering by model/type
+- Read latest sensor data (camera, depth, RGBD, IMU, LiDAR, GPS, contact, force/torque, magnetometer, altimeter, sonar)
+- Subscribe to a sensor topic and cache streamed data
 
-### Dynamic World Generation
-- **Object Placement**: Add static and dynamic objects
-  - Primitive shapes (boxes, spheres, cylinders)
-  - Custom mesh models
-  - Physics properties (mass, friction, collision)
-- **Terrain Modification**: Create diverse environments
-  - Heightmap-based terrain
-  - Surface types (grass, concrete, sand, gravel)
-  - Procedural terrain generation
-- **Lighting Control**: Customize scene lighting
-  - Ambient, directional, point, and spot lights
-  - Day/night cycle simulation
-  - Real-time lighting updates
-- **Live World Updates**: Modify running simulations
-  - Move objects dynamically
-  - Apply forces and torques
-  - Change appearances and properties
+### World Tools
+- Validate and load world files; save the current world
+- Query physics, gravity, and scene properties
+- Update world properties and set the gravity vector (Earth, Moon, zero-g, custom)
+
+### Simulation Control
+- Pause, unpause, and reset the simulation
+- Set simulation speed and query simulation time / performance metrics
+- Get comprehensive simulation status and list active worlds
+
+### ROS2 Tools
+- List ROS2 topics and inspect topic info
+- Publish velocity (twist) commands to drive a robot
+- Look up TF transforms between coordinate frames
+- Spawn models from SDF/URDF XML and read joint states
+
+### Developer Experience & Debugging
+- Add and clear visual debug markers; highlight models
+- Generate RViz2 launch and visualization-panel instructions
+- Record and play back simulations via rosbag (`ros2 bag` commands)
+- Save and restore simulation snapshots for regression testing
+- Profile performance and identify bottlenecks
+
+> **Note:** Tools gracefully fall back to mock data when Gazebo is not running, so the server is usable for development and testing without a live simulator.
 
 ## Quick Start
 
@@ -74,6 +60,49 @@ Enable AI assistants like Claude to control Gazebo simulations, spawn robots (Tu
 - **OS**: Ubuntu 22.04 or 24.04 (recommended)
 
 ### Installation
+
+There are two ways to install: **pixi** (recommended — self-contained, no `apt`/system ROS2 needed) or a manual ROS2 + pip setup.
+
+---
+
+#### Option A — pixi (recommended)
+
+[pixi](https://pixi.sh) pulls ROS2 Jazzy from [RoboStack](https://robostack.github.io/) and the Python deps from conda-forge into one reproducible, locked environment. No `/opt/ros`, no `apt`.
+
+```bash
+# Install pixi (if you don't have it)
+curl -fsSL https://pixi.sh/install.sh | bash
+
+# Clone and install
+git clone https://github.com/kvgork/gazebo-mcp.git
+cd gazebo-mcp
+pixi install            # server only
+# pixi install -e dev   # + pytest/ruff/mypy
+# pixi install -e sim   # + full gz simulator (ros_gz)
+# pixi install -e full  # everything
+
+# Run the server
+pixi run serve
+```
+
+Environments:
+
+| Command | Includes |
+|---|---|
+| `pixi install` | ROS2 Jazzy (rclpy + msgs) + MCP server |
+| `pixi install -e dev` | + pytest, pytest-asyncio/cov/mock/timeout, ruff, mypy |
+| `pixi install -e sim` | + `ros-jazzy-ros-gz` (full Gazebo simulator + bridge) |
+| `pixi install -e full` | sim + dev |
+
+Tasks: `pixi run serve` (stdio server), `pixi run server` (console script), `pixi run -e dev test`, `pixi run -e dev lint`.
+
+The package is installed editable, so `gazebo_mcp` and the `gazebo-mcp-server` entry point are immediately on PATH inside the env. Backend defaults (`GAZEBO_BACKEND=modern`, `GAZEBO_WORLD_NAME=empty`, `PYTHONUNBUFFERED=1`) are set via pixi activation — override per shell as needed.
+
+> Modern (`gz`) Gazebo is the default backend and is fully covered by RoboStack. The classic-Gazebo `gazebo_msgs` spawn/delete paths are not packaged by RoboStack; use Option B if you need classic Gazebo.
+
+---
+
+#### Option B — manual ROS2 + pip
 
 #### 1. Install ROS2 and Gazebo
 
@@ -146,6 +175,27 @@ export GAZEBO_WORLD_NAME=default
 export GAZEBO_TIMEOUT=5.0
 ```
 
+**Actuation safety bounds (P5 hardening).** All actuation is clamped at a single
+bridge-level chokepoint (identical across mock/modern/classic). Defaults and
+overrides:
+
+```bash
+export GAZEBO_MAX_FORCE_N=1000          # force magnitude cap (N)
+export GAZEBO_MAX_TORQUE_NM=500         # torque magnitude cap (N·m)
+export GAZEBO_MAX_JOINT_VELOCITY=10     # vel-mode joint cap (rad/s or m/s)
+export GAZEBO_MAX_JOINT_EFFORT=500      # force/effort-mode joint cap (N·m or N)
+export GAZEBO_MAX_PERSISTENT_WRENCHES=8 # max simultaneous persistent wrenches
+export GAZEBO_RATE_LIMIT_HZ=50          # per-entity rate cap (Hz); <=0 disables
+export GAZEBO_STRICT_BOUNDS=0           # 0 = clamp (default); 1 = reject over-limit
+```
+
+By default over-limit commands are **clamped** (vectors scaled, direction
+preserved); with `GAZEBO_STRICT_BOUNDS=1` they are **rejected** with
+`ACTUATION_BOUNDS_EXCEEDED`. Persistent wrenches require an explicit clear before
+a new one can take a slot. See [`docs/guides/p5-hardening.md`](docs/guides/p5-hardening.md)
+for full details, plus the notify-then-poll sensor model, CPU-only physics,
+image caps, and live-Gazebo acceptance requirements.
+
 **Configuration Priority:**
 1. Environment variables (highest)
 2. Default values in code (lowest)
@@ -153,6 +203,21 @@ export GAZEBO_TIMEOUT=5.0
 **Note:** Modern Gazebo is now the default backend. Classic Gazebo support is deprecated and will be removed in v2.0.0.
 
 **For Claude Desktop Integration**, add to your `claude_desktop_config.json`:
+
+If installed via **pixi (Option A)** — `pixi run` handles ROS2 sourcing and env activation, so no `PYTHONPATH`/sourcing needed:
+
+```json
+{
+  "mcpServers": {
+    "gazebo": {
+      "command": "pixi",
+      "args": ["run", "--manifest-path", "/path/to/gazebo-mcp/pixi.toml", "serve"]
+    }
+  }
+}
+```
+
+If installed via **manual setup (Option B)**:
 
 ```json
 {
@@ -242,7 +307,7 @@ python 05_complete_workflow.py
 
 ## Available MCP Tools
 
-**Total Tools**: 27 tools across 5 categories
+**Total Tools**: 69 tools across 10 categories
 
 See `mcp/README.md` for detailed tool documentation and examples.
 
@@ -300,6 +365,77 @@ See `mcp/README.md` for detailed tool documentation and examples.
 | `gazebo_spawn_sdf` | Spawn a model from complete SDF/URDF XML string |
 | `gazebo_get_joint_states` | Read current joint positions and velocities from a robot |
 
+### Developer Experience & Debugging (12 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_add_debug_marker` | Add a visual debug marker (line, arrow, point, text, bounding_box, trajectory, force_vector) |
+| `gazebo_clear_debug_markers` | Remove a specific marker or clear all markers |
+| `gazebo_highlight_model` | Highlight a model with a visual effect (glow, outline, transparency, color_overlay) |
+| `gazebo_launch_rviz` | Generate the RViz2 launch command and recommended panel configuration |
+| `gazebo_add_rviz_visualization` | Generate RViz2 display-panel instructions for a topic (point_cloud, marker, trajectory, map, laser_scan, image) |
+| `gazebo_start_recording` | Start a rosbag recording session; returns the `ros2 bag record` command |
+| `gazebo_stop_recording` | Stop the active recording session and report bag info |
+| `gazebo_playback_recording` | Generate the `ros2 bag play` command for a recorded bag |
+| `gazebo_save_snapshot` | Save a named snapshot of model poses/velocities and world state |
+| `gazebo_restore_snapshot` | Restore a previously saved simulation snapshot |
+| `gazebo_profile_simulation` | Profile real-time factor, physics step time, FPS, memory, sensor rates |
+| `gazebo_identify_bottlenecks` | Return a ranked list of performance bottlenecks with suggestions |
+
+> **Note:** RViz2 launch, rosbag record/play, and snapshot restoration require an external ROS2/Gazebo session — these tools return the exact CLI commands/instructions to run, and operate in mock mode when Gazebo is not available.
+
+### Multi-Robot Coordination (6 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_spawn_robot_fleet` | Spawn a fleet with collision-free formation placement (line, grid, circle, random) |
+| `gazebo_get_fleet_status` | Query per-robot position, velocity, battery, and task status |
+| `gazebo_send_fleet_command` | Dispatch a command (move, stop, formation, sync, return_home) to the whole fleet or a subset |
+| `gazebo_apply_swarm_behavior` | Apply a swarm behavior (flocking, coverage, formation_keeping, leader_follower, consensus) |
+| `gazebo_visualize_robot_network` | Build comms-graph / task-allocation / formation-line / collision-zone visualization markers |
+| `gazebo_enable_multi_robot_collision_avoidance` | Enable inter-robot collision avoidance (dynamic, social_force, velocity_obstacles, priority) |
+
+### Advanced Sensors (8 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_fuse_sensor_data` | Fuse multiple sensors (lidar_camera, multi_lidar, imu_gps, camera_depth) |
+| `gazebo_visualize_sensor_data` | Build sensor visualization markers (point_cloud, camera_frustum, imu_arrows, gps_path, contact_forces) |
+| `gazebo_process_sensor_data` | Apply processing (voxel/statistical filter, image_blur, edge_detection, segmentation, imu_filter, ground_removal) |
+| `gazebo_calibrate_sensor` | Calibrate a sensor (camera_intrinsics/extrinsics, lidar_offset, imu_bias, time_sync) |
+| `gazebo_monitor_sensor_health` | Report data rate, latency, dropout, and quality score with alerts |
+| `gazebo_record_sensor_stream` | Record sensor topics to a bag (none/lz4/zstd compression) |
+| `gazebo_detect_objects_in_view` | Run object detection on a camera feed with confidence threshold |
+| `gazebo_segment_camera_image` | Semantic or instance segmentation of a camera image |
+
+### SLAM & Mapping (6 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_start_slam` | Start SLAM with a chosen backend (slam_toolbox, cartographer, rtabmap, orb_slam3) |
+| `gazebo_save_slam_map` | Save the generated map (pgm_yaml or ros_map_server format) |
+| `gazebo_load_slam_map` | Load a saved map for localization |
+| `gazebo_localize_robot` | Localize in a known map (amcl, map_matching, icp) |
+| `gazebo_get_localization_quality` | Report particle spread, match score, and ambiguity |
+| `gazebo_detect_loop_closure` | Detect loop closures via visual bag-of-words |
+
+### Navigation & Path Planning — Nav2 (10 tools)
+
+| Tool | Description |
+|------|-------------|
+| `gazebo_initialize_nav2` | Initialize the Nav2 stack and lifecycle nodes for a robot |
+| `gazebo_send_nav_goal` | Send a navigation goal (planner: DWB, TEB, RPP, MPPI) |
+| `gazebo_cancel_nav_goal` | Cancel the current or a specific navigation goal |
+| `gazebo_get_nav_status` | Query active goal, progress, distance remaining, obstacles |
+| `gazebo_plan_path` | Plan a path without executing (A*, RRT, RRT*, DWB, TEB) |
+| `gazebo_visualize_path` | Build visualization markers for a planned path |
+| `gazebo_create_occupancy_map` | Generate an occupancy grid from the world |
+| `gazebo_update_costmap` | Inject, clear, or inflate costmap regions |
+| `gazebo_follow_waypoints` | Execute a multi-waypoint mission (sequence, loop, patrol) |
+| `gazebo_plan_coverage_path` | Plan area coverage (boustrophedon, spiral, energy_efficient) |
+
+> **Note:** Multi-robot, advanced-sensor, SLAM, and Nav2 tools integrate with external ROS2 stacks (Nav2, SLAM Toolbox, etc.) where available, and operate in deterministic mock mode when Gazebo/ROS2 is not running.
+
 ## Project Structure
 
 ```
@@ -333,7 +469,9 @@ ros2_gazebo_mcp/
 │   │       ├── model_management_adapter.py
 │   │       ├── sensor_tools_adapter.py
 │   │       ├── world_tools_adapter.py
-│   │       └── simulation_tools_adapter.py
+│   │       ├── simulation_tools_adapter.py
+│   │       ├── ros2_tools_adapter.py
+│   │       └── developer_tools_adapter.py
 │   └── README.md                    # MCP server documentation
 ├── tests/
 │   ├── conftest.py                  # Pytest configuration
@@ -652,16 +790,22 @@ See **[Performance Metrics Guide](docs/METRICS.md)** for complete documentation 
 - Utility functions (validators, converters, geometry)
 
 ### ✅ Phase 2: Tool Implementation (100% Complete)
-- Model management (5 tools)
+- Model management (6 tools)
 - Sensor tools (3 tools)
-- World tools (4 tools)
-- Simulation control (6 tools)
+- World tools (5 tools)
+- Simulation control (7 tools)
+- ROS2 tools (6 tools)
 
 ### ✅ Phase 3: MCP Server & Testing (100% Complete)
 - MCP server with stdio protocol
-- 4 tool adapters with schemas
+- 6 tool adapters with schemas
 - 80+ tests (unit + integration)
 - Comprehensive documentation
+
+### ✅ Enhancement Area 7: Developer Experience & Debugging (100% Complete)
+- Developer tools (12 tools): debug markers, model highlighting, RViz integration, rosbag record/playback, simulation snapshots, performance profiling
+- 49 unit tests (mock-mode coverage), 244 unit tests passing total
+- See `CAPABILITY_ENHANCEMENT_PLAN.md` Area 7 for the full capability map
 
 ### ✅ Phase 4: Production Enhancements (100% Complete)
 - Complete `set_model_state()` implementation for teleporting models

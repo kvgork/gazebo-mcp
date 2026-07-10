@@ -13,6 +13,9 @@ dist/
 venv/
 env/
 
+# Pixi (keep pixi.lock committed for reproducibility)
+.pixi/
+
 # Testing & coverage
 .pytest_cache/
 .coverage

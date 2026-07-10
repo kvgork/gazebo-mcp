@@ -4,9 +4,11 @@ Gazebo backend detection.
 Auto-detects which Gazebo version is running (Classic vs Modern).
 """
 
+import os
 import subprocess
 from typing import Optional
 from .config import GazeboBackend
+from ..utils.exceptions import GazeboNotRunningError
 
 
 class GazeboDetector:
@@ -36,9 +38,8 @@ class GazeboDetector:
         Returns:
             GazeboBackend.MODERN if Fortress/Harmonic detected
             GazeboBackend.CLASSIC if Classic detected
-
-        Raises:
-            RuntimeError: If no Gazebo detected
+            GazeboBackend.MOCK as a last-resort fallback when no live Gazebo
+                is detected (so no-Gazebo dev/CI still gets a usable backend)
         """
         if self._detected_backend:
             return self._detected_backend
@@ -72,11 +73,32 @@ class GazeboDetector:
             )
             return self._detected_backend
 
-        raise RuntimeError(
-            "No Gazebo detected. Start Gazebo first:\n"
-            "  Classic: gazebo --verbose\n"
-            "  Modern:  gz sim -v4"
+        # No live Gazebo detected. In dev/CI the deterministic MOCK backend keeps
+        # the server usable; in PRODUCTION a silent mock fallback would serve
+        # FAKE data behind a real-looking API. Opt-in gate: GAZEBO_STRICT_BACKEND
+        # turns the fallback into a hard failure so prod fails loudly instead of
+        # pretending. Default (unset) preserves the dev/CI fallback.
+        if os.getenv("GAZEBO_STRICT_BACKEND", "0").lower() in ("1", "true", "yes"):
+            raise GazeboNotRunningError(
+                "No Gazebo detected (no Modern/Classic services or processes) and "
+                "GAZEBO_STRICT_BACKEND is set — refusing to fall back to the MOCK "
+                "backend (it would silently serve fake data). Start a real backend "
+                "('gz sim') or unset GAZEBO_STRICT_BACKEND / set GAZEBO_BACKEND=mock "
+                "to opt into mock explicitly."
+            )
+
+        # Last-resort fallback: no live Gazebo detected. Rather than hard-fail
+        # (which broke no-Gazebo dev/CI), fall back to the deterministic MOCK
+        # backend so the MCP server still starts and tests stay runnable.
+        self._detected_backend = GazeboBackend.MOCK
+        self.node.get_logger().warn(
+            "No Gazebo detected (no Modern/Classic services or processes). "
+            "Falling back to MOCK backend (in-memory, deterministic). "
+            "Start a real backend with: 'gz sim -v4' (Modern) or "
+            "'gazebo --verbose' (Classic). Set GAZEBO_STRICT_BACKEND=1 to hard-fail "
+            "instead of falling back (recommended in production)."
         )
+        return self._detected_backend
 
     def _check_modern_services(self) -> bool:
         """Check if Modern Gazebo services exist."""

@@ -519,3 +519,99 @@ class ClassicGazeboAdapter(GazeboInterface):
             if isinstance(e, (GazeboNotRunningError, GazeboTimeoutError)):
                 raise
             raise GazeboServiceError("reset_world", str(e)) from e
+
+    # --- Actuation (P1): not supported on Classic Gazebo ---
+    # Classic is deprecated; the wrench-topic + joint-command surfaces are
+    # Modern-only. These raise NotImplementedError rather than silently no-op.
+
+    async def apply_wrench_topic(
+        self,
+        entity: str,
+        link: str = "",
+        force: tuple = (0.0, 0.0, 0.0),
+        torque: tuple = (0.0, 0.0, 0.0),
+        duration: float = 0.0,
+        persistent: bool = False,
+        world: str = "default",
+    ) -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "apply_wrench_topic() not implemented for backend 'classic'"
+        )
+
+    async def clear_wrench(self, entity: str, world: str = "default") -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "clear_wrench() not implemented for backend 'classic'"
+        )
+
+    async def command_joint(
+        self,
+        model: str,
+        joint: str,
+        mode: str,
+        value: float,
+        world: str = "default",
+    ) -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "command_joint() not implemented for backend 'classic'"
+        )
+
+    async def command_joint_trajectory(
+        self,
+        model: str,
+        points: list,
+        world: str = "default",
+        joint_names: Optional[List[str]] = None,
+    ) -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "command_joint_trajectory() not implemented for backend 'classic'"
+        )
+
+    # --- Sensors + parameters (P2): not supported on Classic Gazebo ---
+    # Classic is deprecated; the sensor one-shot + parameter surfaces are
+    # Modern-only. These raise NotImplementedError rather than silently no-op.
+
+    async def list_sensors(self, world: str = "default") -> List[Dict[str, Any]]:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "list_sensors() not implemented for backend 'classic'"
+        )
+
+    async def sensor_snapshot(self, topic: str, world: str = "default") -> Dict[str, Any]:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "sensor_snapshot() not implemented for backend 'classic'"
+        )
+
+    async def sensor_camera_image(
+        self,
+        topic: str,
+        resolution: str = "640x480",
+        quality: int = 60,
+        world: str = "default",
+    ) -> Dict[str, Any]:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "sensor_camera_image() not implemented for backend 'classic'"
+        )
+
+    async def param_list(self, world: str = "default") -> List[str]:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "param_list() not implemented for backend 'classic'"
+        )
+
+    async def param_get(self, name: str, world: str = "default") -> Dict[str, Any]:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "param_get() not implemented for backend 'classic'"
+        )
+
+    async def param_set(self, name: str, value: Any, world: str = "default") -> bool:
+        """Not implemented for Classic Gazebo (deprecated backend)."""
+        raise NotImplementedError(
+            "param_set() not implemented for backend 'classic'"
+        )

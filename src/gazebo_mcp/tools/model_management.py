@@ -19,7 +19,7 @@ from gazebo_mcp.utils.exceptions import (
 from gazebo_mcp.utils.validators import validate_model_name, validate_position, validate_orientation
 from gazebo_mcp.utils.converters import euler_to_quaternion
 from gazebo_mcp.utils.logger import get_logger
-from gazebo_mcp.tools._bridge_helper import get_bridge, use_real_gazebo, _detect_world_name
+from gazebo_mcp.tools._bridge_helper import get_bridge, use_real_gazebo
 
 _logger = get_logger("model_management")
 
@@ -36,7 +36,7 @@ __all__ = [
 
 def list_models(
     response_format: str = "filtered",
-    world: Optional[str] = None
+    world: str = "default"
 ) -> OperationResult:
     """
     List all models in Gazebo simulation.
@@ -84,8 +84,6 @@ def list_models(
             print(f"Active models: {len(active_models)}")
         ```
     """
-    if world is None:
-        world = _detect_world_name()
     try:
         if use_real_gazebo():
             bridge = get_bridge()
@@ -201,7 +199,7 @@ def spawn_model(
     pitch: float = 0.0,
     yaw: float = 0.0,
     namespace: Optional[str] = None,
-    world: Optional[str] = None,
+    world: str = "default",
     geometry: str = "box",
     size: tuple = (1.0, 1.0, 1.0),
     color: tuple = (0.0, 1.0, 0.0, 1.0),
@@ -233,8 +231,6 @@ def spawn_model(
         ...     for suggestion in result.suggestions:
         ...         print(f"  - {suggestion}")
     """
-    if world is None:
-        world = _detect_world_name()
     try:
         model_name = validate_model_name(model_name)
         x, y, z = validate_position(x, y, z)
@@ -351,7 +347,7 @@ def spawn_sdf(
     roll: float = 0.0,
     pitch: float = 0.0,
     yaw: float = 0.0,
-    world: Optional[str] = None,
+    world: str = "default",
 ) -> OperationResult:
     """
     Spawn a model from an SDF or URDF XML string.
@@ -401,8 +397,6 @@ def spawn_sdf(
         ... </sdf>'''
         >>> result = spawn_sdf("my_box", sdf, x=1.0, z=0.25)
     """
-    if world is None:
-        world = _detect_world_name()
     try:
         entity_name = validate_model_name(entity_name)
         x, y, z = validate_position(x, y, z)
@@ -507,7 +501,7 @@ def spawn_sdf(
 
 def delete_model(
     model_name: str,
-    world: Optional[str] = None
+    world: str = "default"
 ) -> OperationResult:
     """
     Delete a model from Gazebo simulation.
@@ -524,8 +518,6 @@ def delete_model(
         >>> if result.success:
         ...     print(f"Deleted {result.data['model_name']}")
     """
-    if world is None:
-        world = _detect_world_name()
     try:
         model_name = validate_model_name(model_name)
 
@@ -578,7 +570,7 @@ def delete_model(
 def get_model_state(
     model_name: str,
     response_format: str = "concise",
-    world: Optional[str] = None
+    world: str = "default"
 ) -> OperationResult:
     """
     Get the current state of a model.
@@ -597,8 +589,6 @@ def get_model_state(
         ...     pos = result.data["position"]
         ...     print(f"Position: x={pos['x']}, y={pos['y']}, z={pos['z']}")
     """
-    if world is None:
-        world = _detect_world_name()
     try:
         model_name = validate_model_name(model_name)
 
@@ -702,7 +692,7 @@ def set_model_state(
     pose: Optional[Dict] = None,
     twist: Optional[Dict] = None,
     reference_frame: str = "world",
-    world: Optional[str] = None,
+    world: str = "default",
 ) -> OperationResult:
     """
     Set model pose and/or velocity.
@@ -734,8 +724,6 @@ def set_model_state(
         ...     "orientation": {"roll": 0, "pitch": 0, "yaw": 1.57}
         ... })
     """
-    if world is None:
-        world = _detect_world_name()
     try:
         model_name = validate_model_name(model_name)
 
@@ -894,7 +882,7 @@ def apply_force(
     force: Optional[Dict[str, float]] = None,
     torque: Optional[Dict[str, float]] = None,
     duration: float = 0.1,
-    world: Optional[str] = None,
+    world: str = "default",
 ) -> OperationResult:
     """
     Apply a force and/or torque to a model for a short duration.
@@ -913,8 +901,6 @@ def apply_force(
         >>> result = apply_force("robot", force={"x": 10.0, "y": 0.0, "z": 0.0})
         >>> result = apply_force("robot", torque={"x": 0.0, "y": 0.0, "z": 5.0})
     """
-    if world is None:
-        world = _detect_world_name()
     try:
         if force is None and torque is None:
             return OperationResult(
@@ -955,14 +941,12 @@ def apply_force(
             else:
                 return OperationResult(
                     success=False,
-                    error=f"Failed to apply wrench to '{model_name}'. "
-                          f"Note: apply_force requires ApplyLinkWrench service which is not available "
-                          f"in Ignition Gazebo Fortress (only Garden+).",
+                    error=f"Failed to apply wrench to '{model_name}'",
                     error_code="APPLY_WRENCH_FAILED",
                     suggestions=[
-                        "apply_force is not supported on Ignition Gazebo Fortress",
-                        "Upgrade to Ignition Gazebo Garden or Gazebo Harmonic for this feature",
-                        "Alternatively, publish directly to velocity topics via gazebo_publish_twist",
+                        "Verify the model exists: gazebo_list_models()",
+                        "Ensure ros_gz_interfaces is installed",
+                        "Check that Modern Gazebo is running",
                     ],
                 )
         else:

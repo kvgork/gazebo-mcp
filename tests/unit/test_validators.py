@@ -238,6 +238,12 @@ class TestValidatePositive:
         with pytest.raises(InvalidParameterError):
             validators.validate_positive("not a number", "value")
 
+    def test_non_finite_value(self):
+        """Test that NaN and Inf raise ValidationError (not pass as positive)."""
+        for bad in (float("inf"), float("-inf"), float("nan")):
+            with pytest.raises(InvalidParameterError):
+                validators.validate_positive(bad, "value")
+
 
 class TestValidateNonNegative:
     """Tests for validate_non_negative function."""
@@ -252,6 +258,12 @@ class TestValidateNonNegative:
         """Test that negative numbers raise ValidationError."""
         with pytest.raises(InvalidParameterError):
             validators.validate_non_negative(-1.0, "value")
+
+    def test_non_finite_value(self):
+        """Test that NaN and Inf raise ValidationError."""
+        for bad in (float("inf"), float("-inf"), float("nan")):
+            with pytest.raises(InvalidParameterError):
+                validators.validate_non_negative(bad, "value")
 
         with pytest.raises(InvalidParameterError):
             validators.validate_non_negative(-0.001, "value")

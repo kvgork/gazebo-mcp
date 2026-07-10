@@ -17,7 +17,7 @@ from gazebo_mcp.utils import OperationResult
 from gazebo_mcp.utils.exceptions import GazeboMCPError
 from gazebo_mcp.utils.validators import validate_positive, validate_timeout
 from gazebo_mcp.utils.logger import get_logger
-from gazebo_mcp.tools._bridge_helper import get_bridge, use_real_gazebo, _detect_world_name
+from gazebo_mcp.tools._bridge_helper import get_bridge, use_real_gazebo
 
 __all__ = [
     "pause_simulation",
@@ -37,7 +37,7 @@ _simulation_paused = False
 
 def pause_simulation(
     timeout: float = 5.0,
-    world: Optional[str] = None
+    world: str = "default"
 ) -> OperationResult:
     """
     Pause Gazebo physics simulation.
@@ -56,8 +56,6 @@ def pause_simulation(
         >>> if result.success:
         ...     print("Simulation paused")
     """
-    if world is None:
-        world = _detect_world_name()
     global _simulation_paused
 
     try:
@@ -108,7 +106,7 @@ def pause_simulation(
 
 def unpause_simulation(
     timeout: float = 5.0,
-    world: Optional[str] = None
+    world: str = "default"
 ) -> OperationResult:
     """
     Unpause Gazebo physics simulation.
@@ -127,8 +125,6 @@ def unpause_simulation(
         >>> if result.success:
         ...     print("Simulation running")
     """
-    if world is None:
-        world = _detect_world_name()
     global _simulation_paused
 
     try:
@@ -181,7 +177,7 @@ def unpause_simulation(
 
 def reset_simulation(
     timeout: float = 10.0,
-    world: Optional[str] = None
+    world: str = "default"
 ) -> OperationResult:
     """
     Reset Gazebo simulation to initial state.
@@ -205,8 +201,6 @@ def reset_simulation(
         >>> if result.success:
         ...     print("Simulation reset")
     """
-    if world is None:
-        world = _detect_world_name()
     try:
         timeout = validate_timeout(timeout)
 

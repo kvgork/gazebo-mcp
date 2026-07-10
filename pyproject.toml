@@ -74,7 +74,11 @@ Repository = "https://github.com/kvgork/gazebo-mcp"
 Issues = "https://github.com/kvgork/gazebo-mcp/issues"
 
 [project.scripts]
-gazebo-mcp-server = "gazebo_mcp.server:main"
+# Unified FastMCP app is the sole server (P*-real C3 retired the hand-rolled +
+# low-level servers). The primary `gazebo-mcp-server` name is preserved but now
+# points at the unified server; `gazebo-mcp-fastmcp` is a kept alias.
+gazebo-mcp-server = "gazebo_mcp.fastmcp_server:main"
+gazebo-mcp-fastmcp = "gazebo_mcp.fastmcp_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -82,6 +86,12 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["gazebo_mcp*"]
+
+[tool.setuptools.package-data]
+# Ship the JETANK model manifest as package data so the actuation tools resolve
+# it via importlib.resources when installed as a wheel (the repo models/ dir is
+# NOT shipped). See gazebo_mcp.tools.actuate._packaged_manifest_path.
+gazebo_mcp = ["data/*.json"]
 
 [tool.black]
 line-length = 100
