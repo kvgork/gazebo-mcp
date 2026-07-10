@@ -79,8 +79,17 @@ and unblock everything else.
   live bugs:** `param_set` used `-t double -m 7.25` but `gz param -s` wants `-t gz.msgs.Double -m
   'data: 7.25'`; `param_get` returned the trailing `----` separator instead of the `data:` line
   (and now handles proto3 default-omission for false/zero). Undeclared → honest KeyError.
-- [ ] **D4. P3-real:** run the unified server `--http` in modern mode against live gz; verify
-  per-session isolation + `gz://sensor/{name}` resources over the REAL backend. *(Only remaining D item.)*
+- [x] **D4. P3-real** — **DONE 2026-07-10** (`tests/integration/test_p3_real_http.py`, 2 tests):
+  unified server on real uvicorn `--http` + modern backend vs live `gz sim -s -r sensors.sdf`;
+  `gz://sensor/imu` returns a REAL typed `gz-json` sample over the modern backend (the resource
+  read drives `list_sensors` name→topic + `sensor_snapshot` over live `gz`), and two distinct
+  `Mcp-Session-Id` clients each get their own session/bridge + independently read the live sensor.
+  **Isolation scope:** session/bridge-OBJECT (distinct ids + independent bridges), NOT world-state
+  (world-state isolation is mock-only — a live gz world is physically shared). Sensor reads are
+  `gz`-CLI so no `ros_gz` bridge is needed. **Found + fixed live:** `sensor_snapshot` dropped a
+  valid typed sample to the `gz-text` raw fallback when `gz topic -e -n 1 --json-output` flushed
+  MULTIPLE concatenated messages under the HTTP/timing path — `modern_adapter._parse_last_json_object`
+  now returns the LATEST complete object (unit-locked in `test_modern_snapshot_parse.py`).
 - [x] Each landed as a `@pytest.mark.gazebo` test (skips by default) so they are permanent.
 
 ## Phase E — P1-real  *(BLOCKED on upstream; ~2–3 d after)*
@@ -103,8 +112,13 @@ and unblock everything else.
   (`SimInterfacesAdapter(GazeboInterface)` — a REP-2018 CLIENT) and live-verified the full
   portable lifecycle against it (`tests/integration/test_p4_real_sim_interfaces.py`). Gazebo-
   specific ops (wrench/joint/sensor/param) stay honest NotImplementedError (REP-2018 doesn't
-  define them). **Follow-up (not done):** wire it into bridge backend-selection
-  (`GAZEBO_BACKEND=sim_interfaces`) + point the `sim_*` tools at it instead of the scene_*/world_* shim.
+  define them). **Follow-up — DONE 2026-07-10:** wired into backend-selection —
+  `GazeboBackend.SIM_INTERFACES` enum + factory branch (lazy import for `-e dev` safety) +
+  `GAZEBO_SIM_INTERFACES_NS` (default `/gz_server`). The 5 `sim_*` tools dispatch polymorphically
+  via `get_bridge().adapter`, so `GAZEBO_BACKEND=sim_interfaces` routes them through
+  `SimInterfacesAdapter` with NO `sim.py` code change. Verified: `test_sim_interfaces_backend_selection.py`
+  (unit) + `test_p4_real_backend_selection.py` (live, 4 tests — factory selection, `sim_get_features`
+  backend name, spawn/step/delete routed through REP-2018, gz-specific op degrades honestly).
 - [x] **P5 deferred** — per-waypoint trajectory position/velocity clamping — **DONE 2026-07-05**:
   `actuate_joint_trajectory` gained an optional `joint_names` arg + per-waypoint manifest-limit
   enforcement (tool rejects out-of-range; bridge `command_joint_trajectory(..., limits=)` clamps
