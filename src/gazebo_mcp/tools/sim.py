@@ -10,14 +10,19 @@ against the ``simulation_interfaces`` verb set — spawn/delete/reset/step/
 get_state — can call these instead of the gz-specific ``scene_*``/``world_*``
 names), NOT a new capability.
 
-The REAL ``simulation_interfaces`` ROS adapter now EXISTS:
-``bridge/adapters/sim_interfaces_adapter.py`` (``SimInterfacesAdapter``) is a
-REP-2018 client that drives any ``simulation_interfaces`` backend, live-verified
-against the ``ros_gz_sim`` gzserver component (P4-real DONE 2026-07-08; see
-``tests/integration/test_p4_real_sim_interfaces.py``). It is not yet wired into
-default bridge backend-selection, so these shim tools still route to
-scene_*/world_*. ``sim_get_features`` reports the adapter status via
-``real_adapter``.
+The REAL ``simulation_interfaces`` ROS adapter now EXISTS and IS wired into
+backend-selection: ``bridge/adapters/sim_interfaces_adapter.py``
+(``SimInterfacesAdapter``) is a REP-2018 client that drives any
+``simulation_interfaces`` backend, live-verified against the ``ros_gz_sim``
+gzserver component (P4-real DONE 2026-07-08; see
+``tests/integration/test_p4_real_sim_interfaces.py``). Setting
+``GAZEBO_BACKEND=sim_interfaces`` makes the factory build that adapter, so these
+shim tools — which delegate to ``scene_*``/``world_*`` and thus to
+``get_bridge().adapter`` — route THROUGH the REP-2018 adapter with no change
+here (polymorphic dispatch). Under that backend the gz-specific ops
+(sensor/param/joint/wrench) honestly raise ``NotImplementedError`` (REP-2018
+does not define them). ``sim_get_features`` reports the live backend name via
+``backend``.
 
 Strictly optional / non-default: these functions are always importable, but the
 FastMCP app (``gz_mcp_server.server.app``) only registers them as ``@mcp.tool``
@@ -86,10 +91,11 @@ async def sim_get_features(world: str = "default") -> OperationResult:
     supports (routed to existing scene_*/world_* tools) and the currently
     configured backend name (best-effort; ``"unknown"`` if unavailable). The
     real ``simulation_interfaces`` ROS-service adapter
-    (``bridge/adapters/sim_interfaces_adapter.py``) now EXISTS and is
+    (``bridge/adapters/sim_interfaces_adapter.py``) now EXISTS, is
     live-verified against the ``ros_gz_sim`` gzserver component backend
-    (see ``tests/integration/test_p4_real_sim_interfaces.py``); it is not yet
-    wired into default bridge backend-selection.
+    (see ``tests/integration/test_p4_real_sim_interfaces.py``), and IS wired
+    into backend-selection: ``GAZEBO_BACKEND=sim_interfaces`` routes the bridge
+    (and thus these shim tools) through it.
 
     Non-throwing and safe even with no world/backend reachable.
     """
@@ -109,9 +115,12 @@ async def sim_get_features(world: str = "default") -> OperationResult:
             "supported_ops": ["spawn", "delete", "reset", "step", "get_state"],
             "backend": backend,
             "real_adapter": (
-                "available — SimInterfacesAdapter (REP-2018 client) live-verified "
-                "against the ros_gz_sim gzserver component (/gz_server services); "
-                "not yet wired into default backend-selection"
+                "available and selectable — set GAZEBO_BACKEND=sim_interfaces to "
+                "route the bridge (and thus these shim tools) through "
+                "SimInterfacesAdapter, the REP-2018 client live-verified against "
+                "the ros_gz_sim gzserver component (/gz_server services). Under "
+                "that backend, gz-specific ops (sensor/param/joint/wrench) "
+                "honestly raise NotImplementedError (outside REP-2018 scope)."
             ),
             "world": world,
         },

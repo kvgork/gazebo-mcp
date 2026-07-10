@@ -15,6 +15,7 @@ class GazeboBackend(Enum):
     MODERN = "modern"
     AUTO = "auto"
     MOCK = "mock"  # In-memory deterministic backend for CI / no-Gazebo dev
+    SIM_INTERFACES = "sim_interfaces"  # REP-2018 simulation_interfaces client (ros_gz_sim gzserver component)
 
 
 class GazeboConfig:
@@ -22,9 +23,11 @@ class GazeboConfig:
     Configuration for Gazebo backend selection.
 
     Environment Variables:
-    - GAZEBO_BACKEND: 'classic', 'modern', or 'auto' (default: modern)
+    - GAZEBO_BACKEND: 'classic', 'modern', 'auto', 'mock', or 'sim_interfaces' (default: modern)
     - GAZEBO_WORLD_NAME: Default world name for Modern (default: 'default')
     - GAZEBO_TIMEOUT: Service call timeout in seconds (default: 5.0)
+    - GAZEBO_SIM_INTERFACES_NS: REP-2018 service namespace for the sim_interfaces
+      backend (default: '/gz_server' — the ros_gz_sim gzserver component)
 
     NOTE: Classic Gazebo is DEPRECATED and will be removed in v2.0.0.
           Default is now 'modern' to encourage migration.
@@ -83,7 +86,7 @@ class GazeboConfig:
             except ValueError:
                 raise ValueError(
                     f"Invalid GAZEBO_BACKEND: {backend_str}. "
-                    f"Must be 'classic', 'modern', 'auto', or 'mock'"
+                    f"Must be 'classic', 'modern', 'auto', 'mock', or 'sim_interfaces'"
                 )
 
         self.backend = backend
